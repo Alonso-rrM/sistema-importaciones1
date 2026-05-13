@@ -113,6 +113,23 @@ def crear_pago(pago: schemas.RegistroPagoCreate, db: Session = Depends(get_db)):
     db.refresh(nuevo_pago)
     return nuevo_pago
 
+# --- QUINTO ENDPOINT (Guardar Concepto de Gasto) ---
+@app.post("/conceptos/", response_model=schemas.CatConceptoPago)
+def crear_concepto(concepto: schemas.CatConceptoPagoCreate, db: Session = Depends(get_db)):
+    try:
+        nuevo_concepto = models.CatConceptoPago(**concepto.model_dump())
+        db.add(nuevo_concepto)
+        db.commit()
+        db.refresh(nuevo_concepto)
+        return nuevo_concepto
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Error al crear el concepto. Verifica que no esté duplicado.")
+
+@app.get("/conceptos/", response_model=list[schemas.CatConceptoPago])
+def listar_conceptos(db: Session = Depends(get_db)):
+    return db.query(models.CatConceptoPago).all()
+
 from typing import List
 
 # --- RUTAS PARA LEER (GET) ---
@@ -164,3 +181,4 @@ def anular_factura(id_maestro: int, db: Session = Depends(get_db)):
 from sqlalchemy.exc import IntegrityError
 
 # (Endpoints duplicados de empresa y anulación eliminados porque ya se integraron arriba)
+

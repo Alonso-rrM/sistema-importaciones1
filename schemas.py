@@ -2,8 +2,10 @@ from typing import List
 from pydantic import BaseModel
 from typing import Optional
 from datetime import date, datetime
+from enum import Enum
 
-# --- ESQUEMAS PARA CAT_BANCOS (Los que ya teníamos) ---
+# --- 1. ESQUEMAS PARA CATÁLOGOS ---
+
 class CatBancoCreate(BaseModel):
     nombre: str
 
@@ -69,9 +71,17 @@ class CatEmpresa(BaseModel):
     class Config:
         from_attributes = True
 
-# --- NUEVOS ESQUEMAS PARA MAESTRO_IMPORTACIONES ---
+class CatConceptoPagoCreate(BaseModel):
+    nombre: str
+    descripcion: Optional[str] = None
 
-# Esquema para recibir los datos (Crear Maestro)
+class CatConceptoPago(CatConceptoPagoCreate):
+    id_concepto: int
+    class Config:
+        from_attributes = True
+
+# --- 2. ESQUEMAS PARA MAESTRO_IMPORTACIONES ---
+
 class MaestroImportacionCreate(BaseModel):
     numero_factura: str
     n_cont_fisico: Optional[str] = None
@@ -89,7 +99,6 @@ class MaestroImportacionCreate(BaseModel):
     cfr_usd: Optional[float] = None
     venta_sucesiva: Optional[str] = None
 
-# Esquema para devolver los datos (Leer Maestro)
 class MaestroImportacion(MaestroImportacionCreate):
     id_maestro: int
     estado_registro: str
@@ -98,11 +107,11 @@ class MaestroImportacion(MaestroImportacionCreate):
     class Config:
         from_attributes = True
 
-# --- ESQUEMAS PARA DETALLE_DAMS ---
+# --- 3. ESQUEMAS PARA DETALLE_DAMS ---
 
 class DetalleDamCreate(BaseModel):
-    id_maestro: int  # Obligatorio: ¿A qué factura pertenece?
-    numero_de_dam: str # Obligatorio
+    id_maestro: int
+    numero_de_dam: str
     serie: Optional[str] = None
     canal_control: Optional[str] = None
     monto_valor_provisional_usd: Optional[float] = None
@@ -115,15 +124,19 @@ class DetalleDam(DetalleDamCreate):
     class Config:
         from_attributes = True
 
-# --- ESQUEMAS PARA REGISTRO_PAGOS ---
+# --- 4. ESQUEMAS PARA REGISTRO_PAGOS ---
+
+class MonedaEnum(str, Enum):
+    USD = "USD"
+    PEN = "PEN"
 
 class RegistroPagoCreate(BaseModel):
-    id_dam: int # Obligatorio: ¿A qué DAM pertenece el pago?
-    concepto_gasto: Optional[str] = None
-    moneda: Optional[str] = None
-    importe: Optional[float] = None
-    tipo_cambio: Optional[float] = None
-    estado_pago: Optional[str] = None
+    id_dam: int
+    id_concepto: int
+    moneda: MonedaEnum
+    importe: float
+    tipo_cambio: float
+    estado_pago: Optional[str] = "PAGADO"
     fecha_pago: Optional[date] = None
     numero_operacion: Optional[str] = None
     id_banco: Optional[int] = None
@@ -136,26 +149,10 @@ class RegistroPago(RegistroPagoCreate):
     class Config:
         from_attributes = True
 
-# --- ESQUEMAS PARA REPORTES CONSOLIDADOS ---
+# --- 5. ESQUEMAS PARA REPORTES CONSOLIDADOS ---
 
 class MaestroConDetalles(MaestroImportacion):
     dams: List[DetalleDam] = [] 
 
     class Config:
         from_attributes = True
-
-from enum import Enum
-
-class MonedaEnum(str, Enum):
-    USD = "USD"
-    PEN = "PEN"
-
-class RegistroPagoCreate(BaseModel):
-    id_dam: int
-    id_concepto: int
-    monto: float
-    moneda: MonedaEnum # Esto crea una lista desplegable en Swagger
-    fecha_pago: date
-    id_banco: int
-    id_empresa: int
-        
