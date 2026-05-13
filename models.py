@@ -1,10 +1,18 @@
-from sqlalchemy import Column, Integer, String, Numeric, Date, ForeignKey, DateTime
+from sqlalchemy import Column, Integer, String, Numeric, Date, ForeignKey, DateTime, Float, Text
 from database import Base
 import datetime
 from sqlalchemy.orm import relationship
 
 
 # --- 1. TABLAS CATÁLOGO ---
+
+class CatConceptoPago(Base):
+    __tablename__ = "cat_conceptos_pagos"
+    id_concepto = Column(Integer, primary_key=True, index=True)
+    nombre = Column(String(100), unique=True, nullable=False)
+    descripcion = Column(Text)
+    pagos = relationship("RegistroPago", back_populates="concepto_rel")
+    
 class CatProveedor(Base):
     __tablename__ = "cat_proveedores"
     id_proveedor = Column(Integer, primary_key=True, index=True)
@@ -83,10 +91,10 @@ class RegistroPago(Base):
     __tablename__ = "registro_pagos"
     id_pago = Column(Integer, primary_key=True, index=True)
     id_dam = Column(Integer, ForeignKey("detalle_dams.id_dam"), nullable=False)
-    concepto_gasto = Column(String(100))
-    moneda = Column(String(10))
-    importe = Column(Numeric(15, 2))
-    tipo_cambio = Column(Numeric(10, 4))
+    id_concepto = Column(Integer, ForeignKey("cat_conceptos_pagos.id_concepto"), nullable=False)
+    moneda = Column(String(3), nullable=False)
+    importe = Column(Float, nullable=False)
+    tipo_cambio = Column(Float, nullable=False)
     estado_pago = Column(String(50))
     fecha_pago = Column(Date)
     numero_operacion = Column(String(100))
@@ -96,3 +104,4 @@ class RegistroPago(Base):
     dam = relationship("DetalleDam", back_populates="pagos")
     banco = relationship("CatBanco", backref="pagos")
     empresa = relationship("CatEmpresa", backref="pagos")
+    concepto_rel = relationship("CatConceptoPago", back_populates="pagos")

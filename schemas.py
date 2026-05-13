@@ -143,4 +143,19 @@ class MaestroConDetalles(MaestroImportacion):
 
     class Config:
         from_attributes = True
+
+from enum import Enum
+
+class MonedaEnum(str, Enum):
+    USD = "USD"
+    PEN = "PEN"
+
+class RegistroPagoCreate(BaseModel):
+    id_dam: int
+    id_concepto: int
+    monto: float
+    moneda: MonedaEnum # Esto crea una lista desplegable en Swagger
+    fecha_pago: date
+    id_banco: int
+    id_empresa: int
         
