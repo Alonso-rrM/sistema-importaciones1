@@ -11,6 +11,7 @@ class CatConceptoPago(Base):
     id_concepto = Column(Integer, primary_key=True, index=True)
     nombre = Column(String(100), unique=True, nullable=False)
     descripcion = Column(Text)
+    estado_registro = Column(String(20), default="ACTIVO")
     pagos = relationship("RegistroPago", back_populates="concepto_rel")
     
 class CatProveedor(Base):
@@ -60,10 +61,10 @@ class MaestroImportacion(Base):
     id_proveedor = Column(Integer, ForeignKey("cat_proveedores.id_proveedor"))
     documento_transporte = Column(String(100))
     fecha_embarque = Column(Date)
-    fecha_arribo = Column(Date)
-    status_llegada = Column(String(50))
-    estado_levante = Column(String(50))
-    id_almacen = Column(Integer, ForeignKey("cat_almacenes.id_almacen"))
+    fecha_arribo = Column(Date, nullable=True)
+    status_llegada = Column(String(50), nullable=True, default="EN TRÁNSITO")
+    estado_levante = Column(String(50), nullable=True, default="SIN LEVANTE")
+    id_almacen = Column(Integer, ForeignKey("cat_almacenes.id_almacen"), nullable=True)
     fob_usd = Column(Numeric(15, 2))
     flete_usd = Column(Numeric(15, 2))
     cfr_usd = Column(Numeric(15, 2))
@@ -105,3 +106,4 @@ class RegistroPago(Base):
     banco = relationship("CatBanco", backref="pagos")
     empresa = relationship("CatEmpresa", backref="pagos")
     concepto_rel = relationship("CatConceptoPago", back_populates="pagos")
+    estado_registro = Column(String(20), default="ACTIVO")

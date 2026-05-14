@@ -77,6 +77,7 @@ class CatConceptoPagoCreate(BaseModel):
 
 class CatConceptoPago(CatConceptoPagoCreate):
     id_concepto: int
+    estado_registro: str
     class Config:
         from_attributes = True
 
@@ -90,10 +91,10 @@ class MaestroImportacionCreate(BaseModel):
     id_proveedor: Optional[int] = None
     documento_transporte: Optional[str] = None
     fecha_embarque: Optional[date] = None
-    fecha_arribo: Optional[date] = None
-    status_llegada: Optional[str] = None
-    estado_levante: Optional[str] = None
-    id_almacen: Optional[int] = None
+    fecha_arribo: date | None = None
+    status_llegada: str | None = "EN TRÁNSITO" # Le damos un valor por defecto lógico
+    estado_levante: str | None = "SIN LEVANTE"
+    id_almacen: int | None = None
     fob_usd: Optional[float] = None
     flete_usd: Optional[float] = None
     cfr_usd: Optional[float] = None

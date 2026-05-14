@@ -106,12 +106,25 @@ def crear_dam(dam: schemas.DetalleDamCreate, db: Session = Depends(get_db)):
 
 # --- CUARTO ENDPOINT (Guardar Pago) ---
 @app.post("/pagos/", response_model=schemas.RegistroPago)
-def crear_pago(pago: schemas.RegistroPagoCreate, db: Session = Depends(get_db)):
-    nuevo_pago = models.RegistroPago(**pago.model_dump())
-    db.add(nuevo_pago)
-    db.commit()
-    db.refresh(nuevo_pago)
-    return nuevo_pago
+def registrar_pago(pago: schemas.RegistroPagoCreate, db: Session = Depends(get_db)):
+    # 1. Verificamos que el concepto exista antes de pagar
+    concepto_existe = db.query(models.CatConceptoPago).filter(models.CatConceptoPago.id_concepto == pago.id_concepto).first()
+    if not concepto_existe:
+        raise HTTPException(status_code=404, detail="El concepto de pago seleccionado no existe en el catálogo.")
+
+    # 2. Registramos el pago en la base de datos
+    try:
+        nuevo_pago = models.RegistroPago(**pago.model_dump())
+        db.add(nuevo_pago)
+        db.commit()
+        db.refresh(nuevo_pago)
+        return nuevo_pago
+    except Exception as e:
+        db.rollback()
+        # Esta línea imprimirá el error rojo gigante en tu terminal
+        print(f"--- ERROR REAL EN BASE DE DATOS ---: {e}") 
+        # Y esta línea te lo mostrará en Swagger
+        raise HTTPException(status_code=400, detail=f"Error exacto: {str(e)}")
 
 # --- QUINTO ENDPOINT (Guardar Concepto de Gasto) ---
 @app.post("/conceptos/", response_model=schemas.CatConceptoPago)
@@ -128,7 +141,22 @@ def crear_concepto(concepto: schemas.CatConceptoPagoCreate, db: Session = Depend
 
 @app.get("/conceptos/", response_model=list[schemas.CatConceptoPago])
 def listar_conceptos(db: Session = Depends(get_db)):
-    return db.query(models.CatConceptoPago).all()
+    return db.query(models.CatConceptoPago).filter(models.CatConceptoPago.estado_registro == "ACTIVO").all()
+
+@app.delete("/conceptos/{id_concepto}")
+def eliminar_concepto(id_concepto: int, db: Session = Depends(get_db)):
+    # 1. Buscamos el concepto
+    concepto = db.query(models.CatConceptoPago).filter(models.CatConceptoPago.id_concepto == id_concepto).first()
+    
+    if not concepto:
+        raise HTTPException(status_code=404, detail="Concepto no encontrado")
+    
+    # 2. BORRADO LÓGICO: Cambiamos el estado y guardamos
+    concepto.estado_registro = "INACTIVO"
+    db.commit()
+    
+    return {"mensaje": f"El concepto '{concepto.nombre}' ha sido eliminado lógicamente (INACTIVO)."}
+
 
 from typing import List
 
