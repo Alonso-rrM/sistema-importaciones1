@@ -83,7 +83,7 @@ class CatConceptoPago(CatConceptoPagoCreate):
 
 # --- 2. ESQUEMAS PARA MAESTRO_IMPORTACIONES ---
 
-class MaestroImportacionCreate(BaseModel):
+class MaestroImportacionBase(BaseModel):
     numero_factura: str
     n_cont_fisico: Optional[str] = None
     id_agente: Optional[int] = None
@@ -91,16 +91,20 @@ class MaestroImportacionCreate(BaseModel):
     id_proveedor: Optional[int] = None
     documento_transporte: Optional[str] = None
     fecha_embarque: Optional[date] = None
-    fecha_arribo: date | None = None
-    status_llegada: str | None = "EN TRÁNSITO" # Le damos un valor por defecto lógico
-    estado_levante: str | None = "SIN LEVANTE"
-    id_almacen: int | None = None
+    fecha_arribo: Optional[date] = None
+    status_llegada: Optional[str] = "EN TRÁNSITO"
+    estado_levante: Optional[str] = "SIN LEVANTE"
+    id_almacen: Optional[int] = None
     fob_usd: Optional[float] = None
     flete_usd: Optional[float] = None
     cfr_usd: Optional[float] = None
     venta_sucesiva: Optional[str] = None
+    tipo_valor: Optional[str] = "DEFINITIVO"
 
-class MaestroImportacion(MaestroImportacionCreate):
+class MaestroImportacionCreate(MaestroImportacionBase):
+    pass
+
+class MaestroImportacion(MaestroImportacionBase):
     id_maestro: int
     estado_registro: str
     created_at: Optional[datetime] = None
@@ -108,32 +112,75 @@ class MaestroImportacion(MaestroImportacionCreate):
     class Config:
         from_attributes = True
 
+class MaestroImportacionUpdate(BaseModel):
+    numero_factura: str | None = None
+    n_cont_fisico: str | None = None
+    id_agente: int | None = None
+    id_importador: int | None = None
+    id_proveedor: int | None = None
+    documento_transporte: str | None = None
+    fecha_embarque: date | None = None
+    fecha_arribo: date | None = None
+    status_llegada: str | None = None
+    estado_levante: str | None = None
+    id_almacen: int | None = None
+    fob_usd: float | None = None
+    flete_usd: float | None = None
+    cfr_usd: float | None = None
+    venta_sucesiva: str | None = None
+    tipo_valor: str | None = None
+
 # --- 3. ESQUEMAS PARA DETALLE_DAMS ---
 
-class DetalleDamCreate(BaseModel):
+class DetalleDamBase(BaseModel):
     id_maestro: int
     numero_de_dam: str
     serie: Optional[str] = None
     canal_control: Optional[str] = None
     monto_valor_provisional_usd: Optional[float] = None
-    tipo_valor: Optional[str] = None
 
-class DetalleDam(DetalleDamCreate):
+class DetalleDamCreate(DetalleDamBase):
+    pass
+
+class DetalleDam(DetalleDamBase):
     id_dam: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class DetalleDamUpdate(BaseModel):
+    id_maestro: int | None = None
+    numero_de_dam: str | None = None
+    serie: str | None = None
+    canal_control: str | None = None
+    monto_valor_provisional_usd: float | None = None
+
+# --- 4. ESQUEMAS PARA REGISTRO_GASTOS ---
+
+class RegistroGastoCreate(BaseModel):
+    id_dam: int
+    id_concepto: int
+    monto_usd: float
+
+class RegistroGasto(RegistroGastoCreate):
+    id_gasto: int
+    estado_pago: str
+    estado_registro: str
     created_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
 
-# --- 4. ESQUEMAS PARA REGISTRO_PAGOS ---
+# --- 5. ESQUEMAS PARA REGISTRO_PAGOS ---
 
 class MonedaEnum(str, Enum):
     USD = "USD"
     PEN = "PEN"
 
 class RegistroPagoCreate(BaseModel):
-    id_dam: int
-    id_concepto: int
+    id_dam: int | None = None
+    id_concepto: int | None = None
     moneda: MonedaEnum
     importe: float
     tipo_cambio: float
@@ -142,6 +189,7 @@ class RegistroPagoCreate(BaseModel):
     numero_operacion: Optional[str] = None
     id_banco: Optional[int] = None
     id_empresa: Optional[int] = None
+    id_gasto: Optional[int] = None
 
 class RegistroPago(RegistroPagoCreate):
     id_pago: int
@@ -150,7 +198,7 @@ class RegistroPago(RegistroPagoCreate):
     class Config:
         from_attributes = True
 
-# --- 5. ESQUEMAS PARA REPORTES CONSOLIDADOS ---
+# --- 6. ESQUEMAS PARA REPORTES CONSOLIDADOS ---
 
 class MaestroConDetalles(MaestroImportacion):
     dams: List[DetalleDam] = [] 

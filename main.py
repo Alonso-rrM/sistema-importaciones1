@@ -98,32 +98,71 @@ def crear_maestro(maestro: schemas.MaestroImportacionCreate, db: Session = Depen
 # --- TERCER ENDPOINT (Guardar DAM) ---
 @app.post("/dams/", response_model=schemas.DetalleDam)
 def crear_dam(dam: schemas.DetalleDamCreate, db: Session = Depends(get_db)):
+    # 1. Buscar el Maestro de esa DAM en la BD
+    maestro = db.query(models.MaestroImportacion).filter(models.MaestroImportacion.id_maestro == dam.id_maestro).first()
+    
+    if not maestro:
+        raise HTTPException(status_code=404, detail="El Maestro de Importación asociado no existe en la base de datos.")
+
+    # 2. Reglas de Negocio base al tipo_valor del Maestro
+    if maestro.tipo_valor == "DEFINITIVO":
+        # Forzar a Null según la regla operativa
+        dam.monto_valor_provisional_usd = None
+        
+    elif maestro.tipo_valor == "PROVISIONAL":
+        # Bloquear registro si no se envía un valor positivo
+        if not dam.monto_valor_provisional_usd or dam.monto_valor_provisional_usd <= 0:
+            raise HTTPException(
+                status_code=400, 
+                detail="Operación rechazada. Como el Maestro es 'PROVISIONAL', el campo 'monto_valor_provisional_usd' es obligatorio y debe ser mayor a 0."
+            )
+
+    # 3. Guardar en Base de Datos
     nueva_dam = models.DetalleDam(**dam.model_dump())
     db.add(nueva_dam)
     db.commit()
     db.refresh(nueva_dam)
+    
     return nueva_dam
 
 # --- CUARTO ENDPOINT (Guardar Pago) ---
 @app.post("/pagos/", response_model=schemas.RegistroPago)
 def registrar_pago(pago: schemas.RegistroPagoCreate, db: Session = Depends(get_db)):
-    # 1. Verificamos que el concepto exista antes de pagar
-    concepto_existe = db.query(models.CatConceptoPago).filter(models.CatConceptoPago.id_concepto == pago.id_concepto).first()
-    if not concepto_existe:
-        raise HTTPException(status_code=404, detail="El concepto de pago seleccionado no existe en el catálogo.")
+    gasto = None
+    
+    # 1. Lógica de herencia con Gasto
+    if pago.id_gasto is not None:
+        gasto = db.query(models.RegistroGasto).filter(models.RegistroGasto.id_gasto == pago.id_gasto).first()
+        if not gasto:
+            raise HTTPException(status_code=404, detail="El gasto asociado no existe.")
+        
+        # Heredamos los datos
+        pago.id_dam = gasto.id_dam
+        pago.id_concepto = gasto.id_concepto
 
-    # 2. Registramos el pago en la base de datos
+    # 2. Verificamos que el concepto exista (ya sea heredado o enviado manualmente)
+    if pago.id_concepto is not None:
+        concepto_existe = db.query(models.CatConceptoPago).filter(models.CatConceptoPago.id_concepto == pago.id_concepto).first()
+        if not concepto_existe:
+            raise HTTPException(status_code=404, detail="El concepto de pago seleccionado no existe en el catálogo.")
+    else:
+        raise HTTPException(status_code=400, detail="Debe proporcionar un id_concepto o un id_gasto válido.")
+
+    # 3. Registramos el pago en la base de datos
     try:
         nuevo_pago = models.RegistroPago(**pago.model_dump())
         db.add(nuevo_pago)
+
+        # 4. Cambiamos el estado del gasto a PAGADO si existe
+        if gasto:
+            gasto.estado_pago = "PAGADO"
+        
         db.commit()
         db.refresh(nuevo_pago)
         return nuevo_pago
     except Exception as e:
         db.rollback()
-        # Esta línea imprimirá el error rojo gigante en tu terminal
         print(f"--- ERROR REAL EN BASE DE DATOS ---: {e}") 
-        # Y esta línea te lo mostrará en Swagger
         raise HTTPException(status_code=400, detail=f"Error exacto: {str(e)}")
 
 # --- QUINTO ENDPOINT (Guardar Concepto de Gasto) ---
@@ -194,6 +233,42 @@ def actualizar_banco(id_banco: int, banco_editado: schemas.CatBancoCreate, db: S
     db.refresh(db_banco)
     return db_banco
 
+@app.put("/maestros/{id_maestro}", response_model=schemas.MaestroImportacion)
+def actualizar_maestro(id_maestro: int, maestro_editado: schemas.MaestroImportacionUpdate, db: Session = Depends(get_db)):
+    db_maestro = db.query(models.MaestroImportacion).filter(models.MaestroImportacion.id_maestro == id_maestro).first()
+    
+    if not db_maestro:
+        raise HTTPException(status_code=404, detail="Maestro de importación no encontrado")
+    
+    # Extraemos solo los campos que el usuario envió explícitamente
+    update_data = maestro_editado.model_dump(exclude_unset=True)
+    
+    # Iteramos para actualizar dinámicamente
+    for key, value in update_data.items():
+        setattr(db_maestro, key, value)
+        
+    db.commit()
+    db.refresh(db_maestro)
+    
+    return db_maestro
+
+@app.put("/dams/{id_dam}", response_model=schemas.DetalleDam)
+def actualizar_dam(id_dam: int, dam_editada: schemas.DetalleDamUpdate, db: Session = Depends(get_db)):
+    db_dam = db.query(models.DetalleDam).filter(models.DetalleDam.id_dam == id_dam).first()
+    
+    if not db_dam:
+        raise HTTPException(status_code=404, detail="DAM no encontrada")
+        
+    update_data = dam_editada.model_dump(exclude_unset=True)
+    
+    for key, value in update_data.items():
+        setattr(db_dam, key, value)
+        
+    db.commit()
+    db.refresh(db_dam)
+    
+    return db_dam
+
 # --- 2. ANULAR UNA FACTURA (Borrado Lógico) ---
 @app.delete("/maestros/{id_maestro}")
 def anular_factura(id_maestro: int, db: Session = Depends(get_db)):
@@ -208,5 +283,22 @@ def anular_factura(id_maestro: int, db: Session = Depends(get_db)):
 
 from sqlalchemy.exc import IntegrityError
 
-# (Endpoints duplicados de empresa y anulación eliminados porque ya se integraron arriba)
+
+# --- SEXTO ENDPOINT (Registro de Gastos) ---
+
+@app.post("/gastos/", response_model=schemas.RegistroGasto)
+def crear_gasto(gasto: schemas.RegistroGastoCreate, db: Session = Depends(get_db)):
+    try:
+        nuevo_gasto = models.RegistroGasto(**gasto.model_dump())
+        db.add(nuevo_gasto)
+        db.commit()
+        db.refresh(nuevo_gasto)
+        return nuevo_gasto
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"Error al crear gasto: {str(e)}")
+
+@app.get("/gastos/", response_model=List[schemas.RegistroGasto])
+def listar_gastos(db: Session = Depends(get_db)):
+    return db.query(models.RegistroGasto).all()
 

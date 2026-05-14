@@ -13,6 +13,7 @@ class CatConceptoPago(Base):
     descripcion = Column(Text)
     estado_registro = Column(String(20), default="ACTIVO")
     pagos = relationship("RegistroPago", back_populates="concepto_rel")
+    gastos = relationship("RegistroGasto", back_populates="concepto_rel")
     
 class CatProveedor(Base):
     __tablename__ = "cat_proveedores"
@@ -69,6 +70,7 @@ class MaestroImportacion(Base):
     flete_usd = Column(Numeric(15, 2))
     cfr_usd = Column(Numeric(15, 2))
     venta_sucesiva = Column(String(50))
+    tipo_valor = Column(String(50), default="DEFINITIVO")
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     dams = relationship("DetalleDam", back_populates="maestro")
     estado_registro = Column(String(20), default="ACTIVO")
@@ -82,11 +84,26 @@ class DetalleDam(Base):
     numero_de_dam = Column(String(100), unique=True, nullable=False)
     serie = Column(String(50))
     canal_control = Column(String(50))
-    monto_valor_provisional_usd = Column(Numeric(15, 2))
-    tipo_valor = Column(String(50))
+    monto_valor_provisional_usd = Column(Float, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     maestro = relationship("MaestroImportacion", back_populates="dams")
     pagos = relationship("RegistroPago", back_populates="dam")
+    gastos = relationship("RegistroGasto", back_populates="dam")
+
+class RegistroGasto(Base):
+    __tablename__ = "registro_gastos"
+    id_gasto = Column(Integer, primary_key=True, index=True)
+    id_dam = Column(Integer, ForeignKey("detalle_dams.id_dam"), nullable=False)
+    id_concepto = Column(Integer, ForeignKey("cat_conceptos_pagos.id_concepto"), nullable=False)
+    monto_usd = Column(Numeric(15, 2), nullable=False)
+    estado_pago = Column(String(50), default="PENDIENTE")
+    estado_registro = Column(String(20), default="ACTIVO")
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    # Relaciones
+    dam = relationship("DetalleDam", back_populates="gastos")
+    concepto_rel = relationship("CatConceptoPago", back_populates="gastos")
+    pagos = relationship("RegistroPago", back_populates="gasto_rel")
 
 class RegistroPago(Base):
     __tablename__ = "registro_pagos"
@@ -101,9 +118,11 @@ class RegistroPago(Base):
     numero_operacion = Column(String(100))
     id_banco = Column(Integer, ForeignKey("cat_bancos.id_banco"))
     id_empresa = Column(Integer, ForeignKey("cat_empresas.id_empresa"))
+    id_gasto = Column(Integer, ForeignKey("registro_gastos.id_gasto"), nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     dam = relationship("DetalleDam", back_populates="pagos")
     banco = relationship("CatBanco", backref="pagos")
     empresa = relationship("CatEmpresa", backref="pagos")
     concepto_rel = relationship("CatConceptoPago", back_populates="pagos")
+    gasto_rel = relationship("RegistroGasto", back_populates="pagos")
     estado_registro = Column(String(20), default="ACTIVO")
