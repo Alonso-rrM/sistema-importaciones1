@@ -197,3 +197,24 @@ class RegistroPagoUpdate(BaseModel):
 class MaestroConDetalles(MaestroImportacion):
     dams: List[DetalleDam] = [] 
     model_config = ConfigDict(from_attributes=True)
+
+# --- 7. ESQUEMAS PARA ESTADOS DE CUENTA (ANALÍTICO) ---
+
+class EstadoCuentaDam(BaseModel):
+    id_dam: int
+    numero_de_dam: str
+    total_gastos_pen: Decimal
+    total_pagado_pen: Decimal
+    saldo_pendiente_pen: Decimal
+    model_config = ConfigDict(from_attributes=True)
+
+class EstadoCuentaFacturaResumen(BaseModel):
+    id_maestro: int
+    numero_factura: str
+    documento_transporte: Optional[str] = None
+    total_general_gastos_pen: Decimal
+    total_general_pagado_pen: Decimal
+    saldo_general_pendiente_pen: Decimal
+    porcentaje_amortizado: Decimal
+    desglose_dams: List[EstadoCuentaDam]
+    model_config = ConfigDict(from_attributes=True)
