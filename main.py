@@ -100,6 +100,12 @@ def crear_empresa(empresa: schemas.CatEmpresaCreate, db: Session = Depends(get_d
 @app.post("/maestros/", response_model=schemas.MaestroImportacion)
 def crear_maestro(maestro: schemas.MaestroImportacionCreate, db: Session = Depends(get_db)):
     nuevo_maestro = models.MaestroImportacion(**maestro.model_dump())
+    
+    # Automatización CFR
+    fob = nuevo_maestro.fob_usd if nuevo_maestro.fob_usd is not None else 0
+    flete = nuevo_maestro.flete_usd if nuevo_maestro.flete_usd is not None else 0
+    nuevo_maestro.cfr_usd = fob + flete
+    
     db.add(nuevo_maestro)
     db.commit()
     db.refresh(nuevo_maestro)
@@ -233,6 +239,11 @@ def actualizar_maestro(id_maestro: int, maestro_editado: schemas.MaestroImportac
     for key, value in update_data.items():
         setattr(db_maestro, key, value)
         
+    # Automatización CFR (Recálculo)
+    fob = db_maestro.fob_usd if db_maestro.fob_usd is not None else 0
+    flete = db_maestro.flete_usd if db_maestro.flete_usd is not None else 0
+    db_maestro.cfr_usd = fob + flete
+        
     db.commit()
     db.refresh(db_maestro)
     
@@ -282,3 +293,48 @@ def crear_gasto(gasto: schemas.RegistroGastoCreate, db: Session = Depends(get_db
 @app.get("/gastos/", response_model=List[schemas.RegistroGasto])
 def listar_gastos(db: Session = Depends(get_db)):
     return db.query(models.RegistroGasto).all()
+
+# --- Agrega el endpoint PUT /gastos/{id_gasto} (Candado Auditoría) ---
+@app.put("/gastos/{id_gasto}", response_model=schemas.RegistroGasto)
+def actualizar_gasto(id_gasto: int, gasto_editado: schemas.RegistroGastoUpdate, db: Session = Depends(get_db)):
+    db_gasto = db.query(models.RegistroGasto).filter(models.RegistroGasto.id_gasto == id_gasto).first()
+    if not db_gasto:
+        raise HTTPException(status_code=404, detail="Gasto no encontrado")
+        
+    # Candado de Auditoría Financiera
+    if db_gasto.estado_pago == "PAGADO":
+        raise HTTPException(
+            status_code=403, 
+            detail="Acción rechazada por Auditoría: No se permite modificar un gasto que ya ha sido PAGADO."
+        )
+        
+    update_data = gasto_editado.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_gasto, key, value)
+        
+    db.commit()
+    db.refresh(db_gasto)
+    return db_gasto
+
+# --- Agrega el endpoint PUT /pagos/{id_pago} (Candado Auditoría) ---
+@app.put("/pagos/{id_pago}", response_model=schemas.RegistroPago)
+def actualizar_pago(id_pago: int, pago_editado: schemas.RegistroPagoUpdate, db: Session = Depends(get_db)):
+    db_pago = db.query(models.RegistroPago).filter(models.RegistroPago.id_pago == id_pago).first()
+    if not db_pago:
+        raise HTTPException(status_code=404, detail="Pago no encontrado")
+        
+    update_data = pago_editado.model_dump(exclude_unset=True)
+    
+    # Candado de Auditoría Financiera
+    if "importe" in update_data or "moneda" in update_data:
+        raise HTTPException(
+            status_code=403,
+            detail="Acción rechazada por Auditoría: No se permite modificar el importe ni la moneda de un pago ya registrado. Si hubo un error, proceda a la anulación o extorno."
+        )
+        
+    for key, value in update_data.items():
+        setattr(db_pago, key, value)
+        
+    db.commit()
+    db.refresh(db_pago)
+    return db_pago

@@ -154,6 +154,11 @@ class RegistroGasto(RegistroGastoCreate):
     created_at: Optional[datetime] = None
     model_config = ConfigDict(from_attributes=True)
 
+class RegistroGastoUpdate(BaseModel):
+    id_dam: int | None = None
+    id_concepto: int | None = None
+    monto_usd: Decimal | None = None
+
 # --- 5. ESQUEMAS PARA REGISTRO_PAGOS ---
 
 class MonedaEnum(str, Enum):
@@ -177,6 +182,15 @@ class RegistroPago(RegistroPagoCreate):
     id_pago: int
     created_at: Optional[datetime] = None
     model_config = ConfigDict(from_attributes=True)
+
+class RegistroPagoUpdate(BaseModel):
+    moneda: MonedaEnum | None = None
+    importe: Decimal | None = None
+    tipo_cambio: Decimal | None = None
+    numero_operacion: str | None = None
+    id_banco: int | None = None
+    id_empresa: int | None = None
+    id_gasto: int | None = None
 
 # --- 6. ESQUEMAS PARA REPORTES CONSOLIDADOS ---
 
