@@ -1,8 +1,7 @@
-from sqlalchemy import Column, Integer, String, Numeric, Date, ForeignKey, DateTime, Float, Text
-from database import Base
 import datetime
+from sqlalchemy import Column, Integer, String, Numeric, Date, ForeignKey, DateTime, Text
 from sqlalchemy.orm import relationship
-
+from database import Base
 
 # --- 1. TABLAS CATÁLOGO ---
 
@@ -26,12 +25,10 @@ class CatAlmacen(Base):
     id_almacen = Column(Integer, primary_key=True, index=True)
     nombre = Column(String(100), unique=True, nullable=False)
 
-
 class CatBanco(Base):
     __tablename__ = "cat_bancos"
     id_banco = Column(Integer, primary_key=True, index=True)
     nombre = Column(String(100), unique=True, nullable=False)
-
 
 class CatEmpresa(Base):
     __tablename__ = "cat_empresas"
@@ -50,8 +47,8 @@ class CatImportador(Base):
     nombre = Column(String(150), unique=True, nullable=False)
     ruc = Column(String(11), unique=True)
 
-
 # --- 2. TABLAS PRINCIPALES ---
+
 class MaestroImportacion(Base):
     __tablename__ = "maestro_importaciones"
     id_maestro = Column(Integer, primary_key=True, index=True)
@@ -74,8 +71,6 @@ class MaestroImportacion(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     dams = relationship("DetalleDam", back_populates="maestro")
     estado_registro = Column(String(20), default="ACTIVO")
-    
-
 
 class DetalleDam(Base):
     __tablename__ = "detalle_dams"
@@ -84,7 +79,7 @@ class DetalleDam(Base):
     numero_de_dam = Column(String(100), unique=True, nullable=False)
     serie = Column(String(50))
     canal_control = Column(String(50))
-    monto_valor_provisional_usd = Column(Float, nullable=True)
+    monto_valor_provisional_usd = Column(Numeric(15, 2), nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     maestro = relationship("MaestroImportacion", back_populates="dams")
     pagos = relationship("RegistroPago", back_populates="dam")
@@ -100,7 +95,6 @@ class RegistroGasto(Base):
     estado_registro = Column(String(20), default="ACTIVO")
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
-    # Relaciones
     dam = relationship("DetalleDam", back_populates="gastos")
     concepto_rel = relationship("CatConceptoPago", back_populates="gastos")
     pagos = relationship("RegistroPago", back_populates="gasto_rel")
@@ -111,8 +105,8 @@ class RegistroPago(Base):
     id_dam = Column(Integer, ForeignKey("detalle_dams.id_dam"), nullable=False)
     id_concepto = Column(Integer, ForeignKey("cat_conceptos_pagos.id_concepto"), nullable=False)
     moneda = Column(String(3), nullable=False)
-    importe = Column(Float, nullable=False)
-    tipo_cambio = Column(Float, nullable=False)
+    importe = Column(Numeric(15, 2), nullable=False)
+    tipo_cambio = Column(Numeric(15, 2), nullable=False)
     estado_pago = Column(String(50))
     fecha_pago = Column(Date)
     numero_operacion = Column(String(100))
@@ -120,6 +114,7 @@ class RegistroPago(Base):
     id_empresa = Column(Integer, ForeignKey("cat_empresas.id_empresa"))
     id_gasto = Column(Integer, ForeignKey("registro_gastos.id_gasto"), nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    
     dam = relationship("DetalleDam", back_populates="pagos")
     banco = relationship("CatBanco", backref="pagos")
     empresa = relationship("CatEmpresa", backref="pagos")

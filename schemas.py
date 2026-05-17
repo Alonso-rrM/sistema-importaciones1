@@ -1,7 +1,7 @@
-from typing import List
-from pydantic import BaseModel
-from typing import Optional
+from typing import List, Optional
+from pydantic import BaseModel, ConfigDict
 from datetime import date, datetime
+from decimal import Decimal
 from enum import Enum
 
 # --- 1. ESQUEMAS PARA CATÁLOGOS ---
@@ -12,9 +12,7 @@ class CatBancoCreate(BaseModel):
 class CatBanco(BaseModel):
     id_banco: int
     nombre: str
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class CatAgenteCreate(BaseModel):
     nombre: str
@@ -22,9 +20,7 @@ class CatAgenteCreate(BaseModel):
 class CatAgente(BaseModel):
     id_agente: int
     nombre: str
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class CatProveedorCreate(BaseModel):
     nombre: str
@@ -34,9 +30,7 @@ class CatProveedor(BaseModel):
     id_proveedor: int
     nombre: str
     ruc: Optional[str] = None
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class CatAlmacenCreate(BaseModel):
     nombre: str
@@ -44,9 +38,7 @@ class CatAlmacenCreate(BaseModel):
 class CatAlmacen(BaseModel):
     id_almacen: int
     nombre: str
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class CatImportadorCreate(BaseModel):
     nombre: str
@@ -56,9 +48,7 @@ class CatImportador(BaseModel):
     id_importador: int
     nombre: str
     ruc: Optional[str] = None 
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class CatEmpresaCreate(BaseModel):
     nombre: str
@@ -68,8 +58,7 @@ class CatEmpresa(BaseModel):
     id_empresa: int
     nombre: str
     ruc: Optional[str] = None
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class CatConceptoPagoCreate(BaseModel):
     nombre: str
@@ -78,8 +67,7 @@ class CatConceptoPagoCreate(BaseModel):
 class CatConceptoPago(CatConceptoPagoCreate):
     id_concepto: int
     estado_registro: str
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 # --- 2. ESQUEMAS PARA MAESTRO_IMPORTACIONES ---
 
@@ -95,9 +83,9 @@ class MaestroImportacionBase(BaseModel):
     status_llegada: Optional[str] = "EN TRÁNSITO"
     estado_levante: Optional[str] = "SIN LEVANTE"
     id_almacen: Optional[int] = None
-    fob_usd: Optional[float] = None
-    flete_usd: Optional[float] = None
-    cfr_usd: Optional[float] = None
+    fob_usd: Optional[Decimal] = None
+    flete_usd: Optional[Decimal] = None
+    cfr_usd: Optional[Decimal] = None
     venta_sucesiva: Optional[str] = None
     tipo_valor: Optional[str] = "DEFINITIVO"
 
@@ -108,9 +96,7 @@ class MaestroImportacion(MaestroImportacionBase):
     id_maestro: int
     estado_registro: str
     created_at: Optional[datetime] = None
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class MaestroImportacionUpdate(BaseModel):
     numero_factura: str | None = None
@@ -124,9 +110,9 @@ class MaestroImportacionUpdate(BaseModel):
     status_llegada: str | None = None
     estado_levante: str | None = None
     id_almacen: int | None = None
-    fob_usd: float | None = None
-    flete_usd: float | None = None
-    cfr_usd: float | None = None
+    fob_usd: Decimal | None = None
+    flete_usd: Decimal | None = None
+    cfr_usd: Decimal | None = None
     venta_sucesiva: str | None = None
     tipo_valor: str | None = None
 
@@ -137,7 +123,7 @@ class DetalleDamBase(BaseModel):
     numero_de_dam: str
     serie: Optional[str] = None
     canal_control: Optional[str] = None
-    monto_valor_provisional_usd: Optional[float] = None
+    monto_valor_provisional_usd: Optional[Decimal] = None
 
 class DetalleDamCreate(DetalleDamBase):
     pass
@@ -145,32 +131,28 @@ class DetalleDamCreate(DetalleDamBase):
 class DetalleDam(DetalleDamBase):
     id_dam: int
     created_at: datetime
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class DetalleDamUpdate(BaseModel):
     id_maestro: int | None = None
     numero_de_dam: str | None = None
     serie: str | None = None
     canal_control: str | None = None
-    monto_valor_provisional_usd: float | None = None
+    monto_valor_provisional_usd: Decimal | None = None
 
 # --- 4. ESQUEMAS PARA REGISTRO_GASTOS ---
 
 class RegistroGastoCreate(BaseModel):
     id_dam: int
     id_concepto: int
-    monto_usd: float
+    monto_usd: Decimal
 
 class RegistroGasto(RegistroGastoCreate):
     id_gasto: int
     estado_pago: str
     estado_registro: str
     created_at: Optional[datetime] = None
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 # --- 5. ESQUEMAS PARA REGISTRO_PAGOS ---
 
@@ -182,8 +164,8 @@ class RegistroPagoCreate(BaseModel):
     id_dam: int | None = None
     id_concepto: int | None = None
     moneda: MonedaEnum
-    importe: float
-    tipo_cambio: float
+    importe: Decimal
+    tipo_cambio: Decimal
     estado_pago: Optional[str] = "PAGADO"
     fecha_pago: Optional[date] = None
     numero_operacion: Optional[str] = None
@@ -194,14 +176,10 @@ class RegistroPagoCreate(BaseModel):
 class RegistroPago(RegistroPagoCreate):
     id_pago: int
     created_at: Optional[datetime] = None
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 # --- 6. ESQUEMAS PARA REPORTES CONSOLIDADOS ---
 
 class MaestroConDetalles(MaestroImportacion):
     dams: List[DetalleDam] = [] 
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
