@@ -211,9 +211,51 @@ def registrar_pago(pago: schemas.RegistroPagoCreate, db: Session = Depends(get_d
         if not gasto:
             raise HTTPException(status_code=404, detail="El gasto asociado no existe.")
         
+        # 1. Blindaje: Evitar pagar un gasto ya pagado
+        if gasto.estado_pago == "PAGADO":
+            raise HTTPException(status_code=400, detail="El gasto ya se encuentra totalmente pagado.")
+        
+        # Heredamos los datos operativos
         pago.id_dam = gasto.id_dam
         pago.id_concepto = gasto.id_concepto
 
+        # 2. Consultar pagos existentes
+        pagos_existentes = db.query(models.RegistroPago).filter(
+            models.RegistroPago.id_gasto == pago.id_gasto,
+            models.RegistroPago.estado_registro == "ACTIVO"
+        ).all()
+
+        # 3. Calcular total ya pagado (Homogeneizando a la moneda del gasto, es decir USD)
+        total_ya_pagado = Decimal("0.00")
+        for p in pagos_existentes:
+            importe_db = Decimal(str(p.importe))
+            tc_db = Decimal(str(p.tipo_cambio))
+            if p.moneda == "USD":
+                total_ya_pagado += importe_db
+            elif p.moneda == "PEN":
+                total_ya_pagado += (importe_db / tc_db)
+
+        # 4. Calcular saldo pendiente
+        monto_gasto_usd = Decimal(str(gasto.monto_usd))
+        saldo_pendiente = monto_gasto_usd - total_ya_pagado
+
+        # 5. Calcular importe del pago entrante en la moneda del gasto (USD)
+        nuevo_importe_usd = Decimal("0.00")
+        if pago.moneda == "USD":
+            nuevo_importe_usd = pago.importe
+        elif pago.moneda == "PEN":
+            nuevo_importe_usd = pago.importe / pago.tipo_cambio
+
+        # 6. Blindaje de Sobrefacturación (Con tolerancia de 1 centavo por redondeos)
+        margen = Decimal("0.01")
+        if nuevo_importe_usd > (saldo_pendiente + margen):
+            saldo_formateado = saldo_pendiente.quantize(Decimal("0.01"))
+            raise HTTPException(
+                status_code=400, 
+                detail=f"El importe ingresado supera el saldo pendiente de la deuda. Saldo restante: {saldo_formateado}"
+            )
+
+    # Verificamos que el concepto exista 
     if pago.id_concepto is not None:
         concepto_existe = db.query(models.CatConceptoPago).filter(models.CatConceptoPago.id_concepto == pago.id_concepto).first()
         if not concepto_existe:
@@ -221,11 +263,13 @@ def registrar_pago(pago: schemas.RegistroPagoCreate, db: Session = Depends(get_d
     else:
         raise HTTPException(status_code=400, detail="Debe proporcionar un id_concepto o un id_gasto válido.")
 
+    # Guardado e Inserción Final
     try:
         nuevo_pago = models.RegistroPago(**pago.model_dump())
         db.add(nuevo_pago)
 
-        if gasto:
+        # 7. Si el nuevo pago cubre exactamente el saldo (o con la tolerancia), cerramos la deuda
+        if gasto and nuevo_importe_usd >= (saldo_pendiente - margen):
             gasto.estado_pago = "PAGADO"
         
         db.commit()
