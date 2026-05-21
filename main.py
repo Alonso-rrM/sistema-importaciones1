@@ -1,4 +1,5 @@
 from typing import List
+from datetime import date
 from decimal import Decimal
 from fastapi import FastAPI, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -170,6 +171,35 @@ def actualizar_dam(id_dam: int, dam_editada: schemas.DetalleDamUpdate, db: Sessi
 # --- ENDPOINTS PARA GASTOS ---
 @app.post("/gastos/", response_model=schemas.RegistroGasto)
 def crear_gasto(gasto: schemas.RegistroGastoCreate, db: Session = Depends(get_db)):
+    # 1. Consultar información del Proveedor
+    proveedor = db.query(models.CatProveedor).filter(models.CatProveedor.id_proveedor == gasto.id_proveedor).first()
+    if not proveedor:
+        raise HTTPException(status_code=404, detail="El proveedor especificado no existe.")
+
+    # 2. Normalización Estricta del Número de Documento
+    if proveedor.categoria != "ESTADO_O_TRIBUTO" and gasto.numero_documento and "-" in gasto.numero_documento:
+        partes = gasto.numero_documento.split("-", 1)
+        if len(partes) == 2:
+            serie = partes[0]
+            correlativo = partes[1].zfill(8) # Rellena con ceros a la izquierda hasta 8 dígitos
+            gasto.numero_documento = f"{serie}-{correlativo}"
+
+    # 3. Candado Lógico Anti-Duplicados Documentales
+    if gasto.numero_documento:
+        gasto_duplicado = db.query(models.RegistroGasto).filter(
+            models.RegistroGasto.id_proveedor == gasto.id_proveedor,
+            models.RegistroGasto.id_tipo_doc == gasto.id_tipo_doc,
+            models.RegistroGasto.numero_documento == gasto.numero_documento,
+            models.RegistroGasto.estado_registro == "ACTIVO"
+        ).first()
+        
+        if gasto_duplicado:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Duplicidad detectada: Ya existe un gasto registrado con el documento {gasto.numero_documento} para este proveedor."
+            )
+
+    # 4. Guardar en Base de Datos
     try:
         nuevo_gasto = models.RegistroGasto(**gasto.model_dump())
         db.add(nuevo_gasto)
@@ -204,80 +234,113 @@ def actualizar_gasto(id_gasto: int, gasto_editado: schemas.RegistroGastoUpdate, 
 # --- ENDPOINTS PARA PAGOS ---
 @app.post("/pagos/", response_model=schemas.RegistroPago)
 def registrar_pago(pago: schemas.RegistroPagoCreate, db: Session = Depends(get_db)):
-    gasto = None
+    if pago.id_gasto is None:
+        raise HTTPException(status_code=400, detail="Debe proporcionar un id_gasto válido.")
+
+    # 1. Búsqueda y Bloqueo de Pagados
+    gasto = db.query(models.RegistroGasto).filter(models.RegistroGasto.id_gasto == pago.id_gasto).first()
+    if not gasto:
+        raise HTTPException(status_code=404, detail="El gasto asociado no existe.")
     
-    if pago.id_gasto is not None:
-        gasto = db.query(models.RegistroGasto).filter(models.RegistroGasto.id_gasto == pago.id_gasto).first()
-        if not gasto:
-            raise HTTPException(status_code=404, detail="El gasto asociado no existe.")
-        
-        # 1. Blindaje: Evitar pagar un gasto ya pagado
-        if gasto.estado_pago == "PAGADO":
-            raise HTTPException(status_code=400, detail="El gasto ya se encuentra totalmente pagado.")
-        
-        # Heredamos los datos operativos
-        pago.id_dam = gasto.id_dam
-        pago.id_concepto = gasto.id_concepto
+    if gasto.estado_pago == "PAGADO":
+        raise HTTPException(status_code=400, detail="Operación rechazada: El gasto ya se encuentra totalmente PAGADO.")
+    
+    # Heredar datos operativos del gasto
+    pago.id_dam = gasto.id_dam
+    pago.id_concepto = gasto.id_concepto
 
-        # 2. Consultar pagos existentes
-        pagos_existentes = db.query(models.RegistroPago).filter(
-            models.RegistroPago.id_gasto == pago.id_gasto,
-            models.RegistroPago.estado_registro == "ACTIVO"
-        ).all()
+    # Validar que el concepto exista
+    concepto_existe = db.query(models.CatConceptoPago).filter(models.CatConceptoPago.id_concepto == pago.id_concepto).first()
+    if not concepto_existe:
+        raise HTTPException(status_code=404, detail="El concepto de pago no existe en el catálogo.")
 
-        # 3. Calcular total ya pagado (Homogeneizando a la moneda del gasto, es decir USD)
-        total_ya_pagado = Decimal("0.00")
-        for p in pagos_existentes:
-            importe_db = Decimal(str(p.importe))
-            tc_db = Decimal(str(p.tipo_cambio))
-            if p.moneda == "USD":
-                total_ya_pagado += importe_db
-            elif p.moneda == "PEN":
-                total_ya_pagado += (importe_db / tc_db)
-
-        # 4. Calcular saldo pendiente
-        monto_gasto_usd = Decimal(str(gasto.monto_usd))
-        saldo_pendiente = monto_gasto_usd - total_ya_pagado
-
-        # 5. Calcular importe del pago entrante en la moneda del gasto (USD)
-        nuevo_importe_usd = Decimal("0.00")
-        if pago.moneda == "USD":
-            nuevo_importe_usd = pago.importe
-        elif pago.moneda == "PEN":
-            nuevo_importe_usd = pago.importe / pago.tipo_cambio
-
-        # 6. Blindaje de Sobrefacturación (Con tolerancia de 1 centavo por redondeos)
-        margen = Decimal("0.01")
-        if nuevo_importe_usd > (saldo_pendiente + margen):
-            saldo_formateado = saldo_pendiente.quantize(Decimal("0.01"))
+    # 2. Lógica de Parche de Auditoría (Tipo de Cambio SUNAT)
+    tc_aplicado = pago.tipo_cambio
+    if not tc_aplicado or tc_aplicado <= Decimal("0.00"):
+        tc_sunat = db.query(models.HistorialTipoCambio).filter(models.HistorialTipoCambio.fecha == date.today()).first()
+        if not tc_sunat:
             raise HTTPException(
                 status_code=400, 
-                detail=f"El importe ingresado supera el saldo pendiente de la deuda. Saldo restante: {saldo_formateado}"
+                detail="No se proporcionó un tipo de cambio y no hay registro oficial de SUNAT para el día de hoy. Regístrelo en el sistema."
             )
+        tc_aplicado = tc_sunat.precio_venta
+        pago.tipo_cambio = tc_aplicado
+    
+    pago.tipo_cambio_aplicado = tc_aplicado
 
-    # Verificamos que el concepto exista 
-    if pago.id_concepto is not None:
-        concepto_existe = db.query(models.CatConceptoPago).filter(models.CatConceptoPago.id_concepto == pago.id_concepto).first()
-        if not concepto_existe:
-            raise HTTPException(status_code=404, detail="El concepto de pago seleccionado no existe en el catálogo.")
-    else:
-        raise HTTPException(status_code=400, detail="Debe proporcionar un id_concepto o un id_gasto válido.")
+    # 3. Validación Financiera Estricta (Saldos)
+    pagos_existentes = db.query(models.RegistroPago).filter(
+        models.RegistroPago.id_gasto == pago.id_gasto,
+        models.RegistroPago.estado_registro == "ACTIVO"
+    ).all()
 
-    # Guardado e Inserción Final
+    total_ya_pagado = Decimal("0.00")
+    for p in pagos_existentes:
+        importe_db = Decimal(str(p.importe))
+        tc_db = Decimal(str(p.tipo_cambio_aplicado or p.tipo_cambio))
+        if p.moneda == "USD":
+            total_ya_pagado += importe_db
+        elif p.moneda == "PEN":
+            total_ya_pagado += (importe_db / tc_db)
+
+    monto_gasto_usd = Decimal(str(gasto.monto_usd))
+    saldo_pendiente = monto_gasto_usd - total_ya_pagado
+
+    # Calcular el importe real ingresado a moneda dura (USD)
+    nuevo_importe_usd = Decimal("0.00")
+    if pago.moneda == "USD":
+        nuevo_importe_usd = pago.importe
+    elif pago.moneda == "PEN":
+        nuevo_importe_usd = pago.importe / tc_aplicado
+
+    # Tolerancia por diferenciales cambiarios
+    margen_tolerancia = Decimal("0.05")
+    
+    if nuevo_importe_usd > (saldo_pendiente + margen_tolerancia):
+        saldo_formateado = saldo_pendiente.quantize(Decimal("0.01"))
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Sobrepago detectado. El importe ingresado supera el saldo pendiente. Saldo restante original: USD {saldo_formateado}"
+        )
+
+    # 4. Guardar Pago Principal
     try:
         nuevo_pago = models.RegistroPago(**pago.model_dump())
         db.add(nuevo_pago)
-
-        # 7. Si el nuevo pago cubre exactamente el saldo (o con la tolerancia), cerramos la deuda
-        if gasto and nuevo_importe_usd >= (saldo_pendiente - margen):
-            gasto.estado_pago = "PAGADO"
         
+        saldo_pendiente_nuevo = saldo_pendiente - nuevo_importe_usd
+
+        # Cerrar el gasto si el pago es exacto (o se pasa por centavos permitidos)
+        if saldo_pendiente_nuevo <= Decimal("0.00"):
+            gasto.estado_pago = "PAGADO"
+            
+        # 5. Cierre Automático ZD (Ajuste Ficticio por centavos restantes)
+        elif Decimal("0.00") < saldo_pendiente_nuevo <= margen_tolerancia:
+            pago_ajuste = models.RegistroPago(
+                id_dam=gasto.id_dam,
+                id_concepto=gasto.id_concepto,
+                moneda="USD",
+                importe=saldo_pendiente_nuevo,
+                tipo_cambio=Decimal("1.00"),
+                tipo_cambio_aplicado=Decimal("1.00"),
+                estado_pago="PAGADO",
+                fecha_pago=date.today(),
+                numero_operacion="AJUSTE-ZD",
+                id_banco=pago.id_banco,
+                id_empresa=pago.id_empresa,
+                id_gasto=gasto.id_gasto,
+                es_ajuste_sistema=True
+            )
+            db.add(pago_ajuste)
+            gasto.estado_pago = "PAGADO"
+
         db.commit()
         db.refresh(nuevo_pago)
         return nuevo_pago
+        
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=400, detail=f"Error exacto: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Error en transacción: {str(e)}")
 
 @app.put("/pagos/{id_pago}", response_model=schemas.RegistroPago)
 def actualizar_pago(id_pago: int, pago_editado: schemas.RegistroPagoUpdate, db: Session = Depends(get_db)):
