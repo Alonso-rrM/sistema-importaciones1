@@ -1,9 +1,26 @@
 import datetime
-from sqlalchemy import Column, Integer, String, Numeric, Date, ForeignKey, DateTime, Text
+# Agregamos 'Boolean' a las importaciones para el ZAJUSTE
+from sqlalchemy import Column, Integer, String, Numeric, Date, ForeignKey, DateTime, Text, Boolean
 from sqlalchemy.orm import relationship
 from database import Base
 
 # --- 1. TABLAS CATÁLOGO ---
+
+# [NUEVO] Catálogo de Documentos y su impacto contable
+class CatalogoDocumentoPago(Base):
+    __tablename__ = "catalogo_documentos_pago"
+    id_tipo_doc = Column(Integer, primary_key=True, index=True)
+    nombre_documento = Column(String(50), unique=True, nullable=False)
+    multiplicador_financiero = Column(Integer, nullable=False)
+    
+    gastos = relationship("RegistroGasto", back_populates="tipo_doc_rel")
+
+# [NUEVO] Historial automatizado de SUNAT
+class HistorialTipoCambio(Base):
+    __tablename__ = "historial_tipo_cambio"
+    fecha = Column(Date, primary_key=True, default=datetime.date.today)
+    precio_compra = Column(Numeric(15, 4), nullable=False)
+    precio_venta = Column(Numeric(15, 4), nullable=False)
 
 class CatConceptoPago(Base):
     __tablename__ = "cat_conceptos_pagos"
@@ -19,6 +36,10 @@ class CatProveedor(Base):
     id_proveedor = Column(Integer, primary_key=True, index=True)
     nombre = Column(String(200), unique=True, nullable=False)
     ruc = Column(String(11), unique=True)
+    # [NUEVO] Clasificación del proveedor
+    categoria = Column(String(30), default="NACIONAL")
+    
+    gastos = relationship("RegistroGasto", back_populates="proveedor_rel")
 
 class CatAlmacen(Base):
     __tablename__ = "cat_almacenes"
@@ -95,9 +116,17 @@ class RegistroGasto(Base):
     estado_registro = Column(String(20), default="ACTIVO")
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
+    # [NUEVO] Control Documental y Proveedores
+    id_proveedor = Column(Integer, ForeignKey("cat_proveedores.id_proveedor"))
+    id_tipo_doc = Column(Integer, ForeignKey("catalogo_documentos_pago.id_tipo_doc"))
+    numero_documento = Column(String(50))
+    fecha_vencimiento = Column(Date)
+
     dam = relationship("DetalleDam", back_populates="gastos")
     concepto_rel = relationship("CatConceptoPago", back_populates="gastos")
     pagos = relationship("RegistroPago", back_populates="gasto_rel")
+    proveedor_rel = relationship("CatProveedor", back_populates="gastos")
+    tipo_doc_rel = relationship("CatalogoDocumentoPago", back_populates="gastos")
 
 class RegistroPago(Base):
     __tablename__ = "registro_pagos"
@@ -114,10 +143,14 @@ class RegistroPago(Base):
     id_empresa = Column(Integer, ForeignKey("cat_empresas.id_empresa"))
     id_gasto = Column(Integer, ForeignKey("registro_gastos.id_gasto"), nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    estado_registro = Column(String(20), default="ACTIVO")
+    
+    # [NUEVO] Parches de Auditoría
+    es_ajuste_sistema = Column(Boolean, default=False)
+    tipo_cambio_aplicado = Column(Numeric(15, 4))
     
     dam = relationship("DetalleDam", back_populates="pagos")
     banco = relationship("CatBanco", backref="pagos")
     empresa = relationship("CatEmpresa", backref="pagos")
     concepto_rel = relationship("CatConceptoPago", back_populates="pagos")
     gasto_rel = relationship("RegistroGasto", back_populates="pagos")
-    estado_registro = Column(String(20), default="ACTIVO")
