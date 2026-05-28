@@ -9,6 +9,14 @@ import models
 import schemas
 from database import SessionLocal, engine
 
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+import jwt
+from jwt.exceptions import InvalidTokenError, ExpiredSignatureError
+from security import verify_password, create_access_token, SECRET_KEY, ALGORITHM, get_password_hash
+
+# Configuración del esquema OAuth2 (Apunta al endpoint de login)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+
 # Nos aseguramos de que las tablas existan
 models.Base.metadata.create_all(bind=engine)
 
@@ -21,6 +29,60 @@ def get_db():
         yield db
     finally:
         db.close()
+
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    credenciales_exception = HTTPException(
+        status_code=401,
+        detail="No se pudieron validar las credenciales",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    
+    try:
+        # Decodificamos el token
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise credenciales_exception
+    except ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="El token ha expirado", headers={"WWW-Authenticate": "Bearer"})
+    except InvalidTokenError:
+        raise credenciales_exception
+        
+    # Buscamos al usuario en la BD
+    user = db.query(models.Usuario).filter(models.Usuario.username == username).first()
+    if user is None:
+        raise credenciales_exception
+        
+    # Verificamos que el usuario siga activo
+    if not user.is_active:
+        raise HTTPException(status_code=401, detail="El usuario inactivo o suspendido")
+        
+    return user
+
+@app.post("/login")
+def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    # 1. Buscar al usuario por username
+    user = db.query(models.Usuario).filter(models.Usuario.username == form_data.username).first()
+    
+    # 2. Verificar existencia y contraseña
+    if not user or not verify_password(form_data.password, user.hashed_password):
+        raise HTTPException(
+            status_code=401,
+            detail="Username o contraseña incorrectos",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+        
+    # 3. Verificar si está activo
+    if not user.is_active:
+        raise HTTPException(status_code=401, detail="Usuario inactivo")
+        
+    # 4. Crear Payload y generar Access Token
+    # Insertamos datos extra (como el id_rol) por si los necesitamos extraer fácilmente sin tocar la BD
+    access_token = create_access_token(
+        data={"sub": user.username, "id_rol": user.id_rol, "id_usuario": user.id_usuario}
+    )
+    
+    return {"access_token": access_token, "token_type": "bearer"}
 
 # --- PATRÓN STRATEGY PARA VALIDACIÓN DE DAMS ---
 
@@ -45,9 +107,28 @@ ESTRATEGIAS_VALIDACION_DAM = {
 def ruta_principal():
     return {"mensaje": "¡Servidor de Importaciones funcionando al 100%!"}
 
+# --- ENDPOINTS DE USUARIOS ---
+@app.post("/usuarios/", response_model=schemas.Usuario)
+def crear_usuario(usuario: schemas.UsuarioCreate, db: Session = Depends(get_db)):
+    db_user = db.query(models.Usuario).filter(models.Usuario.username == usuario.username).first()
+    if db_user:
+        raise HTTPException(status_code=400, detail="El username ya está registrado")
+    hashed_password = get_password_hash(usuario.password)
+    nuevo_usuario = models.Usuario(
+        id_rol=usuario.id_rol,
+        username=usuario.username,
+        email=usuario.email,
+        is_active=usuario.is_active,
+        hashed_password=hashed_password
+    )
+    db.add(nuevo_usuario)
+    db.commit()
+    db.refresh(nuevo_usuario)
+    return nuevo_usuario
+
 # --- ENDPOINTS DE CATÁLOGOS ---
 @app.post("/bancos/", response_model=schemas.CatBanco)
-def crear_banco(banco: schemas.CatBancoCreate, db: Session = Depends(get_db)):
+def crear_banco(banco: schemas.CatBancoCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     nuevo_banco = models.CatBanco(nombre=banco.nombre)
     db.add(nuevo_banco)
     db.commit()
@@ -55,7 +136,7 @@ def crear_banco(banco: schemas.CatBancoCreate, db: Session = Depends(get_db)):
     return nuevo_banco
 
 @app.post("/agentes/", response_model=schemas.CatAgente)
-def crear_agente(agente: schemas.CatAgenteCreate, db: Session = Depends(get_db)):
+def crear_agente(agente: schemas.CatAgenteCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     nuevo_agente = models.CatAgente(**agente.model_dump())
     db.add(nuevo_agente)
     db.commit()
@@ -63,7 +144,7 @@ def crear_agente(agente: schemas.CatAgenteCreate, db: Session = Depends(get_db))
     return nuevo_agente
 
 @app.post("/proveedores/", response_model=schemas.CatProveedor)
-def crear_proveedor(proveedor: schemas.CatProveedorCreate, db: Session = Depends(get_db)):
+def crear_proveedor(proveedor: schemas.CatProveedorCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     nuevo_proveedor = models.CatProveedor(**proveedor.model_dump())
     db.add(nuevo_proveedor)
     db.commit()
@@ -71,7 +152,7 @@ def crear_proveedor(proveedor: schemas.CatProveedorCreate, db: Session = Depends
     return nuevo_proveedor
 
 @app.post("/almacenes/", response_model=schemas.CatAlmacen)
-def crear_almacen(almacen: schemas.CatAlmacenCreate, db: Session = Depends(get_db)):
+def crear_almacen(almacen: schemas.CatAlmacenCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     nuevo_almacen = models.CatAlmacen(**almacen.model_dump())
     db.add(nuevo_almacen)
     db.commit()
@@ -79,7 +160,7 @@ def crear_almacen(almacen: schemas.CatAlmacenCreate, db: Session = Depends(get_d
     return nuevo_almacen
 
 @app.post("/importadores/", response_model=schemas.CatImportador)
-def crear_importador(importador: schemas.CatImportadorCreate, db: Session = Depends(get_db)):
+def crear_importador(importador: schemas.CatImportadorCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     nuevo_importador = models.CatImportador(**importador.model_dump())
     db.add(nuevo_importador)
     db.commit()
@@ -87,7 +168,7 @@ def crear_importador(importador: schemas.CatImportadorCreate, db: Session = Depe
     return nuevo_importador
 
 @app.post("/empresas/", response_model=schemas.CatEmpresa)
-def crear_empresa(empresa: schemas.CatEmpresaCreate, db: Session = Depends(get_db)):
+def crear_empresa(empresa: schemas.CatEmpresaCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     try:
         nueva_empresa = models.CatEmpresa(**empresa.model_dump())
         db.add(nueva_empresa)
@@ -100,7 +181,7 @@ def crear_empresa(empresa: schemas.CatEmpresaCreate, db: Session = Depends(get_d
 
 # --- ENDPOINTS PARA MAESTRO_IMPORTACIONES ---
 @app.post("/maestros/", response_model=schemas.MaestroImportacion)
-def crear_maestro(maestro: schemas.MaestroImportacionCreate, db: Session = Depends(get_db)):
+def crear_maestro(maestro: schemas.MaestroImportacionCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     nuevo_maestro = models.MaestroImportacion(**maestro.model_dump())
     
     # Automatización CFR
@@ -114,7 +195,7 @@ def crear_maestro(maestro: schemas.MaestroImportacionCreate, db: Session = Depen
     return nuevo_maestro
 
 @app.put("/maestros/{id_maestro}", response_model=schemas.MaestroImportacion)
-def actualizar_maestro(id_maestro: int, maestro_editado: schemas.MaestroImportacionUpdate, db: Session = Depends(get_db)):
+def actualizar_maestro(id_maestro: int, maestro_editado: schemas.MaestroImportacionUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     db_maestro = db.query(models.MaestroImportacion).filter(models.MaestroImportacion.id_maestro == id_maestro).first()
     
     if not db_maestro:
@@ -136,7 +217,7 @@ def actualizar_maestro(id_maestro: int, maestro_editado: schemas.MaestroImportac
 
 # --- ENDPOINTS PARA DAMS ---
 @app.post("/dams/", response_model=schemas.DetalleDam)
-def crear_dam(dam: schemas.DetalleDamCreate, db: Session = Depends(get_db)):
+def crear_dam(dam: schemas.DetalleDamCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     maestro = db.query(models.MaestroImportacion).filter(models.MaestroImportacion.id_maestro == dam.id_maestro).first()
     
     if not maestro:
@@ -153,7 +234,7 @@ def crear_dam(dam: schemas.DetalleDamCreate, db: Session = Depends(get_db)):
     return nueva_dam
 
 @app.put("/dams/{id_dam}", response_model=schemas.DetalleDam)
-def actualizar_dam(id_dam: int, dam_editada: schemas.DetalleDamUpdate, db: Session = Depends(get_db)):
+def actualizar_dam(id_dam: int, dam_editada: schemas.DetalleDamUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     db_dam = db.query(models.DetalleDam).filter(models.DetalleDam.id_dam == id_dam).first()
     
     if not db_dam:
@@ -170,7 +251,7 @@ def actualizar_dam(id_dam: int, dam_editada: schemas.DetalleDamUpdate, db: Sessi
 
 # --- ENDPOINTS PARA GASTOS ---
 @app.post("/gastos/", response_model=schemas.RegistroGasto)
-def crear_gasto(gasto: schemas.RegistroGastoCreate, db: Session = Depends(get_db)):
+def crear_gasto(gasto: schemas.RegistroGastoCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     # 1. Consultar información del Proveedor
     proveedor = db.query(models.CatProveedor).filter(models.CatProveedor.id_proveedor == gasto.id_proveedor).first()
     if not proveedor:
@@ -211,7 +292,7 @@ def crear_gasto(gasto: schemas.RegistroGastoCreate, db: Session = Depends(get_db
         raise HTTPException(status_code=400, detail=f"Error al crear gasto: {str(e)}")
 
 @app.put("/gastos/{id_gasto}", response_model=schemas.RegistroGasto)
-def actualizar_gasto(id_gasto: int, gasto_editado: schemas.RegistroGastoUpdate, db: Session = Depends(get_db)):
+def actualizar_gasto(id_gasto: int, gasto_editado: schemas.RegistroGastoUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     db_gasto = db.query(models.RegistroGasto).filter(models.RegistroGasto.id_gasto == id_gasto).first()
     if not db_gasto:
         raise HTTPException(status_code=404, detail="Gasto no encontrado")
@@ -233,7 +314,7 @@ def actualizar_gasto(id_gasto: int, gasto_editado: schemas.RegistroGastoUpdate, 
 
 # --- ENDPOINTS PARA PAGOS ---
 @app.post("/pagos/", response_model=schemas.RegistroPago)
-def registrar_pago(pago: schemas.RegistroPagoCreate, db: Session = Depends(get_db)):
+def registrar_pago(pago: schemas.RegistroPagoCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     if pago.id_gasto is None:
         raise HTTPException(status_code=400, detail="Debe proporcionar un id_gasto válido.")
 
@@ -343,7 +424,7 @@ def registrar_pago(pago: schemas.RegistroPagoCreate, db: Session = Depends(get_d
         raise HTTPException(status_code=400, detail=f"Error en transacción: {str(e)}")
 
 @app.put("/pagos/{id_pago}", response_model=schemas.RegistroPago)
-def actualizar_pago(id_pago: int, pago_editado: schemas.RegistroPagoUpdate, db: Session = Depends(get_db)):
+def actualizar_pago(id_pago: int, pago_editado: schemas.RegistroPagoUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     db_pago = db.query(models.RegistroPago).filter(models.RegistroPago.id_pago == id_pago).first()
     if not db_pago:
         raise HTTPException(status_code=404, detail="Pago no encontrado")
@@ -369,7 +450,7 @@ def actualizar_pago(id_pago: int, pago_editado: schemas.RegistroPagoUpdate, db: 
 def estado_cuenta_factura(
     id_maestro: int, 
     tipo_cambio_referencial: Decimal = Query(Decimal("3.80"), description="Tipo de cambio referencial para gastos en USD"), 
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)
 ):
     maestro = db.query(models.MaestroImportacion).filter(models.MaestroImportacion.id_maestro == id_maestro).first()
     
@@ -433,7 +514,7 @@ def estado_cuenta_factura(
 
 # --- ENDPOINTS PARA CONCEPTOS ---
 @app.post("/conceptos/", response_model=schemas.CatConceptoPago)
-def crear_concepto(concepto: schemas.CatConceptoPagoCreate, db: Session = Depends(get_db)):
+def crear_concepto(concepto: schemas.CatConceptoPagoCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     try:
         nuevo_concepto = models.CatConceptoPago(**concepto.model_dump())
         db.add(nuevo_concepto)
@@ -445,11 +526,11 @@ def crear_concepto(concepto: schemas.CatConceptoPagoCreate, db: Session = Depend
         raise HTTPException(status_code=400, detail="Error al crear el concepto. Verifica que no esté duplicado.")
 
 @app.get("/conceptos/", response_model=List[schemas.CatConceptoPago])
-def listar_conceptos(db: Session = Depends(get_db)):
+def listar_conceptos(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     return db.query(models.CatConceptoPago).filter(models.CatConceptoPago.estado_registro == "ACTIVO").all()
 
 @app.delete("/conceptos/{id_concepto}")
-def eliminar_concepto(id_concepto: int, db: Session = Depends(get_db)):
+def eliminar_concepto(id_concepto: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     concepto = db.query(models.CatConceptoPago).filter(models.CatConceptoPago.id_concepto == id_concepto).first()
     if not concepto:
         raise HTTPException(status_code=404, detail="Concepto no encontrado")
@@ -460,27 +541,27 @@ def eliminar_concepto(id_concepto: int, db: Session = Depends(get_db)):
 
 # --- RUTAS DE LECTURA (GET) GENERALES ---
 @app.get("/bancos/", response_model=List[schemas.CatBanco])
-def listar_bancos(db: Session = Depends(get_db)):
+def listar_bancos(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     return db.query(models.CatBanco).all()
 
 @app.get("/maestros/", response_model=List[schemas.MaestroImportacion])
-def listar_facturas(db: Session = Depends(get_db)):
+def listar_facturas(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     return db.query(models.MaestroImportacion).all()
 
 @app.get("/reporte-maestro/{id_maestro}", response_model=schemas.MaestroConDetalles)
-def reporte_completo_factura(id_maestro: int, db: Session = Depends(get_db)):
+def reporte_completo_factura(id_maestro: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     factura = db.query(models.MaestroImportacion).filter(models.MaestroImportacion.id_maestro == id_maestro).first()
     if not factura:
         raise HTTPException(status_code=404, detail="Factura no encontrada")
     return factura
 
 @app.get("/gastos/", response_model=List[schemas.RegistroGasto])
-def listar_gastos(db: Session = Depends(get_db)):
+def listar_gastos(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     return db.query(models.RegistroGasto).all()
 
 # --- RUTAS DE ELIMINACIÓN/ANULACIÓN ---
 @app.delete("/maestros/{id_maestro}")
-def anular_factura(id_maestro: int, db: Session = Depends(get_db)):
+def anular_factura(id_maestro: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     db_factura = db.query(models.MaestroImportacion).filter(models.MaestroImportacion.id_maestro == id_maestro).first()
     if not db_factura:
         raise HTTPException(status_code=404, detail="Factura no encontrada")
@@ -490,7 +571,7 @@ def anular_factura(id_maestro: int, db: Session = Depends(get_db)):
     return {"mensaje": f"Factura {db_factura.numero_factura} marcada como ANULADA correctamente."}
 
 @app.put("/bancos/{id_banco}", response_model=schemas.CatBanco)
-def actualizar_banco(id_banco: int, banco_editado: schemas.CatBancoCreate, db: Session = Depends(get_db)):
+def actualizar_banco(id_banco: int, banco_editado: schemas.CatBancoCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     db_banco = db.query(models.CatBanco).filter(models.CatBanco.id_banco == id_banco).first()
     if not db_banco:
         raise HTTPException(status_code=404, detail="Banco no encontrado")

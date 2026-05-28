@@ -154,3 +154,39 @@ class RegistroPago(Base):
     empresa = relationship("CatEmpresa", backref="pagos")
     concepto_rel = relationship("CatConceptoPago", back_populates="pagos")
     gasto_rel = relationship("RegistroGasto", back_populates="pagos")
+
+# --- 3. TABLAS DE SEGURIDAD, RBAC Y AUDITORÍA ---
+
+class CatRol(Base):
+    __tablename__ = "cat_roles"
+    id_rol = Column(Integer, primary_key=True, index=True)
+    nombre = Column(String(50), unique=True, nullable=False)
+    descripcion = Column(Text)
+    estado_registro = Column(String(20), default="ACTIVO")
+    
+    usuarios = relationship("Usuario", back_populates="rol")
+
+class Usuario(Base):
+    __tablename__ = "usuarios"
+    id_usuario = Column(Integer, primary_key=True, index=True)
+    id_rol = Column(Integer, ForeignKey("cat_roles.id_rol"), nullable=False)
+    username = Column(String(50), unique=True, nullable=False)
+    email = Column(String(100), unique=True, nullable=False)
+    hashed_password = Column(String(255), nullable=False)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    
+    rol = relationship("CatRol", back_populates="usuarios")
+    audit_logs = relationship("AuditLog", back_populates="usuario")
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+    id_log = Column(Integer, primary_key=True, index=True)
+    id_usuario = Column(Integer, ForeignKey("usuarios.id_usuario"), nullable=True) # Puede ser nulo para logins fallidos
+    endpoint = Column(String(255), nullable=False)
+    accion = Column(String(100), nullable=False)
+    ip_address = Column(String(50))
+    detalles = Column(Text)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    
+    usuario = relationship("Usuario", back_populates="audit_logs")

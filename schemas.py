@@ -266,3 +266,50 @@ class EstadoCuentaFacturaResumen(BaseModel):
     porcentaje_amortizado: Decimal
     desglose_dams: List[EstadoCuentaDam]
     model_config = ConfigDict(from_attributes=True)
+
+# --- 8. ESQUEMAS PARA SEGURIDAD, RBAC Y AUDITORÍA ---
+
+# -- CatRol --
+class CatRolBase(BaseModel):
+    nombre: str
+    descripcion: Optional[str] = None
+
+class CatRolCreate(CatRolBase):
+    pass
+
+class CatRol(CatRolBase):
+    id_rol: int
+    estado_registro: str
+    model_config = ConfigDict(from_attributes=True)
+
+# -- Usuario --
+class UsuarioBase(BaseModel):
+    id_rol: int
+    username: str
+    email: str
+    is_active: bool = True
+
+class UsuarioCreate(UsuarioBase):
+    password: str  # Recibido en texto plano, jamás devuelto
+
+class Usuario(UsuarioBase):
+    id_usuario: int
+    created_at: datetime
+    # Se excluye deliberadamente password y hashed_password para máxima seguridad
+    model_config = ConfigDict(from_attributes=True)
+
+# -- AuditLog --
+class AuditLogBase(BaseModel):
+    id_usuario: Optional[int] = None
+    endpoint: str
+    accion: str
+    ip_address: Optional[str] = None
+    detalles: Optional[str] = None
+
+class AuditLogCreate(AuditLogBase):
+    pass
+
+class AuditLog(AuditLogBase):
+    id_log: int
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
