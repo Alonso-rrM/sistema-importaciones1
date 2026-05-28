@@ -1,7 +1,7 @@
 from typing import List
 from datetime import date
 from decimal import Decimal
-from fastapi import FastAPI, Depends, HTTPException, Query
+from fastapi import FastAPI, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
@@ -58,6 +58,32 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         raise HTTPException(status_code=401, detail="El usuario inactivo o suspendido")
         
     return user
+
+# --- CONTROL DE ROLES (RBAC) ---
+class RoleChecker:
+    def __init__(self, roles_permitidos: List[int]):
+        self.roles_permitidos = roles_permitidos
+
+    def __call__(self, current_user: models.Usuario = Depends(get_current_user)):
+        if current_user.id_rol not in self.roles_permitidos:
+            raise HTTPException(
+                status_code=403,
+                detail="Operación denegada: No tienes los permisos necesarios para realizar esta acción."
+            )
+        return current_user
+
+# --- BITÁCORA DE AUDITORÍA ---
+async def registrar_auditoria(db: Session, id_usuario: int, endpoint: str, accion: str, detalles: str, ip_address: str):
+    nuevo_log = models.AuditLog(
+        id_usuario=id_usuario,
+        endpoint=endpoint,
+        accion=accion,
+        detalles=detalles,
+        ip_address=ip_address
+    )
+    db.add(nuevo_log)
+    db.commit()
+
 
 @app.post("/login")
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
@@ -251,7 +277,12 @@ def actualizar_dam(id_dam: int, dam_editada: schemas.DetalleDamUpdate, db: Sessi
 
 # --- ENDPOINTS PARA GASTOS ---
 @app.post("/gastos/", response_model=schemas.RegistroGasto)
-def crear_gasto(gasto: schemas.RegistroGastoCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+async def crear_gasto(
+    request: Request,
+    gasto: schemas.RegistroGastoCreate, 
+    db: Session = Depends(get_db), 
+    current_user: models.Usuario = Depends(RoleChecker([1, 3])) # 1: Admin, 3: Logística
+):
     # 1. Consultar información del Proveedor
     proveedor = db.query(models.CatProveedor).filter(models.CatProveedor.id_proveedor == gasto.id_proveedor).first()
     if not proveedor:
@@ -286,11 +317,21 @@ def crear_gasto(gasto: schemas.RegistroGastoCreate, db: Session = Depends(get_db
         db.add(nuevo_gasto)
         db.commit()
         db.refresh(nuevo_gasto)
+        
+        # --- AUDITORÍA: Registro de Creación ---
+        await registrar_auditoria(
+            db=db,
+            id_usuario=current_user.id_usuario,
+            endpoint=request.url.path,
+            accion="CREACION GASTO",
+            detalles=gasto.model_dump_json(), # Pydantic V2 convierte el payload a string JSON
+            ip_address=request.client.host if request.client else "IP Desconocida"
+        )
+        
         return nuevo_gasto
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=f"Error al crear gasto: {str(e)}")
-
 @app.put("/gastos/{id_gasto}", response_model=schemas.RegistroGasto)
 def actualizar_gasto(id_gasto: int, gasto_editado: schemas.RegistroGastoUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     db_gasto = db.query(models.RegistroGasto).filter(models.RegistroGasto.id_gasto == id_gasto).first()
@@ -314,7 +355,12 @@ def actualizar_gasto(id_gasto: int, gasto_editado: schemas.RegistroGastoUpdate, 
 
 # --- ENDPOINTS PARA PAGOS ---
 @app.post("/pagos/", response_model=schemas.RegistroPago)
-def registrar_pago(pago: schemas.RegistroPagoCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+async def registrar_pago(
+    request: Request,
+    pago: schemas.RegistroPagoCreate, 
+    db: Session = Depends(get_db), 
+    current_user: models.Usuario = Depends(RoleChecker([1, 2])) # 1: Admin, 2: Tesorería
+):
     if pago.id_gasto is None:
         raise HTTPException(status_code=400, detail="Debe proporcionar un id_gasto válido.")
 
@@ -417,12 +463,22 @@ def registrar_pago(pago: schemas.RegistroPagoCreate, db: Session = Depends(get_d
 
         db.commit()
         db.refresh(nuevo_pago)
+        
+        # --- AUDITORÍA: Registro de Creación ---
+        await registrar_auditoria(
+            db=db,
+            id_usuario=current_user.id_usuario,
+            endpoint=request.url.path,
+            accion="CREACION PAGO",
+            detalles=pago.model_dump_json(), # Pydantic V2
+            ip_address=request.client.host if request.client else "IP Desconocida"
+        )
+
         return nuevo_pago
         
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=f"Error en transacción: {str(e)}")
-
 @app.put("/pagos/{id_pago}", response_model=schemas.RegistroPago)
 def actualizar_pago(id_pago: int, pago_editado: schemas.RegistroPagoUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     db_pago = db.query(models.RegistroPago).filter(models.RegistroPago.id_pago == id_pago).first()
@@ -580,3 +636,11 @@ def actualizar_banco(id_banco: int, banco_editado: schemas.CatBancoCreate, db: S
     db.commit()
     db.refresh(db_banco)
     return db_banco
+
+# --- ENDPOINT DE AUDITORÍA ---
+@app.get("/auditoria/", response_model=List[schemas.AuditLog])
+def listar_auditoria(
+    db: Session = Depends(get_db), 
+    current_user: models.Usuario = Depends(RoleChecker([1, 4])) # 1: Admin, 4: Auditor
+):
+    return db.query(models.AuditLog).order_by(models.AuditLog.created_at.desc()).limit(100).all()
