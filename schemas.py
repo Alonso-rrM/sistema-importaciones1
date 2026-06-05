@@ -156,6 +156,7 @@ class DetalleDamBase(BaseModel):
     serie: Optional[str] = None
     canal_control: Optional[str] = None
     monto_valor_provisional_usd: Optional[Decimal] = None
+    aforo_realizado: bool = False  # <--- NUEVO
 
 class DetalleDamCreate(DetalleDamBase):
     pass
@@ -171,6 +172,7 @@ class DetalleDamUpdate(BaseModel):
     serie: str | None = None
     canal_control: str | None = None
     monto_valor_provisional_usd: Decimal | None = None
+    aforo_realizado: bool | None = None  # <--- NUEVO OPCIONAL
 
 
 # --- 4. ESQUEMAS PARA REGISTRO_GASTOS ---

@@ -101,6 +101,10 @@ class DetalleDam(Base):
     serie = Column(String(50))
     canal_control = Column(String(50))
     monto_valor_provisional_usd = Column(Numeric(15, 2), nullable=True)
+    
+    # [NUEVO] Control de Aforo Físico
+    aforo_realizado = Column(Boolean, default=False)
+    
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     maestro = relationship("MaestroImportacion", back_populates="dams")
     pagos = relationship("RegistroPago", back_populates="dam")

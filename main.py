@@ -2,6 +2,7 @@ from typing import List
 from datetime import date
 from decimal import Decimal
 from fastapi import FastAPI, Depends, HTTPException, Query, Request
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
@@ -21,6 +22,14 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="API de Importaciones y Pagos")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # En producción lo cambiaremos al dominio real
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Función vital: Abre y cierra la conexión a la base de datos para cada petición
 def get_db():
@@ -240,6 +249,51 @@ def actualizar_maestro(id_maestro: int, maestro_editado: schemas.MaestroImportac
     db.commit()
     db.refresh(db_maestro)
     return db_maestro
+
+# --- ENDPOINT DE LEVANTE (MÁQUINA DE ESTADOS) ---
+@app.put("/maestros/{id_maestro}/autorizar-levante", response_model=schemas.MaestroImportacion)
+async def autorizar_levante(
+    id_maestro: int, 
+    request: Request,
+    db: Session = Depends(get_db), 
+    current_user: models.Usuario = Depends(RoleChecker([1, 3])) # 1: Admin, 3: Logística
+):
+    # 1. Buscar el maestro
+    maestro = db.query(models.MaestroImportacion).filter(models.MaestroImportacion.id_maestro == id_maestro).first()
+    
+    if not maestro:
+        raise HTTPException(status_code=404, detail="Maestro de importación no encontrado")
+        
+    if not maestro.dams:
+        raise HTTPException(status_code=400, detail="El maestro no tiene ninguna DAM asociada para evaluar el levante.")
+
+    # 2. Máquina de Estados: Matriz de Canales
+    for dam in maestro.dams:
+        if dam.canal_control == 'ROJO' and maestro.tipo_valor == 'DEFINITIVO':
+            if not dam.aforo_realizado:
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Operación denegada: El Canal Rojo Definitivo exige Aforo Físico antes del Levante para la DAM {dam.numero_de_dam}."
+                )
+
+    # 3. Aplicar el Levante
+    maestro.estado_levante = 'CON LEVANTE'
+    db.commit()
+    db.refresh(maestro)
+
+    # 4. Bitácora de Auditoría
+    detalles_auditoria = f'{{"id_maestro": {id_maestro}, "nuevo_estado": "CON LEVANTE"}}'
+    
+    await registrar_auditoria(
+        db=db,
+        id_usuario=current_user.id_usuario,
+        endpoint=request.url.path,
+        accion="AUTORIZACION LEVANTE",
+        detalles=detalles_auditoria,
+        ip_address=request.client.host if request.client else "IP Desconocida"
+    )
+
+    return maestro
 
 # --- ENDPOINTS PARA DAMS ---
 @app.post("/dams/", response_model=schemas.DetalleDam)
