@@ -22,6 +22,9 @@ class CatAgente(BaseModel):
     nombre: str
     model_config = ConfigDict(from_attributes=True)
 
+class CatAgenteUpdate(BaseModel):
+    nombre: Optional[str] = None
+
 class CatProveedorCreate(BaseModel):
     nombre: str
     ruc: str
@@ -34,6 +37,11 @@ class CatProveedor(BaseModel):
     categoria: str = "NACIONAL"
     model_config = ConfigDict(from_attributes=True)
 
+class CatProveedorUpdate(BaseModel):
+    nombre: Optional[str] = None
+    ruc: Optional[str] = None
+    categoria: Optional[str] = None
+
 class CatAlmacenCreate(BaseModel):
     nombre: str
 
@@ -41,6 +49,9 @@ class CatAlmacen(BaseModel):
     id_almacen: int
     nombre: str
     model_config = ConfigDict(from_attributes=True)
+
+class CatAlmacenUpdate(BaseModel):
+    nombre: Optional[str] = None
 
 class CatImportadorCreate(BaseModel):
     nombre: str
@@ -52,6 +63,10 @@ class CatImportador(BaseModel):
     ruc: Optional[str] = None 
     model_config = ConfigDict(from_attributes=True)
 
+class CatImportadorUpdate(BaseModel):
+    nombre: Optional[str] = None
+    ruc: Optional[str] = None
+
 class CatEmpresaCreate(BaseModel):
     nombre: str
     ruc: str
@@ -61,6 +76,10 @@ class CatEmpresa(BaseModel):
     nombre: str
     ruc: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
+
+class CatEmpresaUpdate(BaseModel):
+    nombre: Optional[str] = None
+    ruc: Optional[str] = None
 
 class CatConceptoPagoCreate(BaseModel):
     nombre: str

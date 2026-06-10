@@ -178,6 +178,24 @@ def crear_agente(agente: schemas.CatAgenteCreate, db: Session = Depends(get_db),
     db.refresh(nuevo_agente)
     return nuevo_agente
 
+@app.get("/agentes/", response_model=List[schemas.CatAgente])
+def listar_agentes(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    return db.query(models.CatAgente).all()
+
+@app.put("/agentes/{id_agente}", response_model=schemas.CatAgente)
+def actualizar_agente(id_agente: int, agente_editado: schemas.CatAgenteUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    db_agente = db.query(models.CatAgente).filter(models.CatAgente.id_agente == id_agente).first()
+    if not db_agente:
+        raise HTTPException(status_code=404, detail="Agente no encontrado")
+    
+    update_data = agente_editado.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_agente, key, value)
+        
+    db.commit()
+    db.refresh(db_agente)
+    return db_agente
+
 @app.post("/proveedores/", response_model=schemas.CatProveedor)
 def crear_proveedor(proveedor: schemas.CatProveedorCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     nuevo_proveedor = models.CatProveedor(**proveedor.model_dump())
@@ -185,6 +203,28 @@ def crear_proveedor(proveedor: schemas.CatProveedorCreate, db: Session = Depends
     db.commit()
     db.refresh(nuevo_proveedor)
     return nuevo_proveedor
+
+@app.get("/proveedores/", response_model=List[schemas.CatProveedor])
+def listar_proveedores(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    return db.query(models.CatProveedor).all()
+
+@app.put("/proveedores/{id_proveedor}", response_model=schemas.CatProveedor)
+def actualizar_proveedor(id_proveedor: int, proveedor_editado: schemas.CatProveedorUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    db_proveedor = db.query(models.CatProveedor).filter(models.CatProveedor.id_proveedor == id_proveedor).first()
+    if not db_proveedor:
+        raise HTTPException(status_code=404, detail="Proveedor no encontrado")
+    
+    update_data = proveedor_editado.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_proveedor, key, value)
+        
+    try:
+        db.commit()
+        db.refresh(db_proveedor)
+        return db_proveedor
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Error: El Nombre o RUC ya están registrados.")
 
 @app.post("/almacenes/", response_model=schemas.CatAlmacen)
 def crear_almacen(almacen: schemas.CatAlmacenCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
@@ -194,6 +234,24 @@ def crear_almacen(almacen: schemas.CatAlmacenCreate, db: Session = Depends(get_d
     db.refresh(nuevo_almacen)
     return nuevo_almacen
 
+@app.get("/almacenes/", response_model=List[schemas.CatAlmacen])
+def listar_almacenes(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    return db.query(models.CatAlmacen).all()
+
+@app.put("/almacenes/{id_almacen}", response_model=schemas.CatAlmacen)
+def actualizar_almacen(id_almacen: int, almacen_editado: schemas.CatAlmacenUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    db_almacen = db.query(models.CatAlmacen).filter(models.CatAlmacen.id_almacen == id_almacen).first()
+    if not db_almacen:
+        raise HTTPException(status_code=404, detail="Almacén no encontrado")
+    
+    update_data = almacen_editado.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_almacen, key, value)
+        
+    db.commit()
+    db.refresh(db_almacen)
+    return db_almacen
+
 @app.post("/importadores/", response_model=schemas.CatImportador)
 def crear_importador(importador: schemas.CatImportadorCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     nuevo_importador = models.CatImportador(**importador.model_dump())
@@ -201,6 +259,28 @@ def crear_importador(importador: schemas.CatImportadorCreate, db: Session = Depe
     db.commit()
     db.refresh(nuevo_importador)
     return nuevo_importador
+
+@app.get("/importadores/", response_model=List[schemas.CatImportador])
+def listar_importadores(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    return db.query(models.CatImportador).all()
+
+@app.put("/importadores/{id_importador}", response_model=schemas.CatImportador)
+def actualizar_importador(id_importador: int, importador_editado: schemas.CatImportadorUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    db_importador = db.query(models.CatImportador).filter(models.CatImportador.id_importador == id_importador).first()
+    if not db_importador:
+        raise HTTPException(status_code=404, detail="Importador no encontrado")
+    
+    update_data = importador_editado.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_importador, key, value)
+        
+    try:
+        db.commit()
+        db.refresh(db_importador)
+        return db_importador
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Error: El Nombre o RUC ya están registrados.")
 
 @app.post("/empresas/", response_model=schemas.CatEmpresa)
 def crear_empresa(empresa: schemas.CatEmpresaCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
@@ -212,6 +292,28 @@ def crear_empresa(empresa: schemas.CatEmpresaCreate, db: Session = Depends(get_d
         return nueva_empresa
     except IntegrityError:
         db.rollback() 
+        raise HTTPException(status_code=400, detail="Error: El Nombre o RUC ya están registrados.")
+
+@app.get("/empresas/", response_model=List[schemas.CatEmpresa])
+def listar_empresas(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    return db.query(models.CatEmpresa).all()
+
+@app.put("/empresas/{id_empresa}", response_model=schemas.CatEmpresa)
+def actualizar_empresa(id_empresa: int, empresa_editada: schemas.CatEmpresaUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    db_empresa = db.query(models.CatEmpresa).filter(models.CatEmpresa.id_empresa == id_empresa).first()
+    if not db_empresa:
+        raise HTTPException(status_code=404, detail="Empresa no encontrada")
+    
+    update_data = empresa_editada.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_empresa, key, value)
+        
+    try:
+        db.commit()
+        db.refresh(db_empresa)
+        return db_empresa
+    except IntegrityError:
+        db.rollback()
         raise HTTPException(status_code=400, detail="Error: El Nombre o RUC ya están registrados.")
 
 # --- ENDPOINTS PARA MAESTRO_IMPORTACIONES ---
