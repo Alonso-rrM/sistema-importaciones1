@@ -36,6 +36,15 @@ function Layout() {
                     <Link to="/app/proveedores" style={{ color: 'white', textDecoration: 'none', padding: '12px 20px', borderBottom: '1px solid #34495e', display: 'flex', alignItems: 'center', gap: '10px' }}>
                         🤝 Proveedores
                     </Link>
+                    <Link to="/app/agentes" style={{ color: 'white', textDecoration: 'none', padding: '12px 20px', borderBottom: '1px solid #34495e', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        🛃 Agentes de Aduanas
+                    </Link>
+                    <Link to="/app/almacenes" style={{ color: 'white', textDecoration: 'none', padding: '12px 20px', borderBottom: '1px solid #34495e', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        🏭 Almacenes
+                    </Link>
+                    <Link to="/app/empresas" style={{ color: 'white', textDecoration: 'none', padding: '12px 20px', borderBottom: '1px solid #34495e', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        🏢 Empresas
+                    </Link>
                     <Link to="/app/conceptos" style={{ color: 'white', textDecoration: 'none', padding: '12px 20px', borderBottom: '1px solid #34495e', display: 'flex', alignItems: 'center', gap: '10px' }}>
                         🏷️ Conceptos de Gasto
                     </Link>
