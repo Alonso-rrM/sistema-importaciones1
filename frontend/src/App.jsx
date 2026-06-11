@@ -7,6 +7,7 @@ import Agentes from './pages/Agentes'
 import Almacenes from './pages/Almacenes'
 import Bancos from './pages/Bancos'
 import Empresas from './pages/Empresas'
+import Conceptos from './pages/Conceptos'
 
 
 function App() {
@@ -26,7 +27,7 @@ function App() {
           <Route path="agentes" element={<Agentes />} />
           <Route path="almacenes" element={<Almacenes />} />
           <Route path="empresas" element={<Empresas />} />
-          <Route path="conceptos" element={<h2 style={{ color: '#2c3e50' }}>Pantalla en construcción: Tabla de Conceptos de Gasto</h2>} />
+          <Route path="conceptos" element={<Conceptos />} />
           <Route path="bancos" element={<Bancos />} />
 
           {/* Finanzas */}
