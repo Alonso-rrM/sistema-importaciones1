@@ -19,14 +19,14 @@ function Layout() {
 
                 {/* Menú de Navegación Operativa */}
                 <nav style={{ display: 'flex', flexDirection: 'column', padding: '20px 0' }}>
-          
+
                     <div style={{ color: '#7f8c8d', fontSize: '12px', padding: '10px 20px', textTransform: 'uppercase', letterSpacing: '1px' }}>
                         Operaciones
                     </div>
                     <Link to="/app/logistica" style={{ color: 'white', textDecoration: 'none', padding: '12px 20px', borderBottom: '1px solid #34495e', display: 'flex', alignItems: 'center', gap: '10px' }}>
                         📦 Logística y DAMs
                     </Link>
-          
+
                     <div style={{ color: '#7f8c8d', fontSize: '12px', padding: '20px 20px 10px 20px', textTransform: 'uppercase', letterSpacing: '1px' }}>
                         Catálogos Maestros
                     </div>
