@@ -10,6 +10,7 @@ import Empresas from './pages/Empresas'
 import Conceptos from './pages/Conceptos'
 import Logistica from './pages/Logistica'
 import Gastos from './pages/Gastos'
+import Pagos from './pages/Pagos'
 
 function App() {
   return (
@@ -34,6 +35,7 @@ function App() {
           {/* Finanzas */}
           <Route path="tesoreria" element={<h2 style={{ color: '#2c3e50' }}>Pantalla en construcción: Movimientos y Pagos</h2>} />
           <Route path="gastos" element={<Gastos />} />
+          <Route path="pagos" element={<Pagos />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/login" replace />} />

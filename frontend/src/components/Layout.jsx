@@ -58,6 +58,9 @@ function Layout() {
                     <Link to="/app/gastos" style={{ color: 'white', textDecoration: 'none', padding: '12px 20px', borderBottom: '1px solid #34495e', display: 'flex', alignItems: 'center', gap: '10px' }}>
                         💸 Registro de Gastos
                     </Link>
+                    <Link to="/app/pagos" style={{ color: 'white', textDecoration: 'none', padding: '12px 20px', borderBottom: '1px solid #34495e', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        🏦 Liquidación de Pagos
+                    </Link>
                     <Link to="/app/tesoreria" style={{ color: 'white', textDecoration: 'none', padding: '12px 20px', borderBottom: '1px solid #34495e', display: 'flex', alignItems: 'center', gap: '10px' }}>
                         💰 Tesorería y Pagos
                     </Link>
