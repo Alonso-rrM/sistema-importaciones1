@@ -448,6 +448,10 @@ async def autorizar_levante(
     return maestro
 
 # --- ENDPOINTS PARA DAMS ---
+@app.get("/dams/", response_model=List[schemas.DetalleDam])
+def listar_dams(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    return db.query(models.DetalleDam).all()
+
 @app.post("/dams/", response_model=schemas.DetalleDam)
 def crear_dam(dam: schemas.DetalleDamCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     maestro = db.query(models.MaestroImportacion).filter(models.MaestroImportacion.id_maestro == dam.id_maestro).first()
