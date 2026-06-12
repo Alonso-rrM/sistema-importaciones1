@@ -27,6 +27,7 @@ const Gastos = () => {
 
   const [form, setForm] = useState(estadoInicialForm);
   const [mensaje, setMensaje] = useState({ texto: '', tipo: '' });
+  const [isGuardando, setIsGuardando] = useState(false);
 
   // --- CARGA INICIAL DE CATÁLOGOS ---
   useEffect(() => {
@@ -78,13 +79,15 @@ const Gastos = () => {
   // --- MOTOR DE GUARDADO (POST /gastos/) ---
   const registrarGasto = async (e) => {
     e.preventDefault();
-    setMensaje({ texto: 'Registrando gasto...', tipo: 'info' });
-
+    
     // Validación estricta
     if (!form.id_dam || !form.id_concepto || !form.id_proveedor || !form.id_tipo_doc) {
       setMensaje({ texto: '❌ Faltan catálogos obligatorios (DAM, Concepto, Proveedor o Tipo de Doc).', tipo: 'error' });
       return;
     }
+
+    setIsGuardando(true);
+    setMensaje({ texto: 'Registrando gasto...', tipo: 'info' });
 
     try {
       const token = localStorage.getItem('token');
@@ -122,6 +125,8 @@ const Gastos = () => {
       } else {
         setMensaje({ texto: '❌ Error de conexión o validación de datos.', tipo: 'error' });
       }
+    } finally {
+      setIsGuardando(false);
     }
   };
 
@@ -211,8 +216,8 @@ const Gastos = () => {
         </div>
 
         <div style={{ marginTop: '25px', textAlign: 'right', borderTop: '1px solid #eee', paddingTop: '15px' }}>
-          <button type="submit" style={{ padding: '12px 25px', backgroundColor: '#27ae60', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '15px', fontWeight: 'bold', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-            💰 REGISTRAR GASTO
+          <button type="submit" disabled={isGuardando} style={{ padding: '12px 25px', backgroundColor: isGuardando ? '#95a5a6' : '#27ae60', color: 'white', border: 'none', borderRadius: '4px', cursor: isGuardando ? 'not-allowed' : 'pointer', fontSize: '15px', fontWeight: 'bold', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', opacity: isGuardando ? 0.7 : 1 }}>
+            {isGuardando ? '⏳ PROCESANDO...' : '💰 REGISTRAR GASTO'}
           </button>
         </div>
       </form>
