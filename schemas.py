@@ -138,6 +138,7 @@ class MaestroImportacionBase(BaseModel):
     cfr_usd: Optional[Decimal] = None
     venta_sucesiva: Optional[str] = None
     tipo_valor: Optional[str] = "DEFINITIVO"
+    version: int = 1
 
 class MaestroImportacionCreate(MaestroImportacionBase):
     pass
@@ -165,6 +166,7 @@ class MaestroImportacionUpdate(BaseModel):
     cfr_usd: Decimal | None = None
     venta_sucesiva: str | None = None
     tipo_valor: str | None = None
+    version: int | None = None
 
 
 # --- 3. ESQUEMAS PARA DETALLE_DAMS ---

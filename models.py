@@ -92,6 +92,13 @@ class MaestroImportacion(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     dams = relationship("DetalleDam", back_populates="maestro")
     estado_registro = Column(String(20), default="ACTIVO")
+    
+    # [NUEVO] Bloqueo Optimista
+    version = Column(Integer, default=1, nullable=False)
+    
+    __mapper_args__ = {
+        "version_id_col": version
+    }
 
 class DetalleDam(Base):
     __tablename__ = "detalle_dams"

@@ -5,6 +5,8 @@ from fastapi import FastAPI, Depends, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm.exc import StaleDataError
+from fastapi import status
 
 import models
 import schemas
@@ -337,6 +339,13 @@ def actualizar_maestro(id_maestro: int, maestro_editado: schemas.MaestroImportac
     
     if not db_maestro:
         raise HTTPException(status_code=404, detail="Maestro de importación no encontrado")
+        
+    # Regla Crítica B.1: Si ya tiene LEVANTE, se bloquea la edición normal
+    if db_maestro.estado_levante == "CON LEVANTE" and current_user.id_rol != 1:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="Operación Denegada: Los registros con LEVANTE están blindados. Solicita desbloqueo al Administrador."
+        )
     
     update_data = maestro_editado.model_dump(exclude_unset=True)
     
@@ -348,9 +357,50 @@ def actualizar_maestro(id_maestro: int, maestro_editado: schemas.MaestroImportac
     flete = db_maestro.flete_usd if db_maestro.flete_usd is not None else Decimal('0.00')
     db_maestro.cfr_usd = fob + flete
         
+    try:
+        db.commit()
+        db.refresh(db_maestro)
+        return db_maestro
+    except StaleDataError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="❌ CONFLICTO DE CONCURRENCIA: Otro usuario modificó este registro mientras lo editabas. Por favor, recarga la página."
+        )
+
+# 2. NUEVO ENDPOINT: REVERSIÓN AUDITADA (Solo Rol 1 - Administrador)
+@app.post("/maestros/{id_maestro}/desbloquear/", response_model=schemas.MaestroImportacion)
+async def desbloquear_maestro_con_levante(
+    id_maestro: int, 
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(get_current_user)
+):
+    if current_user.id_rol != 1:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="Acceso Restringido: Solo el Administrador del Sistema puede abrir un candado post-levante."
+        )
+
+    maestro = db.query(models.MaestroImportacion).filter(models.MaestroImportacion.id_maestro == id_maestro).first()
+    if not maestro:
+        raise HTTPException(status_code=404, detail="Maestro de importación no encontrado")
+
+    maestro.estado_levante = "SIN LEVANTE"
+    
     db.commit()
-    db.refresh(db_maestro)
-    return db_maestro
+    db.refresh(maestro)
+    
+    await registrar_auditoria(
+        db=db,
+        id_usuario=current_user.id_usuario,
+        endpoint=request.url.path,
+        accion="DESBLOQUEO LEVANTE",
+        detalles=f'{{"id_maestro": {id_maestro}, "nuevo_estado": "SIN LEVANTE"}}',
+        ip_address=request.client.host if request.client else "IP Desconocida"
+    )
+
+    return maestro
 
 # --- ENDPOINT DE LEVANTE (MÁQUINA DE ESTADOS) ---
 @app.put("/maestros/{id_maestro}/autorizar-levante", response_model=schemas.MaestroImportacion)
@@ -750,6 +800,23 @@ def eliminar_concepto(id_concepto: int, db: Session = Depends(get_db), current_u
     concepto.estado_registro = "INACTIVO"
     db.commit()
     return {"mensaje": f"El concepto '{concepto.nombre}' ha sido eliminado lógicamente (INACTIVO)."}
+
+# --- ENDPOINTS PARA TIPOS DE DOCUMENTO ---
+@app.get("/tipos-documento/", response_model=List[schemas.CatalogoDocumentoPago])
+def listar_tipos_documento(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    return db.query(models.CatalogoDocumentoPago).all()
+
+@app.post("/tipos-documento/", response_model=schemas.CatalogoDocumentoPago)
+def crear_tipo_documento(tipo_doc: schemas.CatalogoDocumentoPagoCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    nuevo_tipo = models.CatalogoDocumentoPago(**tipo_doc.model_dump())
+    db.add(nuevo_tipo)
+    try:
+        db.commit()
+        db.refresh(nuevo_tipo)
+        return nuevo_tipo
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="El nombre del documento ya existe.")
 
 # --- RUTAS DE LECTURA (GET) GENERALES ---
 @app.get("/bancos/", response_model=List[schemas.CatBanco])
