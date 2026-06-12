@@ -8,6 +8,7 @@ import Almacenes from './pages/Almacenes'
 import Bancos from './pages/Bancos'
 import Empresas from './pages/Empresas'
 import Conceptos from './pages/Conceptos'
+import Logistica from './pages/Logistica'
 
 
 function App() {
@@ -19,7 +20,7 @@ function App() {
         {/* Zona Corporativa */}
         <Route path="/app" element={<Layout />}>
           {/* Operaciones */}
-          <Route path="logistica" element={<h2 style={{ color: '#2c3e50' }}>Pantalla en construcción: Registro de Contenedores y DAMs</h2>} />
+          <Route path="logistica" element={<Logistica />} />
 
           {/* Catálogos */}
           <Route path="importadores" element={<Importadores />} />
