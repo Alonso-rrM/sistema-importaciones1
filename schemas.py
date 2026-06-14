@@ -341,3 +341,76 @@ class AuditLog(AuditLogBase):
 
 class EliminacionRequest(BaseModel):
     motivo: str = Field(..., min_length=10, description="Motivo de la eliminación.")
+
+# --- 10. ESQUEMAS DE AUDITORÍA (TABLAS SOMBRA) ---
+
+class AuditoriaBaseResponse(BaseModel):
+    id_eliminacion: int
+    motivo_eliminacion: str
+    usuario_id: int
+    fecha_eliminacion: datetime
+    
+    model_config = ConfigDict(from_attributes=True)
+
+class MaestroEliminadoResponse(AuditoriaBaseResponse):
+    id_maestro: Optional[int] = None
+    numero_factura: str
+    n_cont_fisico: Optional[str] = None
+    id_agente: Optional[int] = None
+    id_importador: Optional[int] = None
+    id_proveedor: Optional[int] = None
+    documento_transporte: Optional[str] = None
+    fecha_embarque: Optional[date] = None
+    fecha_arribo: Optional[date] = None
+    status_llegada: Optional[str] = None
+    estado_levante: Optional[str] = None
+    id_almacen: Optional[int] = None
+    fob_usd: Optional[Decimal] = None
+    flete_usd: Optional[Decimal] = None
+    cfr_usd: Optional[Decimal] = None
+    venta_sucesiva: Optional[str] = None
+    tipo_valor: Optional[str] = None
+    created_at: Optional[datetime] = None
+    estado_registro: Optional[str] = None
+    version: Optional[int] = None
+
+class DamEliminadaResponse(AuditoriaBaseResponse):
+    id_dam: Optional[int] = None
+    id_maestro: int
+    numero_de_dam: str
+    serie: Optional[str] = None
+    canal_control: Optional[str] = None
+    monto_valor_provisional_usd: Optional[Decimal] = None
+    aforo_realizado: Optional[bool] = None
+    created_at: Optional[datetime] = None
+
+class GastoEliminadoResponse(AuditoriaBaseResponse):
+    id_gasto: Optional[int] = None
+    id_dam: int
+    id_concepto: int
+    monto_usd: Decimal
+    estado_pago: Optional[str] = None
+    estado_registro: Optional[str] = None
+    created_at: Optional[datetime] = None
+    id_proveedor: Optional[int] = None
+    id_tipo_doc: Optional[int] = None
+    numero_documento: Optional[str] = None
+    fecha_vencimiento: Optional[date] = None
+
+class PagoEliminadoResponse(AuditoriaBaseResponse):
+    id_pago: Optional[int] = None
+    id_dam: int
+    id_concepto: int
+    moneda: str
+    importe: Decimal
+    tipo_cambio: Decimal
+    estado_pago: Optional[str] = None
+    fecha_pago: Optional[date] = None
+    numero_operacion: Optional[str] = None
+    id_banco: Optional[int] = None
+    id_empresa: Optional[int] = None
+    id_gasto: Optional[int] = None
+    created_at: Optional[datetime] = None
+    estado_registro: Optional[str] = None
+    es_ajuste_sistema: Optional[bool] = None
+    tipo_cambio_aplicado: Optional[Decimal] = None

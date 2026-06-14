@@ -998,3 +998,21 @@ def listar_auditoria(
     current_user: models.Usuario = Depends(RoleChecker([1, 4])) # 1: Admin, 4: Auditor
 ):
     return db.query(models.AuditLog).order_by(models.AuditLog.created_at.desc()).limit(100).all()
+
+# --- ENDPOINTS DE CONSULTA DE AUDITORÍA (TABLAS SOMBRA) ---
+
+@app.get("/auditoria/maestros/", response_model=List[schemas.MaestroEliminadoResponse])
+def listar_auditoria_maestros(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    return db.query(models.MaestroEliminado).order_by(models.MaestroEliminado.fecha_eliminacion.desc()).all()
+
+@app.get("/auditoria/dams/", response_model=List[schemas.DamEliminadaResponse])
+def listar_auditoria_dams(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    return db.query(models.DamEliminada).order_by(models.DamEliminada.fecha_eliminacion.desc()).all()
+
+@app.get("/auditoria/gastos/", response_model=List[schemas.GastoEliminadoResponse])
+def listar_auditoria_gastos(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    return db.query(models.GastoEliminado).order_by(models.GastoEliminado.fecha_eliminacion.desc()).all()
+
+@app.get("/auditoria/pagos/", response_model=List[schemas.PagoEliminadoResponse])
+def listar_auditoria_pagos(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    return db.query(models.PagoEliminado).order_by(models.PagoEliminado.fecha_eliminacion.desc()).all()

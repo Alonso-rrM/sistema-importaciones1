@@ -65,6 +65,13 @@ function Layout() {
                         💰 Tesorería y Pagos
                     </Link>
 
+                    <div style={{ color: '#7f8c8d', fontSize: '12px', padding: '20px 20px 10px 20px', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                        Seguridad y Control
+                    </div>
+                    <Link to="/app/auditoria" style={{ color: 'white', textDecoration: 'none', padding: '12px 20px', borderBottom: '1px solid #34495e', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        🛡️ Auditoría (Eliminados)
+                    </Link>
+
                 </nav>
 
                 {/* Botón de salida empujado al fondo */}
