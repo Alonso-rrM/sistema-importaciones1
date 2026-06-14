@@ -2,6 +2,8 @@ import datetime
 # Agregamos 'Boolean' a las importaciones para el ZAJUSTE
 from sqlalchemy import Column, Integer, String, Numeric, Date, ForeignKey, DateTime, Text, Boolean
 from sqlalchemy.orm import relationship
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.sql import func
 from database import Base
 
 # --- 1. TABLAS CATÁLOGO ---
@@ -201,3 +203,83 @@ class AuditLog(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     
     usuario = relationship("Usuario", back_populates="audit_logs")
+
+# --- 4. TABLAS SOMBRA DE AUDITORÍA ---
+
+class AuditoriaMixin:
+    """Mixin con las columnas comunes para las tablas sombra de auditoría."""
+    id_eliminacion = Column(Integer, primary_key=True, index=True)
+    motivo_eliminacion = Column(String(255), nullable=False)
+    usuario_id = Column(Integer, nullable=False)
+    fecha_eliminacion = Column(DateTime, server_default=func.now())
+
+class MaestroEliminado(AuditoriaMixin, Base):
+    __tablename__ = "maestros_eliminados"
+    
+    id_maestro = Column(Integer)
+    numero_factura = Column(String(100), nullable=False)
+    n_cont_fisico = Column(String(100))
+    id_agente = Column(Integer)
+    id_importador = Column(Integer)
+    id_proveedor = Column(Integer)
+    documento_transporte = Column(String(100))
+    fecha_embarque = Column(Date)
+    fecha_arribo = Column(Date, nullable=True)
+    status_llegada = Column(String(50), nullable=True, default="EN TRÁNSITO")
+    estado_levante = Column(String(50), nullable=True, default="SIN LEVANTE")
+    id_almacen = Column(Integer, nullable=True)
+    fob_usd = Column(Numeric(15, 2))
+    flete_usd = Column(Numeric(15, 2))
+    cfr_usd = Column(Numeric(15, 2))
+    venta_sucesiva = Column(String(50))
+    tipo_valor = Column(String(50), default="DEFINITIVO")
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    estado_registro = Column(String(20), default="ACTIVO")
+    version = Column(Integer, default=1, nullable=False)
+
+class DamEliminada(AuditoriaMixin, Base):
+    __tablename__ = "dams_eliminadas"
+    
+    id_dam = Column(Integer)
+    id_maestro = Column(Integer, nullable=False)
+    numero_de_dam = Column(String(100), nullable=False)
+    serie = Column(String(50))
+    canal_control = Column(String(50))
+    monto_valor_provisional_usd = Column(Numeric(15, 2), nullable=True)
+    aforo_realizado = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+class GastoEliminado(AuditoriaMixin, Base):
+    __tablename__ = "gastos_eliminados"
+    
+    id_gasto = Column(Integer)
+    id_dam = Column(Integer, nullable=False)
+    id_concepto = Column(Integer, nullable=False)
+    monto_usd = Column(Numeric(15, 2), nullable=False)
+    estado_pago = Column(String(50), default="PENDIENTE")
+    estado_registro = Column(String(20), default="ACTIVO")
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    id_proveedor = Column(Integer)
+    id_tipo_doc = Column(Integer)
+    numero_documento = Column(String(50))
+    fecha_vencimiento = Column(Date)
+
+class PagoEliminado(AuditoriaMixin, Base):
+    __tablename__ = "pagos_eliminados"
+    
+    id_pago = Column(Integer)
+    id_dam = Column(Integer, nullable=False)
+    id_concepto = Column(Integer, nullable=False)
+    moneda = Column(String(3), nullable=False)
+    importe = Column(Numeric(15, 2), nullable=False)
+    tipo_cambio = Column(Numeric(15, 2), nullable=False)
+    estado_pago = Column(String(50))
+    fecha_pago = Column(Date)
+    numero_operacion = Column(String(100))
+    id_banco = Column(Integer)
+    id_empresa = Column(Integer)
+    id_gasto = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    estado_registro = Column(String(20), default="ACTIVO")
+    es_ajuste_sistema = Column(Boolean, default=False)
+    tipo_cambio_aplicado = Column(Numeric(15, 4))

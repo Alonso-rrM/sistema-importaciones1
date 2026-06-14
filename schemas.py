@@ -1,5 +1,5 @@
 from typing import List, Optional
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
@@ -336,3 +336,8 @@ class AuditLog(AuditLogBase):
     id_log: int
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
+
+# --- 9. [INTEGRADO] ESQUEMA DE BORRADO FÍSICO ---
+
+class EliminacionRequest(BaseModel):
+    motivo: str = Field(..., min_length=10, description="Motivo de la eliminación.")

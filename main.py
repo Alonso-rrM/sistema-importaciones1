@@ -1,12 +1,13 @@
 from typing import List
 from datetime import date
 from decimal import Decimal
-from fastapi import FastAPI, Depends, HTTPException, Query, Request
+from fastapi import FastAPI, Depends, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
-from fastapi import status
+from sqlalchemy import func, case
 
 import models
 import schemas
@@ -711,6 +712,9 @@ def actualizar_pago(id_pago: int, pago_editado: schemas.RegistroPagoUpdate, db: 
     db.refresh(db_pago)
     return db_pago
 
+
+
+
 # --- ENDPOINT ANALÍTICO: ESTADO DE CUENTA ---
 @app.get("/maestros/{id_maestro}/estado_cuenta", response_model=schemas.EstadoCuentaFacturaResumen)
 def estado_cuenta_factura(
@@ -842,16 +846,139 @@ def reporte_completo_factura(id_maestro: int, db: Session = Depends(get_db), cur
 def listar_gastos(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     return db.query(models.RegistroGasto).all()
 
-# --- RUTAS DE ELIMINACIÓN/ANULACIÓN ---
+# --- ENDPOINTS DE ELIMINACIÓN FÍSICA Y AUDITORÍA (TABLAS SOMBRA) ---
+
 @app.delete("/maestros/{id_maestro}")
-def anular_factura(id_maestro: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
-    db_factura = db.query(models.MaestroImportacion).filter(models.MaestroImportacion.id_maestro == id_maestro).first()
-    if not db_factura:
-        raise HTTPException(status_code=404, detail="Factura no encontrada")
+def eliminar_maestro(id_maestro: int, req: schemas.EliminacionRequest, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    maestro = db.query(models.MaestroImportacion).filter(models.MaestroImportacion.id_maestro == id_maestro).first()
+    if not maestro:
+        raise HTTPException(status_code=404, detail="Maestro de importación no encontrado")
+        
+    tiene_dams = db.query(models.DetalleDam).filter(models.DetalleDam.id_maestro == id_maestro).first()
+    if tiene_dams:
+        raise HTTPException(
+            status_code=400, 
+            detail="❌ Bloqueo: No se puede eliminar el Maestro porque tiene DAMs asociadas. Elimine primero las DAMs."
+        )
+        
+    datos = {c.name: getattr(maestro, c.name) for c in maestro.__table__.columns}
+    respaldo = models.MaestroEliminado(**datos, motivo_eliminacion=req.motivo, usuario_id=current_user.id_usuario)
     
-    db_factura.estado_registro = "ANULADO" 
+    db.add(respaldo)
+    db.delete(maestro)
     db.commit()
-    return {"mensaje": f"Factura {db_factura.numero_factura} marcada como ANULADA correctamente."}
+    return {"mensaje": f"Maestro de importación {maestro.numero_factura} eliminado físicamente con respaldo de auditoría."}
+
+@app.delete("/dams/{id_dam}")
+def eliminar_dam(id_dam: int, req: schemas.EliminacionRequest, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    dam = db.query(models.DetalleDam).filter(models.DetalleDam.id_dam == id_dam).first()
+    if not dam:
+        raise HTTPException(status_code=404, detail="DAM no encontrada")
+        
+    tiene_gastos = db.query(models.RegistroGasto).filter(models.RegistroGasto.id_dam == id_dam).first()
+    if tiene_gastos:
+        raise HTTPException(
+            status_code=400, 
+            detail="❌ Bloqueo: No se puede eliminar la DAM porque tiene Gastos asociados. Elimine primero los Gastos."
+        )
+        
+    datos = {c.name: getattr(dam, c.name) for c in dam.__table__.columns}
+    respaldo = models.DamEliminada(**datos, motivo_eliminacion=req.motivo, usuario_id=current_user.id_usuario)
+    
+    db.add(respaldo)
+    db.delete(dam)
+    db.commit()
+    return {"mensaje": f"DAM {dam.numero_de_dam} eliminada físicamente con respaldo de auditoría."}
+
+@app.delete("/gastos/{id_gasto}")
+def eliminar_gasto(id_gasto: int, req: schemas.EliminacionRequest, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    gasto = db.query(models.RegistroGasto).filter(models.RegistroGasto.id_gasto == id_gasto).first()
+    if not gasto:
+        raise HTTPException(status_code=404, detail="Gasto no encontrado")
+        
+    tiene_pagos = db.query(models.RegistroPago).filter(models.RegistroPago.id_gasto == id_gasto).first()
+    if tiene_pagos:
+        raise HTTPException(
+            status_code=400, 
+            detail="❌ Bloqueo: No se puede eliminar el Gasto porque tiene Pagos asociados. Elimine primero los Pagos."
+        )
+        
+    datos = {c.name: getattr(gasto, c.name) for c in gasto.__table__.columns}
+    respaldo = models.GastoEliminado(**datos, motivo_eliminacion=req.motivo, usuario_id=current_user.id_usuario)
+    
+    db.add(respaldo)
+    db.delete(gasto)
+    db.commit()
+    return {"mensaje": f"Gasto {id_gasto} eliminado físicamente con respaldo de auditoría."}
+
+@app.delete("/pagos/{id_pago}")
+def eliminar_pago(id_pago: int, req: schemas.EliminacionRequest, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    pago = db.query(models.RegistroPago).filter(models.RegistroPago.id_pago == id_pago).first()
+    if not pago:
+        raise HTTPException(status_code=404, detail="Pago no encontrado")
+        
+    id_gasto_afectado = pago.id_gasto
+    es_ajuste_actual = pago.es_ajuste_sistema
+        
+    # 1. Respaldo del pago principal
+    datos = {c.name: getattr(pago, c.name) for c in pago.__table__.columns}
+    respaldo = models.PagoEliminado(**datos, motivo_eliminacion=req.motivo, usuario_id=current_user.id_usuario)
+    db.add(respaldo)
+    
+    # 2. Ejecución Física del pago principal
+    db.delete(pago)
+    db.flush() 
+    
+    # 3. Lógica Contable: Reversión ZD y Recálculo Dinámico
+    if id_gasto_afectado:
+        gasto = db.query(models.RegistroGasto).filter(models.RegistroGasto.id_gasto == id_gasto_afectado).first()
+        
+        if gasto:
+            # A. Reversión de Ajuste ZD huérfano
+            if not es_ajuste_actual:
+                pago_zd = db.query(models.RegistroPago).filter(
+                    models.RegistroPago.id_gasto == id_gasto_afectado,
+                    models.RegistroPago.es_ajuste_sistema == True
+                ).first()
+                
+                if pago_zd:
+                    datos_zd = {c.name: getattr(pago_zd, c.name) for c in pago_zd.__table__.columns}
+                    respaldo_zd = models.PagoEliminado(
+                        **datos_zd,
+                        motivo_eliminacion=f"Reversión contable automática por eliminación del pago padre ID: {id_pago}",
+                        usuario_id=current_user.id_usuario
+                    )
+                    db.add(respaldo_zd)
+                    db.delete(pago_zd)
+                    db.flush() 
+            
+            # B. Cálculo de saldos dinámicos
+            total_pagado_usd = db.query(
+                func.sum(
+                    case(
+                        (models.RegistroPago.moneda == "USD", models.RegistroPago.importe),
+                        (models.RegistroPago.moneda == "PEN", models.RegistroPago.importe / func.coalesce(models.RegistroPago.tipo_cambio_aplicado, models.RegistroPago.tipo_cambio, 1)),
+                        else_=0
+                    )
+                )
+            ).filter(models.RegistroPago.id_gasto == id_gasto_afectado).scalar()
+            
+            total_pagado_usd = Decimal(str(total_pagado_usd)) if total_pagado_usd else Decimal("0.00")
+            monto_gasto_usd = Decimal(str(gasto.monto_usd))
+            
+            saldo_pendiente = monto_gasto_usd - total_pagado_usd
+            margen_tolerancia = Decimal("0.05")
+            
+            # C. Asignación Dinámica del Estado
+            if saldo_pendiente >= monto_gasto_usd:
+                gasto.estado_pago = "PENDIENTE"
+            elif saldo_pendiente > margen_tolerancia:
+                gasto.estado_pago = "PARCIAL"
+            else:
+                gasto.estado_pago = "PAGADO"
+                
+    db.commit()
+    return {"mensaje": f"Pago {id_pago} eliminado exitosamente. Saldos recalculados y sincronizados en los registros de auditoría."}
 
 @app.put("/bancos/{id_banco}", response_model=schemas.CatBanco)
 def actualizar_banco(id_banco: int, banco_editado: schemas.CatBancoCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
