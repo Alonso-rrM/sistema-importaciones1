@@ -866,12 +866,19 @@ def eliminar_maestro(id_maestro: int, req: schemas.EliminacionRequest, db: Sessi
         )
         
     datos = {c.name: getattr(maestro, c.name) for c in maestro.__table__.columns}
+    snapshot = {
+        "Agente": maestro.agente_rel.nombre if maestro.agente_rel else "N/A",
+        "Importador": maestro.importador_rel.nombre if maestro.importador_rel else "N/A",
+        "Proveedor": maestro.proveedor_rel.nombre if maestro.proveedor_rel else "N/A",
+        "Almacén": maestro.almacen_rel.nombre if maestro.almacen_rel else "N/A"
+    }
     respaldo = models.MaestroEliminado(
         **datos, 
         motivo_eliminacion=req.motivo, 
         usuario_id=current_user.id_usuario,
-        nombre_usuario_ejecutor=current_user.nombre,
-        identificador_principal=f"Contenedor/Factura: {maestro.numero_factura}"
+        nombre_usuario_ejecutor=current_user.username,
+        identificador_principal=f"Contenedor/Factura: {maestro.numero_factura}",
+        detalles_legibles=snapshot
     )
     
     db.add(respaldo)
@@ -893,12 +900,16 @@ def eliminar_dam(id_dam: int, req: schemas.EliminacionRequest, db: Session = Dep
         )
         
     datos = {c.name: getattr(dam, c.name) for c in dam.__table__.columns}
+    snapshot = {
+        "Contenedor/Factura": dam.maestro.numero_factura if dam.maestro else "N/A"
+    }
     respaldo = models.DamEliminada(
         **datos, 
         motivo_eliminacion=req.motivo, 
         usuario_id=current_user.id_usuario,
-        nombre_usuario_ejecutor=current_user.nombre,
-        identificador_principal=f"DAM: {dam.numero_de_dam}"
+        nombre_usuario_ejecutor=current_user.username,
+        identificador_principal=f"DAM: {dam.numero_de_dam}",
+        detalles_legibles=snapshot
     )
     
     db.add(respaldo)
@@ -920,12 +931,18 @@ def eliminar_gasto(id_gasto: int, req: schemas.EliminacionRequest, db: Session =
         )
         
     datos = {c.name: getattr(gasto, c.name) for c in gasto.__table__.columns}
+    snapshot = {
+        "Proveedor": gasto.proveedor_rel.nombre if gasto.proveedor_rel else "N/A",
+        "Concepto": gasto.concepto_rel.nombre if gasto.concepto_rel else "N/A",
+        "Tipo Documento": gasto.tipo_doc_rel.nombre_documento if hasattr(gasto, 'tipo_doc_rel') and gasto.tipo_doc_rel else "N/A"
+    }
     respaldo = models.GastoEliminado(
         **datos, 
         motivo_eliminacion=req.motivo, 
         usuario_id=current_user.id_usuario,
-        nombre_usuario_ejecutor=current_user.nombre,
-        identificador_principal=f"Gasto USD: {gasto.monto_usd} (DAM: {gasto.id_dam})"
+        nombre_usuario_ejecutor=current_user.username,
+        identificador_principal=f"Gasto USD: {gasto.monto_usd} (DAM: {gasto.id_dam})",
+        detalles_legibles=snapshot
     )
     
     db.add(respaldo)
@@ -944,12 +961,20 @@ def eliminar_pago(id_pago: int, req: schemas.EliminacionRequest, db: Session = D
         
     # 1. Respaldo del pago principal
     datos = {c.name: getattr(pago, c.name) for c in pago.__table__.columns}
+    snapshot = {
+        "Banco": pago.banco.nombre if pago.banco else "N/A",
+        "Empresa": pago.empresa.nombre if pago.empresa else "N/A",
+        "Concepto": pago.concepto_rel.nombre if pago.concepto_rel else "N/A",
+        "DAM": pago.dam.numero_de_dam if pago.dam else "N/A",
+        "Ref. Gasto USD": f"{pago.gasto_rel.monto_usd}" if pago.gasto_rel else "N/A"
+    }
     respaldo = models.PagoEliminado(
         **datos, 
         motivo_eliminacion=req.motivo, 
         usuario_id=current_user.id_usuario,
-        nombre_usuario_ejecutor=current_user.nombre,
-        identificador_principal=f"Pago OP: {pago.numero_operacion}"
+        nombre_usuario_ejecutor=current_user.username,
+        identificador_principal=f"Pago OP: {pago.numero_operacion}",
+        detalles_legibles=snapshot
     )
     db.add(respaldo)
     
@@ -971,12 +996,20 @@ def eliminar_pago(id_pago: int, req: schemas.EliminacionRequest, db: Session = D
                 
                 if pago_zd:
                     datos_zd = {c.name: getattr(pago_zd, c.name) for c in pago_zd.__table__.columns}
+                    snapshot_zd = {
+                        "Banco": pago_zd.banco.nombre if pago_zd.banco else "N/A",
+                        "Empresa": pago_zd.empresa.nombre if pago_zd.empresa else "N/A",
+                        "Concepto": pago_zd.concepto_rel.nombre if pago_zd.concepto_rel else "N/A",
+                        "DAM": pago_zd.dam.numero_de_dam if pago_zd.dam else "N/A",
+                        "Ref. Gasto USD": f"{pago_zd.gasto_rel.monto_usd}" if pago_zd.gasto_rel else "N/A"
+                    }
                     respaldo_zd = models.PagoEliminado(
                         **datos_zd,
                         motivo_eliminacion=f"Reversión contable automática por eliminación del pago padre ID: {id_pago}",
                         usuario_id=current_user.id_usuario,
-                        nombre_usuario_ejecutor=current_user.nombre,
-                        identificador_principal=f"Pago OP: {pago_zd.numero_operacion}"
+                        nombre_usuario_ejecutor=current_user.username,
+                        identificador_principal=f"Pago OP: {pago_zd.numero_operacion}",
+                        detalles_legibles=snapshot_zd
                     )
                     db.add(respaldo_zd)
                     db.delete(pago_zd)

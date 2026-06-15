@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, ConfigDict, Field
 from datetime import date, datetime
 from decimal import Decimal
@@ -351,6 +351,7 @@ class AuditoriaBaseResponse(BaseModel):
     fecha_eliminacion: datetime
     nombre_usuario_ejecutor: str | None = None
     identificador_principal: str | None = None
+    detalles_legibles: Optional[Dict[str, Any]] = None
     
     model_config = ConfigDict(from_attributes=True)
 

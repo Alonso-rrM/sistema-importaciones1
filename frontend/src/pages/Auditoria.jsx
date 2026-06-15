@@ -55,7 +55,8 @@ const Auditoria = () => {
   // Formateador inteligente de fechas
   const formatValue = (val) => {
     if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(val)) {
-      return new Date(val).toLocaleString("es-PE");
+      const utcDate = val.endsWith("Z") ? val : val + "Z";
+      return new Date(utcDate).toLocaleString("es-PE");
     }
     return val;
   };
@@ -214,7 +215,7 @@ const Auditoria = () => {
             {registros.map((row) => (
               <tr key={row.id_eliminacion}>
                 <td style={styles.td}>{row.id_eliminacion}</td>
-                <td style={styles.td}>{new Date(row.fecha_eliminacion).toLocaleString("es-PE")}</td>
+                <td style={styles.td}>{formatValue(row.fecha_eliminacion)}</td>
                 <td style={styles.td}>{row.nombre_usuario_ejecutor || row.usuario_id}</td>
                 <td style={styles.td}>{row.motivo_eliminacion}</td>
                 <td style={styles.td}>{row.identificador_principal}</td>
@@ -272,16 +273,33 @@ const Auditoria = () => {
               </button>
             </div>
             <div style={styles.modalBody}>
-              {Object.entries(modalData).map(([key, value]) => (
-                <div key={key} style={styles.dataGroup}>
-                  <span style={styles.dataLabel}>
-                    {key.replace(/_/g, " ")}
-                  </span>
-                  <span style={styles.dataValue}>
-                    {value !== null && value !== undefined ? (typeof value === "boolean" ? (value ? "Sí" : "No") : formatValue(value)) : "N/A"}
-                  </span>
+              {/* 1. Mostrar la fotografía de nombres legibles destacada */}
+              {modalData.detalles_legibles && Object.entries(modalData.detalles_legibles).map(([key, value]) => (
+                <div key={`legible-${key}`} style={{...styles.dataGroup, backgroundColor: "#e8f4fd", borderColor: "#b8daff"}}>
+                  <span style={{...styles.dataLabel, color: "#0056b3"}}>{key}</span>
+                  <span style={styles.dataValue}>{value}</span>
                 </div>
               ))}
+
+              {/* 2. Mostrar el resto de datos */}
+              {Object.entries(modalData).map(([key, value]) => {
+                // Filtro para ocultar datos redundantes, IDs crudos y campos duplicados visualmente
+                if (
+                  key === "detalles_legibles" || 
+                  key.startsWith("id_") || 
+                  key === "usuario_id" || 
+                  key === "identificador_principal"
+                ) return null;
+
+                return (
+                  <div key={key} style={styles.dataGroup}>
+                    <span style={styles.dataLabel}>{key.replace(/_/g, " ")}</span>
+                    <span style={styles.dataValue}>
+                      {value !== null && value !== undefined ? (typeof value === "boolean" ? (value ? "Sí" : "No") : formatValue(value)) : "N/A"}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>

@@ -1,6 +1,6 @@
 import datetime
 # Agregamos 'Boolean' a las importaciones para el ZAJUSTE
-from sqlalchemy import Column, Integer, String, Numeric, Date, ForeignKey, DateTime, Text, Boolean
+from sqlalchemy import Column, Integer, String, Numeric, Date, ForeignKey, DateTime, Text, Boolean, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
@@ -93,6 +93,10 @@ class MaestroImportacion(Base):
     tipo_valor = Column(String(50), default="DEFINITIVO")
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     dams = relationship("DetalleDam", back_populates="maestro")
+    agente_rel = relationship("CatAgente")
+    importador_rel = relationship("CatImportador")
+    proveedor_rel = relationship("CatProveedor")
+    almacen_rel = relationship("CatAlmacen")
     estado_registro = Column(String(20), default="ACTIVO")
     
     # [NUEVO] Bloqueo Optimista
@@ -211,10 +215,11 @@ class AuditoriaMixin:
     id_eliminacion = Column(Integer, primary_key=True, index=True)
     motivo_eliminacion = Column(String(255), nullable=False)
     usuario_id = Column(Integer, nullable=False)
-    fecha_eliminacion = Column(DateTime, server_default=func.now())
+    fecha_eliminacion = Column(DateTime, default=datetime.datetime.utcnow)
     # --- NUEVAS COLUMNAS DE TEXTO LEGIBLE ---
     nombre_usuario_ejecutor = Column(String(150))
     identificador_principal = Column(String(255))
+    detalles_legibles = Column(JSON)
     
 
 class MaestroEliminado(AuditoriaMixin, Base):
