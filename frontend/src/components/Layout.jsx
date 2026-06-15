@@ -24,7 +24,10 @@ function Layout() {
                         Operaciones
                     </div>
                     <Link to="/app/logistica" style={{ color: 'white', textDecoration: 'none', padding: '12px 20px', borderBottom: '1px solid #34495e', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        📦 Logística y DAMs
+                        📦 Logística y Maestros
+                    </Link>
+                    <Link to="/app/dams" style={{ color: 'white', textDecoration: 'none', padding: '12px 20px', borderBottom: '1px solid #34495e', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        📑 Declaraciones (DAMs)
                     </Link>
 
                     <div style={{ color: '#7f8c8d', fontSize: '12px', padding: '20px 20px 10px 20px', textTransform: 'uppercase', letterSpacing: '1px' }}>

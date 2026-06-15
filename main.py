@@ -846,6 +846,10 @@ def reporte_completo_factura(id_maestro: int, db: Session = Depends(get_db), cur
 def listar_gastos(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     return db.query(models.RegistroGasto).all()
 
+@app.get("/pagos/", response_model=List[schemas.RegistroPago])
+def listar_pagos(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    return db.query(models.RegistroPago).all()
+
 # --- ENDPOINTS DE ELIMINACIÓN FÍSICA Y AUDITORÍA (TABLAS SOMBRA) ---
 
 @app.delete("/maestros/{id_maestro}")
@@ -862,7 +866,13 @@ def eliminar_maestro(id_maestro: int, req: schemas.EliminacionRequest, db: Sessi
         )
         
     datos = {c.name: getattr(maestro, c.name) for c in maestro.__table__.columns}
-    respaldo = models.MaestroEliminado(**datos, motivo_eliminacion=req.motivo, usuario_id=current_user.id_usuario)
+    respaldo = models.MaestroEliminado(
+        **datos, 
+        motivo_eliminacion=req.motivo, 
+        usuario_id=current_user.id_usuario,
+        nombre_usuario_ejecutor=current_user.nombre,
+        identificador_principal=f"Contenedor/Factura: {maestro.numero_factura}"
+    )
     
     db.add(respaldo)
     db.delete(maestro)
@@ -883,7 +893,13 @@ def eliminar_dam(id_dam: int, req: schemas.EliminacionRequest, db: Session = Dep
         )
         
     datos = {c.name: getattr(dam, c.name) for c in dam.__table__.columns}
-    respaldo = models.DamEliminada(**datos, motivo_eliminacion=req.motivo, usuario_id=current_user.id_usuario)
+    respaldo = models.DamEliminada(
+        **datos, 
+        motivo_eliminacion=req.motivo, 
+        usuario_id=current_user.id_usuario,
+        nombre_usuario_ejecutor=current_user.nombre,
+        identificador_principal=f"DAM: {dam.numero_de_dam}"
+    )
     
     db.add(respaldo)
     db.delete(dam)
@@ -904,7 +920,13 @@ def eliminar_gasto(id_gasto: int, req: schemas.EliminacionRequest, db: Session =
         )
         
     datos = {c.name: getattr(gasto, c.name) for c in gasto.__table__.columns}
-    respaldo = models.GastoEliminado(**datos, motivo_eliminacion=req.motivo, usuario_id=current_user.id_usuario)
+    respaldo = models.GastoEliminado(
+        **datos, 
+        motivo_eliminacion=req.motivo, 
+        usuario_id=current_user.id_usuario,
+        nombre_usuario_ejecutor=current_user.nombre,
+        identificador_principal=f"Gasto USD: {gasto.monto_usd} (DAM: {gasto.id_dam})"
+    )
     
     db.add(respaldo)
     db.delete(gasto)
@@ -922,7 +944,13 @@ def eliminar_pago(id_pago: int, req: schemas.EliminacionRequest, db: Session = D
         
     # 1. Respaldo del pago principal
     datos = {c.name: getattr(pago, c.name) for c in pago.__table__.columns}
-    respaldo = models.PagoEliminado(**datos, motivo_eliminacion=req.motivo, usuario_id=current_user.id_usuario)
+    respaldo = models.PagoEliminado(
+        **datos, 
+        motivo_eliminacion=req.motivo, 
+        usuario_id=current_user.id_usuario,
+        nombre_usuario_ejecutor=current_user.nombre,
+        identificador_principal=f"Pago OP: {pago.numero_operacion}"
+    )
     db.add(respaldo)
     
     # 2. Ejecución Física del pago principal
@@ -946,7 +974,9 @@ def eliminar_pago(id_pago: int, req: schemas.EliminacionRequest, db: Session = D
                     respaldo_zd = models.PagoEliminado(
                         **datos_zd,
                         motivo_eliminacion=f"Reversión contable automática por eliminación del pago padre ID: {id_pago}",
-                        usuario_id=current_user.id_usuario
+                        usuario_id=current_user.id_usuario,
+                        nombre_usuario_ejecutor=current_user.nombre,
+                        identificador_principal=f"Pago OP: {pago_zd.numero_operacion}"
                     )
                     db.add(respaldo_zd)
                     db.delete(pago_zd)

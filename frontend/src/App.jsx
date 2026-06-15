@@ -9,6 +9,7 @@ import Bancos from './pages/Bancos'
 import Empresas from './pages/Empresas'
 import Conceptos from './pages/Conceptos'
 import Logistica from './pages/Logistica'
+import Dams from './pages/Dams'
 import Gastos from './pages/Gastos'
 import Pagos from './pages/Pagos'
 import Auditoria from './pages/Auditoria'
@@ -23,6 +24,7 @@ function App() {
         <Route path="/app" element={<Layout />}>
           {/* Operaciones */}
           <Route path="logistica" element={<Logistica />} />
+          <Route path="dams" element={<Dams />} />
 
           {/* Catálogos */}
           <Route path="importadores" element={<Importadores />} />

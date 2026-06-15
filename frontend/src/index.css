@@ -17,7 +17,7 @@
 
   font: 18px/145% var(--sans);
   letter-spacing: 0.18px;
-  color-scheme: light dark;
+  color-scheme: light;
   color: var(--text);
   background: var(--bg);
   font-synthesis: none;
@@ -30,6 +30,19 @@
   }
 }
 
+/* Base style overrides for form elements to ensure light backgrounds and dark text */
+input, select, textarea {
+  background-color: #ffffff !important;
+  color: #2c3e50 !important;
+}
+
+input:disabled, select:disabled, textarea:disabled {
+  background-color: #f5f5f5 !important;
+  color: #95a5a6 !important;
+}
+
+/* Commented out to prevent text color and browser inputs from turning white on white in OS dark mode */
+/*
 @media (prefers-color-scheme: dark) {
   :root {
     --text: #9ca3af;
@@ -49,6 +62,7 @@
     filter: invert(1) brightness(2);
   }
 }
+*/
 
 body {
   margin: 0;

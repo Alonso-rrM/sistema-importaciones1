@@ -212,6 +212,10 @@ class AuditoriaMixin:
     motivo_eliminacion = Column(String(255), nullable=False)
     usuario_id = Column(Integer, nullable=False)
     fecha_eliminacion = Column(DateTime, server_default=func.now())
+    # --- NUEVAS COLUMNAS DE TEXTO LEGIBLE ---
+    nombre_usuario_ejecutor = Column(String(150))
+    identificador_principal = Column(String(255))
+    
 
 class MaestroEliminado(AuditoriaMixin, Base):
     __tablename__ = "maestros_eliminados"

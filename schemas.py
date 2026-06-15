@@ -349,6 +349,8 @@ class AuditoriaBaseResponse(BaseModel):
     motivo_eliminacion: str
     usuario_id: int
     fecha_eliminacion: datetime
+    nombre_usuario_ejecutor: str | None = None
+    identificador_principal: str | None = None
     
     model_config = ConfigDict(from_attributes=True)
 

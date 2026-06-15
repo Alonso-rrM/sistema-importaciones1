@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect } from 'react';
 
 const Auditoria = () => {
-  const [activeTab, setActiveTab] = useState("maestros");
-  const [data, setData] = useState([]);
+  const [registros, setRegistros] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [modalData, setModalData] = useState(null);
+  const [activeTab, setActiveTab] = useState("maestros"); // Manteniendo la estructura de pestañas
 
   const tabs = [
     { id: "maestros", label: "Maestros (Contenedores)" },
@@ -12,6 +13,7 @@ const Auditoria = () => {
     { id: "pagos", label: "Pagos" }
   ];
 
+  // Fetch real de datos
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
@@ -26,14 +28,14 @@ const Auditoria = () => {
         
         if (response.ok) {
           const result = await response.json();
-          setData(result);
+          setRegistros(result);
         } else {
           console.error("Error al obtener los datos de auditoría");
-          setData([]);
+          setRegistros([]);
         }
       } catch (error) {
         console.error("Error de red:", error);
-        setData([]);
+        setRegistros([]);
       } finally {
         setLoading(false);
       }
@@ -42,59 +44,194 @@ const Auditoria = () => {
     fetchData();
   }, [activeTab]);
 
-  // --- Estilos Inline ---
+  const abrirModal = (row) => {
+    setModalData(row);
+  };
+
+  const cerrarModal = () => {
+    setModalData(null);
+  };
+
+  // Formateador inteligente de fechas
+  const formatValue = (val) => {
+    if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(val)) {
+      return new Date(val).toLocaleString("es-PE");
+    }
+    return val;
+  };
+
+  // --- ESTILOS INLINE ---
   const styles = {
-    container: { padding: "20px", fontFamily: "Arial, sans-serif", color: "#333" },
+    container: {
+      maxWidth: "100%",
+      padding: "20px",
+      boxSizing: "border-box",
+      fontFamily: "Arial, sans-serif"
+    },
     header: { borderBottom: "2px solid #eee", paddingBottom: "10px", marginBottom: "20px" },
-    tabsContainer: { display: "flex", gap: "10px", marginBottom: "20px" },
+    tabsContainer: {
+      display: "flex",
+      gap: "10px",
+      marginBottom: "20px",
+      borderBottom: "2px solid #ddd",
+      paddingBottom: "10px"
+    },
     tabButton: (isActive) => ({
       padding: "10px 20px",
       cursor: "pointer",
-      backgroundColor: isActive ? "#0d6efd" : "#f8f9fa",
-      color: isActive ? "#fff" : "#333",
-      border: "1px solid #dee2e6",
+      backgroundColor: isActive ? "#0d6efd" : "transparent",
+      color: isActive ? "#fff" : "#555",
+      border: isActive ? "none" : "none",
       borderRadius: "4px",
-      fontWeight: isActive ? "bold" : "normal",
+      fontSize: "16px",
+      fontWeight: "bold",
       transition: "background-color 0.2s"
     }),
     tableContainer: { overflowX: "auto", backgroundColor: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.1)", borderRadius: "4px" },
-    table: { width: "100%", borderCollapse: "collapse" },
-    th: { backgroundColor: "#f8f9fa", padding: "12px 15px", textAlign: "left", borderBottom: "2px solid #dee2e6", fontWeight: "bold", whiteSpace: "nowrap", textTransform: "capitalize" },
-    td: { padding: "12px 15px", borderBottom: "1px solid #dee2e6", verticalAlign: "middle", whiteSpace: "nowrap" },
+    table: {
+      width: "100%",
+      borderCollapse: "collapse",
+      marginTop: "10px"
+    },
+    th: {
+      backgroundColor: "#f8f9fa",
+      padding: "12px",
+      borderBottom: "2px solid #dee2e6",
+      textAlign: "left",
+      fontWeight: "bold"
+    },
+    td: {
+      padding: "12px",
+      borderBottom: "1px solid #dee2e6",
+      verticalAlign: "middle"
+    },
+    btnConsultar: {
+      backgroundColor: "#17a2b8",
+      color: "white",
+      border: "none",
+      padding: "8px 12px",
+      borderRadius: "4px",
+      cursor: "pointer",
+      fontWeight: "bold",
+      display: "flex",
+      alignItems: "center",
+      gap: "5px",
+      margin: "0 auto"
+    },
+    modalOverlay: {
+      position: "fixed",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: "rgba(0,0,0,0.5)",
+      display: "flex",
+      justifyContent: "center",
+      alignItems: "center",
+      zIndex: 1000
+    },
+    modalContent: {
+      backgroundColor: "white",
+      borderRadius: "8px",
+      width: "90%",
+      maxWidth: "700px",
+      maxHeight: "85vh",
+      display: "flex",
+      flexDirection: "column",
+      boxShadow: "0 4px 6px rgba(0,0,0,0.1)"
+    },
+    modalHeader: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      padding: "15px 20px",
+      borderBottom: "1px solid #eee",
+      backgroundColor: "#f8f9fa",
+      borderTopLeftRadius: "8px",
+      borderTopRightRadius: "8px"
+    },
+    modalTitle: {
+      margin: 0,
+      color: "#333",
+      fontSize: "1.25rem"
+    },
+    btnCerrar: {
+      backgroundColor: "#ff0033",
+      color: "white",
+      border: "none",
+      padding: "8px 15px",
+      borderRadius: "4px",
+      cursor: "pointer",
+      fontWeight: "bold"
+    },
+    modalBody: {
+      padding: "20px",
+      overflowY: "auto",
+      display: "grid",
+      gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))",
+      gap: "20px"
+    },
+    dataGroup: {
+      display: "flex",
+      flexDirection: "column",
+      backgroundColor: "#fdfdfd",
+      padding: "10px",
+      border: "1px solid #eee",
+      borderRadius: "4px"
+    },
+    dataLabel: {
+      fontWeight: "bold",
+      color: "#666",
+      fontSize: "0.85rem",
+      textTransform: "capitalize",
+      marginBottom: "5px"
+    },
+    dataValue: {
+      color: "#222",
+      fontSize: "1rem",
+      wordBreak: "break-word"
+    },
     emptyText: { textAlign: "center", padding: "20px", color: "#666", fontStyle: "italic" }
   };
 
   const renderTable = () => {
-    if (loading) return <p>Cargando datos...</p>;
-    if (data.length === 0) return <p style={styles.emptyText}>No hay registros eliminados en esta categoría.</p>;
-
-    // Extracción dinámica de columnas basada en el primer objeto del array
-    const columns = Object.keys(data[0]);
-
+    if (loading) return <p style={{ padding: "20px" }}>Cargando datos...</p>;
+    
     return (
       <div style={styles.tableContainer}>
         <table style={styles.table}>
           <thead>
             <tr>
-              {columns.map((col) => (
-                <th key={col} style={styles.th}>{col.replace(/_/g, " ")}</th>
-              ))}
+              <th style={styles.th}>ID Eliminación</th>
+              <th style={styles.th}>Fecha</th>
+              <th style={styles.th}>Usuario</th>
+              <th style={styles.th}>Motivo</th>
+              <th style={styles.th}>Referencia</th>
+              <th style={{ ...styles.th, textAlign: "center" }}>Acciones</th>
             </tr>
           </thead>
           <tbody>
-            {data.map((row, index) => (
-              <tr key={index}>
-                {columns.map((col) => (
-                  <td key={col} style={styles.td}>
-                    {/* Renderizado seguro para booleanos, nulos u objetos */}
-                    {row[col] === null ? "N/A" : 
-                     typeof row[col] === "boolean" ? (row[col] ? "Sí" : "No") : 
-                     typeof row[col] === "object" ? JSON.stringify(row[col]) : 
-                     String(row[col])}
-                  </td>
-                ))}
+            {registros.map((row) => (
+              <tr key={row.id_eliminacion}>
+                <td style={styles.td}>{row.id_eliminacion}</td>
+                <td style={styles.td}>{new Date(row.fecha_eliminacion).toLocaleString("es-PE")}</td>
+                <td style={styles.td}>{row.nombre_usuario_ejecutor || row.usuario_id}</td>
+                <td style={styles.td}>{row.motivo_eliminacion}</td>
+                <td style={styles.td}>{row.identificador_principal}</td>
+                <td style={styles.td}>
+                  <button style={styles.btnConsultar} onClick={() => abrirModal(row)}>
+                    🔍 Consultar
+                  </button>
+                </td>
               </tr>
             ))}
+            {registros.length === 0 && (
+              <tr>
+                <td colSpan="6" style={{ ...styles.td, textAlign: "center", fontStyle: "italic", color: "#666" }}>
+                  No hay registros de auditoría disponibles.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -105,9 +242,10 @@ const Auditoria = () => {
     <div style={styles.container}>
       <div style={styles.header}>
         <h2>Cementerio de Auditoría (Tablas Sombra)</h2>
-        <p style={{ margin: 0, color: "#666" }}>Visualización dinámica de registros eliminados por módulo.</p>
+        <p style={{ margin: 0, color: "#666" }}>Visualización "Master-Detail" de registros eliminados.</p>
       </div>
 
+      {/* Pestañas Superiores */}
       <div style={styles.tabsContainer}>
         {tabs.map((tab) => (
           <button
@@ -120,7 +258,34 @@ const Auditoria = () => {
         ))}
       </div>
 
+      {/* Tabla Resumen (Master View) */}
       {renderTable()}
+
+      {/* Modal de Detalle (Detail View) */}
+      {modalData && (
+        <div style={styles.modalOverlay} onClick={cerrarModal}>
+          <div style={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+            <div style={styles.modalHeader}>
+              <h3 style={styles.modalTitle}>Detalles del Registro #{modalData.id_eliminacion}</h3>
+              <button style={styles.btnCerrar} onClick={cerrarModal}>
+                Cerrar
+              </button>
+            </div>
+            <div style={styles.modalBody}>
+              {Object.entries(modalData).map(([key, value]) => (
+                <div key={key} style={styles.dataGroup}>
+                  <span style={styles.dataLabel}>
+                    {key.replace(/_/g, " ")}
+                  </span>
+                  <span style={styles.dataValue}>
+                    {value !== null && value !== undefined ? (typeof value === "boolean" ? (value ? "Sí" : "No") : formatValue(value)) : "N/A"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
