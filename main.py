@@ -5,7 +5,7 @@ from fastapi import FastAPI, Depends, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm.exc import StaleDataError
 from sqlalchemy import func, case
 
@@ -564,6 +564,56 @@ def actualizar_gasto(id_gasto: int, gasto_editado: schemas.RegistroGastoUpdate, 
     db.refresh(db_gasto)
     return db_gasto
 
+# --- ENDPOINTS PARA VOUCHERS ---
+@app.post("/vouchers/", response_model=schemas.VoucherBancarioResponse)
+def crear_voucher(voucher: schemas.VoucherBancarioCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    nuevo_voucher = models.VoucherBancario(
+        banco_id=voucher.banco_id,
+        numero_operacion=voucher.numero_operacion,
+        monto_total=voucher.monto_total,
+        saldo_disponible=voucher.monto_total, # Saldo inicial = Monto total
+        moneda=voucher.moneda,
+        fecha_transferencia=voucher.fecha_transferencia
+    )
+    db.add(nuevo_voucher)
+    db.commit()
+    db.refresh(nuevo_voucher)
+    return nuevo_voucher
+
+@app.get("/vouchers/", response_model=List[schemas.VoucherBancarioResponse])
+def listar_vouchers(saldo_mayor_cero: bool = False, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    query = db.query(models.VoucherBancario).filter(models.VoucherBancario.estado_registro == "ACTIVO")
+    if saldo_mayor_cero:
+        query = query.filter(models.VoucherBancario.saldo_disponible > 0)
+    return query.all()
+
+@app.delete("/vouchers/{id_voucher}")
+def eliminar_voucher(id_voucher: int, req: schemas.EliminacionRequest, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    voucher = db.query(models.VoucherBancario).filter(models.VoucherBancario.id_voucher == id_voucher).first()
+    if not voucher:
+        raise HTTPException(status_code=404, detail="Voucher no encontrado")
+        
+    if voucher.monto_total != voucher.saldo_disponible:
+        raise HTTPException(status_code=400, detail="❌ Bloqueo: No se puede eliminar el voucher porque ya tiene pagos amarrados (saldo disponible menor al total).")
+
+    datos = {c.name: getattr(voucher, c.name) for c in voucher.__table__.columns}
+    snapshot = {
+        "Banco": voucher.banco_rel.nombre if voucher.banco_rel else "N/A",
+        "Numero Operacion": voucher.numero_operacion
+    }
+    respaldo = models.VoucherEliminado(
+        **datos,
+        motivo_eliminacion=req.motivo,
+        usuario_id=current_user.id_usuario,
+        nombre_usuario_ejecutor=current_user.username,
+        identificador_principal=f"Voucher {voucher.numero_operacion} ({voucher.moneda})",
+        detalles_legibles=snapshot
+    )
+    db.add(respaldo)
+    db.delete(voucher)
+    db.commit()
+    return {"mensaje": f"Voucher {id_voucher} eliminado físicamente con respaldo de auditoría."}
+
 # --- ENDPOINTS PARA PAGOS ---
 @app.post("/pagos/", response_model=schemas.RegistroPago)
 async def registrar_pago(
@@ -576,24 +626,47 @@ async def registrar_pago(
         raise HTTPException(status_code=400, detail="Debe proporcionar un id_gasto válido.")
 
     # 1. Búsqueda y Bloqueo de Pagados
-    gasto = db.query(models.RegistroGasto).filter(models.RegistroGasto.id_gasto == pago.id_gasto).first()
+    try:
+        gasto = db.query(models.RegistroGasto).filter(models.RegistroGasto.id_gasto == pago.id_gasto).with_for_update(nowait=True).first()
+    except OperationalError:
+        raise HTTPException(status_code=409, detail="El registro está siendo modificado por otro usuario.")
+
     if not gasto:
         raise HTTPException(status_code=404, detail="El gasto asociado no existe.")
     
     if gasto.estado_pago == "PAGADO":
         raise HTTPException(status_code=400, detail="Operación rechazada: El gasto ya se encuentra totalmente PAGADO.")
     
+    # Bloqueo de Voucher:
+    voucher = None
+    if pago.voucher_id:
+        try:
+            voucher = db.query(models.VoucherBancario).filter(models.VoucherBancario.id_voucher == pago.voucher_id).with_for_update(nowait=True).first()
+        except OperationalError:
+            raise HTTPException(status_code=409, detail="El voucher está siendo modificado por otro usuario.")
+        
+        if not voucher:
+            raise HTTPException(status_code=404, detail="El voucher especificado no existe.")
+            
+        # Matemática y Validación de Saldos
+        if voucher.saldo_disponible < pago.monto_moneda_origen:
+            raise HTTPException(status_code=400, detail="Saldo insuficiente en el voucher.")
+            
+        # Resta el dinero del voucher
+        voucher.saldo_disponible -= pago.monto_moneda_origen
+
+    pago_dict = pago.model_dump()
     # Heredar datos operativos del gasto
-    pago.id_dam = gasto.id_dam
-    pago.id_concepto = gasto.id_concepto
+    pago_dict["id_dam"] = gasto.id_dam
+    pago_dict["id_concepto"] = gasto.id_concepto
 
     # Validar que el concepto exista
-    concepto_existe = db.query(models.CatConceptoPago).filter(models.CatConceptoPago.id_concepto == pago.id_concepto).first()
+    concepto_existe = db.query(models.CatConceptoPago).filter(models.CatConceptoPago.id_concepto == pago_dict["id_concepto"]).first()
     if not concepto_existe:
         raise HTTPException(status_code=404, detail="El concepto de pago no existe en el catálogo.")
 
     # 2. Lógica de Parche de Auditoría (Tipo de Cambio SUNAT)
-    tc_aplicado = pago.tipo_cambio
+    tc_aplicado = pago_dict["tipo_cambio"]
     if not tc_aplicado or tc_aplicado <= Decimal("0.00"):
         tc_sunat = db.query(models.HistorialTipoCambio).filter(models.HistorialTipoCambio.fecha == date.today()).first()
         if not tc_sunat:
@@ -602,13 +675,13 @@ async def registrar_pago(
                 detail="No se proporcionó un tipo de cambio y no hay registro oficial de SUNAT para el día de hoy. Regístrelo en el sistema."
             )
         tc_aplicado = tc_sunat.precio_venta
-        pago.tipo_cambio = tc_aplicado
+        pago_dict["tipo_cambio"] = tc_aplicado
     
-    pago.tipo_cambio_aplicado = tc_aplicado
+    pago_dict["tipo_cambio_aplicado"] = tc_aplicado
 
     # 3. Validación Financiera Estricta (Saldos)
     pagos_existentes = db.query(models.RegistroPago).filter(
-        models.RegistroPago.id_gasto == pago.id_gasto,
+        models.RegistroPago.id_gasto == pago_dict["id_gasto"],
         models.RegistroPago.estado_registro == "ACTIVO"
     ).all()
 
@@ -626,10 +699,10 @@ async def registrar_pago(
 
     # Calcular el importe real ingresado a moneda dura (USD)
     nuevo_importe_usd = Decimal("0.00")
-    if pago.moneda == "USD":
-        nuevo_importe_usd = pago.importe
-    elif pago.moneda == "PEN":
-        nuevo_importe_usd = pago.importe / tc_aplicado
+    if pago_dict["moneda"] == "USD":
+        nuevo_importe_usd = pago_dict["importe"]
+    elif pago_dict["moneda"] == "PEN":
+        nuevo_importe_usd = pago_dict["importe"] / tc_aplicado
 
     # Tolerancia por diferenciales cambiarios
     margen_tolerancia = Decimal("0.05")
@@ -643,7 +716,7 @@ async def registrar_pago(
 
     # 4. Guardar Pago Principal
     try:
-        nuevo_pago = models.RegistroPago(**pago.model_dump())
+        nuevo_pago = models.RegistroPago(**pago_dict)
         db.add(nuevo_pago)
         
         saldo_pendiente_nuevo = saldo_pendiente - nuevo_importe_usd
@@ -663,11 +736,13 @@ async def registrar_pago(
                 tipo_cambio_aplicado=Decimal("1.00"),
                 estado_pago="PAGADO",
                 fecha_pago=date.today(),
-                numero_operacion="AJUSTE-ZD",
-                id_banco=pago.id_banco,
-                id_empresa=pago.id_empresa,
+                id_empresa=pago_dict.get("id_empresa"),
                 id_gasto=gasto.id_gasto,
-                es_ajuste_sistema=True
+                es_ajuste_sistema=True,
+                voucher_id=None,
+                pago_moneda_cruzada=False,
+                gasto_financiero_tc=Decimal("0.00"),
+                monto_moneda_origen=saldo_pendiente_nuevo
             )
             db.add(pago_ajuste)
             gasto.estado_pago = "PAGADO"
@@ -958,11 +1033,16 @@ def eliminar_pago(id_pago: int, req: schemas.EliminacionRequest, db: Session = D
         
     id_gasto_afectado = pago.id_gasto
     es_ajuste_actual = pago.es_ajuste_sistema
+
+    # Reversión de Dinero al Voucher
+    if pago.voucher_rel:
+        pago.voucher_rel.saldo_disponible += pago.monto_moneda_origen
         
     # 1. Respaldo del pago principal
     datos = {c.name: getattr(pago, c.name) for c in pago.__table__.columns}
     snapshot = {
-        "Banco": pago.banco.nombre if pago.banco else "N/A",
+        "Voucher": pago.voucher_rel.numero_operacion if pago.voucher_rel else "N/A",
+        "Banco": pago.voucher_rel.banco_rel.nombre if (pago.voucher_rel and pago.voucher_rel.banco_rel) else "N/A",
         "Empresa": pago.empresa.nombre if pago.empresa else "N/A",
         "Concepto": pago.concepto_rel.nombre if pago.concepto_rel else "N/A",
         "DAM": pago.dam.numero_de_dam if pago.dam else "N/A",
@@ -973,7 +1053,7 @@ def eliminar_pago(id_pago: int, req: schemas.EliminacionRequest, db: Session = D
         motivo_eliminacion=req.motivo, 
         usuario_id=current_user.id_usuario,
         nombre_usuario_ejecutor=current_user.username,
-        identificador_principal=f"Pago OP: {pago.numero_operacion}",
+        identificador_principal=f"Pago {pago.id_pago}",
         detalles_legibles=snapshot
     )
     db.add(respaldo)
@@ -995,9 +1075,13 @@ def eliminar_pago(id_pago: int, req: schemas.EliminacionRequest, db: Session = D
                 ).first()
                 
                 if pago_zd:
+                    if pago_zd.voucher_rel:
+                        pago_zd.voucher_rel.saldo_disponible += pago_zd.monto_moneda_origen
+                    
                     datos_zd = {c.name: getattr(pago_zd, c.name) for c in pago_zd.__table__.columns}
                     snapshot_zd = {
-                        "Banco": pago_zd.banco.nombre if pago_zd.banco else "N/A",
+                        "Voucher": pago_zd.voucher_rel.numero_operacion if pago_zd.voucher_rel else "N/A",
+                        "Banco": pago_zd.voucher_rel.banco_rel.nombre if (pago_zd.voucher_rel and pago_zd.voucher_rel.banco_rel) else "N/A",
                         "Empresa": pago_zd.empresa.nombre if pago_zd.empresa else "N/A",
                         "Concepto": pago_zd.concepto_rel.nombre if pago_zd.concepto_rel else "N/A",
                         "DAM": pago_zd.dam.numero_de_dam if pago_zd.dam else "N/A",
@@ -1008,7 +1092,7 @@ def eliminar_pago(id_pago: int, req: schemas.EliminacionRequest, db: Session = D
                         motivo_eliminacion=f"Reversión contable automática por eliminación del pago padre ID: {id_pago}",
                         usuario_id=current_user.id_usuario,
                         nombre_usuario_ejecutor=current_user.username,
-                        identificador_principal=f"Pago OP: {pago_zd.numero_operacion}",
+                        identificador_principal=f"Pago ZD {pago_zd.id_pago}",
                         detalles_legibles=snapshot_zd
                     )
                     db.add(respaldo_zd)
