@@ -16,20 +16,21 @@ const Pagos = () => {
   const [pagosLista, setPagosLista] = useState([]);
   const [gastosRaw, setGastosRaw] = useState([]);
   const [opcionesGastos, setOpcionesGastos] = useState([]);
-  const [opcionesBancos, setOpcionesBancos] = useState([]);
   const [opcionesEmpresas, setOpcionesEmpresas] = useState([]);
+  const [opcionesVouchers, setOpcionesVouchers] = useState([]);
   
   const [inheritedGasto, setInheritedGasto] = useState(null);
 
   const estadoInicialForm = {
     id_gasto: null,
     id_empresa: null,
-    id_banco: null,
-    numero_operacion: '',
+    voucher_id: null,
     fecha_pago: '',
     moneda: 'USD',
     tipo_cambio: '1.00',
-    importe: ''
+    importe: '',
+    pago_moneda_cruzada: false,
+    monto_moneda_origen: ''
   };
 
   const [form, setForm] = useState(estadoInicialForm);
@@ -106,22 +107,28 @@ const Pagos = () => {
       const token = localStorage.getItem('token');
       const config = { headers: { Authorization: `Bearer ${token}` } };
 
-      const [resGastos, resBancos, resEmpresas] = await Promise.all([
+      const [resGastos, resBancos, resEmpresas, resVouchers] = await Promise.all([
         axios.get('http://127.0.0.1:8000/gastos/', config),
         axios.get('http://127.0.0.1:8000/bancos/', config),
-        axios.get('http://127.0.0.1:8000/empresas/', config)
+        axios.get('http://127.0.0.1:8000/empresas/', config),
+        axios.get('http://127.0.0.1:8000/vouchers/?saldo_mayor_cero=true', config)
       ]);
 
       setGastosRaw(resGastos.data);
       
-      const gastosPendientes = resGastos.data.filter(g => g.estado_pago !== 'PAGADO');
+      const bancosMap = {};
+      resBancos.data.forEach(b => bancosMap[b.id_banco] = b.nombre);
       
+      setOpcionesVouchers(resVouchers.data.map(v => ({
+        value: v.id_voucher,
+        label: `${bancosMap[v.banco_id] || 'Banco'} - ${v.numero_operacion} (Saldo: ${v.moneda} ${v.saldo_disponible})`
+      })));
+
       setOpcionesGastos(resGastos.data.map(g => ({ 
         value: g.id_gasto, 
         label: `[Gasto #${g.id_gasto}] Doc: ${g.numero_documento || 'S/N'} — Deuda original: $${parseFloat(g.monto_usd).toFixed(2)} USD (${g.estado_pago})` 
       })));
       
-      setOpcionesBancos(resBancos.data.map(b => ({ value: b.id_banco, label: b.nombre })));
       setOpcionesEmpresas(resEmpresas.data.map(e => ({ value: e.id_empresa, label: `${e.ruc} - ${e.nombre}` })));
 
     } catch (error) {
@@ -131,6 +138,8 @@ const Pagos = () => {
   };
 
   const handleChangeTexto = (e) => setForm({ ...form, [e.target.name]: e.target.value });
+
+  const handleChangeCheckbox = (e) => setForm({ ...form, [e.target.name]: e.target.checked });
 
   const handleChangeMoneda = (e) => {
     const nuevaMoneda = e.target.value;
@@ -154,12 +163,13 @@ const Pagos = () => {
       setForm({
         id_gasto: pago.id_gasto,
         id_empresa: pago.id_empresa,
-        id_banco: pago.id_banco,
-        numero_operacion: pago.numero_operacion || '',
+        voucher_id: pago.voucher_id || null,
         fecha_pago: pago.fecha_pago || '',
         moneda: pago.moneda || 'USD',
         tipo_cambio: pago.tipo_cambio_aplicado || pago.tipo_cambio || '1.00',
-        importe: pago.importe || ''
+        importe: pago.importe || '',
+        pago_moneda_cruzada: pago.pago_moneda_cruzada || false,
+        monto_moneda_origen: pago.monto_moneda_origen || ''
       });
     }
   };
@@ -203,8 +213,8 @@ const Pagos = () => {
     e.preventDefault();
     if (isSubmitting) return;
 
-    if (!form.id_gasto || !form.id_empresa || !form.id_banco || !form.fecha_pago) {
-      setMensaje({ texto: '❌ Faltan catálogos obligatorios o fecha de pago.', tipo: 'error' });
+    if (!form.id_gasto || !form.id_empresa || !form.voucher_id || !form.fecha_pago) {
+      setMensaje({ texto: '❌ Faltan catálogos obligatorios, voucher o fecha de pago.', tipo: 'error' });
       return;
     }
     if (form.moneda === 'PEN' && (!form.tipo_cambio || parseFloat(form.tipo_cambio) <= 0)) {
@@ -215,6 +225,11 @@ const Pagos = () => {
       setMensaje({ texto: '❌ El importe debe ser mayor a 0.', tipo: 'error' });
       return;
     }
+
+    const importeConvertido = form.moneda === 'PEN' ? (parseFloat(form.importe) / parseFloat(form.tipo_cambio)) : parseFloat(form.importe);
+    const montoOrigenNum = form.pago_moneda_cruzada && form.monto_moneda_origen ? parseFloat(form.monto_moneda_origen) : parseFloat(form.importe);
+    // Nota: El gasto financiero se puede calcular más preciso dependiendo de las monedas. Para este ejemplo, lo simplificamos a la diferencia.
+    const gastoFinancieroTc = form.pago_moneda_cruzada ? Math.max(0, montoOrigenNum - importeConvertido) : 0;
 
     setIsSubmitting(true);
     setMensaje({ texto: 'Procesando pago...', tipo: 'info' });
@@ -227,23 +242,26 @@ const Pagos = () => {
         const payload = {
           id_gasto: form.id_gasto,
           id_empresa: form.id_empresa,
-          id_banco: form.id_banco,
-          numero_operacion: form.numero_operacion || null,
+          voucher_id: form.voucher_id,
           fecha_pago: form.fecha_pago || null,
           moneda: form.moneda,
           importe: parseFloat(form.importe),
-          tipo_cambio: parseFloat(form.tipo_cambio)
+          tipo_cambio: parseFloat(form.tipo_cambio),
+          pago_moneda_cruzada: form.pago_moneda_cruzada,
+          monto_moneda_origen: montoOrigenNum,
+          gasto_financiero_tc: gastoFinancieroTc
         };
         await axios.post('http://127.0.0.1:8000/pagos/', payload, config);
         setMensaje({ texto: '✅ Pago registrado con éxito.', tipo: 'exito' });
       } else if (viewMode === 'MODIFICAR') {
-        // El backend no permite cambiar importe ni moneda en el PUT. Enviamos solo los autorizados.
         const payloadUpdate = {
-          numero_operacion: form.numero_operacion || null,
-          id_banco: form.id_banco,
+          voucher_id: form.voucher_id,
           id_empresa: form.id_empresa,
           fecha_pago: form.fecha_pago || null,
-          tipo_cambio: parseFloat(form.tipo_cambio)
+          tipo_cambio: parseFloat(form.tipo_cambio),
+          pago_moneda_cruzada: form.pago_moneda_cruzada,
+          monto_moneda_origen: montoOrigenNum,
+          gasto_financiero_tc: gastoFinancieroTc
         };
         await axios.put(`http://127.0.0.1:8000/pagos/${selectedId}`, payloadUpdate, config);
         setMensaje({ texto: '✅ Pago actualizado con éxito.', tipo: 'exito' });
@@ -279,6 +297,11 @@ const Pagos = () => {
 
   const colorMoneda = form.moneda === 'USD' ? '#27ae60' : '#e67e22';
   const simboloMoneda = form.moneda === 'USD' ? '$' : 'S/';
+
+  // Lógica para mostrar la advertencia de gasto financiero
+  const importeConvertido = form.moneda === 'PEN' && tcNum > 0 ? (importeNum / tcNum) : importeNum;
+  const montoOrigenNum = parseFloat(form.monto_moneda_origen) || 0;
+  const gastoFinancieroCálculo = form.pago_moneda_cruzada ? Math.max(0, montoOrigenNum - importeConvertido) : 0;
 
   // --- ESTILOS ---
   const containerStyle = { padding: '20px', fontFamily: 'Arial, sans-serif' };
@@ -371,7 +394,7 @@ const Pagos = () => {
                 <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>Moneda</th>
                 <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>Importe</th>
                 <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>Fecha Pago</th>
-                <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>N° Operación</th>
+                <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>ID Voucher</th>
                 <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>Gasto Asociado</th>
               </tr>
             </thead>
@@ -388,7 +411,7 @@ const Pagos = () => {
                   </td>
                   <td style={{ padding: '12px', fontWeight: '500' }}>{p.moneda === 'USD' ? '$' : 'S/'} {parseFloat(p.importe).toFixed(2)}</td>
                   <td style={{ padding: '12px' }}>{p.fecha_pago}</td>
-                  <td style={{ padding: '12px' }}>{p.numero_operacion || '-'}</td>
+                  <td style={{ padding: '12px' }}>{p.voucher_id ? `V-${p.voucher_id}` : '-'}</td>
                   <td style={{ padding: '12px', fontWeight: 'bold' }}>Gasto #{p.id_gasto}</td>
                 </tr>
               ))}
@@ -466,12 +489,12 @@ const Pagos = () => {
               />
             </div>
             <div style={{ zIndex: 4 }}>
-              <label style={labelStyle}>Banco de Origen *</label>
+              <label style={labelStyle}>Voucher a utilizar *</label>
               <Select 
-                options={opcionesBancos} 
-                value={opcionesBancos.find(op => op.value === form.id_banco) || null} 
-                onChange={(op) => setForm({ ...form, id_banco: op ? op.value : null })} 
-                placeholder="Selecciona el banco..." 
+                options={opcionesVouchers} 
+                value={opcionesVouchers.find(op => op.value === form.voucher_id) || null} 
+                onChange={(op) => setForm({ ...form, voucher_id: op ? op.value : null })} 
+                placeholder="Seleccione el voucher disponible..." 
                 isClearable 
                 isDisabled={isReadOnly}
                 styles={selectStyles} 
@@ -494,19 +517,7 @@ const Pagos = () => {
               />
             </div>
             <div>
-              <label style={labelStyle}>N° Operación (Voucher)</label>
-              <input 
-                type="text" 
-                name="numero_operacion" 
-                value={form.numero_operacion} 
-                onChange={handleChangeTexto} 
-                style={inputStyle} 
-                placeholder="Ej: OP-998877" 
-                disabled={isReadOnly}
-              />
-            </div>
-            <div>
-              <label style={labelStyle}>Moneda del Pago *</label>
+              <label style={labelStyle}>Moneda del Pago (Deuda) *</label>
               <select 
                 name="moneda" 
                 value={form.moneda} 
@@ -531,6 +542,52 @@ const Pagos = () => {
               />
             </div>
           </div>
+          
+          <div style={{ marginTop: '10px', marginBottom: '20px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 'bold', color: '#8e44ad' }}>
+              <input 
+                type="checkbox" 
+                name="pago_moneda_cruzada"
+                checked={form.pago_moneda_cruzada}
+                onChange={handleChangeCheckbox}
+                disabled={isReadOnly}
+              />
+              ¿Moneda cruzada? (Pago difiere de moneda origen)
+            </label>
+          </div>
+
+          {form.pago_moneda_cruzada && (
+            <div style={{ ...gridStyle, backgroundColor: '#fcf3cf', padding: '15px', borderRadius: '8px', border: '1px solid #f1c40f' }}>
+              <div>
+                <label style={labelStyle}>Monto extraído del voucher *</label>
+                <input 
+                  type="number" 
+                  step="0.01" 
+                  name="monto_moneda_origen" 
+                  value={form.monto_moneda_origen} 
+                  onChange={handleChangeTexto} 
+                  style={inputStyle} 
+                  placeholder="Lo que realmente cobró el banco" 
+                  disabled={isReadOnly}
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>Pérdida Financiera (Solo Lectura)</label>
+                <input 
+                  type="text" 
+                  value={gastoFinancieroCálculo.toFixed(2)} 
+                  readOnly
+                  style={{ ...inputStyle, backgroundColor: '#e9ecef', color: '#c0392b', fontWeight: 'bold' }} 
+                />
+              </div>
+            </div>
+          )}
+
+          {gastoFinancieroCálculo > 0 && (
+            <div style={{ backgroundColor: '#fff3cd', color: '#856404', padding: '12px', borderRadius: '5px', fontWeight: 'bold', marginBottom: '20px' }}>
+              ⚠️ Aviso: Esta operación registrará una pérdida financiera por tipo de cambio de {gastoFinancieroCálculo.toFixed(2)}.
+            </div>
+          )}
 
           {/* CUADRO DE IMPORTES */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '20px' }}>

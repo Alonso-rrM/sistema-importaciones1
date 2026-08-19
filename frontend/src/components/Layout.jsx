@@ -58,6 +58,9 @@ function Layout() {
                     <div style={{ color: '#7f8c8d', fontSize: '12px', padding: '20px 20px 10px 20px', textTransform: 'uppercase', letterSpacing: '1px' }}>
                         Finanzas
                     </div>
+                    <Link to="/app/vouchers" style={{ color: 'white', textDecoration: 'none', padding: '12px 20px', borderBottom: '1px solid #34495e', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        🎟️ Vouchers Bancarios
+                    </Link>
                     <Link to="/app/gastos" style={{ color: 'white', textDecoration: 'none', padding: '12px 20px', borderBottom: '1px solid #34495e', display: 'flex', alignItems: 'center', gap: '10px' }}>
                         💸 Registro de Gastos
                     </Link>

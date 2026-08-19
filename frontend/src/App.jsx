@@ -12,6 +12,7 @@ import Logistica from './pages/Logistica'
 import Dams from './pages/Dams'
 import Gastos from './pages/Gastos'
 import Pagos from './pages/Pagos'
+import Vouchers from './pages/Vouchers'
 import Auditoria from './pages/Auditoria'
 
 function App() {
@@ -37,6 +38,7 @@ function App() {
 
           {/* Finanzas */}
           <Route path="tesoreria" element={<h2 style={{ color: '#2c3e50' }}>Pantalla en construcción: Movimientos y Pagos</h2>} />
+          <Route path="vouchers" element={<Vouchers />} />
           <Route path="gastos" element={<Gastos />} />
           <Route path="pagos" element={<Pagos />} />
           <Route path="auditoria" element={<Auditoria />} />
