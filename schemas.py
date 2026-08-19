@@ -119,6 +119,34 @@ class HistorialTipoCambio(HistorialTipoCambioBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+# --- ESQUEMAS PARA VOUCHERS BANCARIOS ---
+
+class VoucherBancarioBase(BaseModel):
+    banco_id: int
+    numero_operacion: str
+    monto_total: Decimal
+    moneda: str  # 'USD' o 'PEN'
+    fecha_transferencia: date
+
+class VoucherBancarioCreate(VoucherBancarioBase):
+    pass
+
+class VoucherBancarioUpdate(BaseModel):
+    banco_id: int | None = None
+    numero_operacion: str | None = None
+    monto_total: Decimal | None = None
+    saldo_disponible: Decimal | None = None
+    moneda: str | None = None
+    fecha_transferencia: date | None = None
+    version: int | None = None
+
+class VoucherBancarioResponse(VoucherBancarioBase):
+    id_voucher: int
+    saldo_disponible: Decimal
+    estado_registro: str
+    version: int
+    model_config = ConfigDict(from_attributes=True)
+
 # --- 2. ESQUEMAS PARA MAESTRO_IMPORTACIONES ---
 
 class MaestroImportacionBase(BaseModel):
@@ -238,12 +266,15 @@ class RegistroPagoCreate(BaseModel):
     tipo_cambio: Decimal
     estado_pago: Optional[str] = "PAGADO"
     fecha_pago: Optional[date] = None
-    numero_operacion: Optional[str] = None
-    id_banco: Optional[int] = None
     id_empresa: Optional[int] = None
     id_gasto: Optional[int] = None
     es_ajuste_sistema: bool = False
     tipo_cambio_aplicado: Optional[Decimal] = None
+    # [SPRINT 1] Vinculación a Voucher
+    voucher_id: Optional[int] = None
+    pago_moneda_cruzada: bool = False
+    gasto_financiero_tc: Decimal = Decimal("0.00")
+    monto_moneda_origen: Decimal
 
 class RegistroPago(RegistroPagoCreate):
     id_pago: int
@@ -254,12 +285,15 @@ class RegistroPagoUpdate(BaseModel):
     moneda: MonedaEnum | None = None
     importe: Decimal | None = None
     tipo_cambio: Decimal | None = None
-    numero_operacion: str | None = None
-    id_banco: int | None = None
     id_empresa: int | None = None
     id_gasto: int | None = None
     es_ajuste_sistema: bool | None = None
     tipo_cambio_aplicado: Decimal | None = None
+    # [SPRINT 1] Vinculación a Voucher
+    voucher_id: int | None = None
+    pago_moneda_cruzada: bool | None = None
+    gasto_financiero_tc: Decimal | None = None
+    monto_moneda_origen: Decimal | None = None
 
 
 # --- 6. ESQUEMAS PARA REPORTES CONSOLIDADOS ---
@@ -409,11 +443,25 @@ class PagoEliminadoResponse(AuditoriaBaseResponse):
     tipo_cambio: Decimal
     estado_pago: Optional[str] = None
     fecha_pago: Optional[date] = None
-    numero_operacion: Optional[str] = None
-    id_banco: Optional[int] = None
     id_empresa: Optional[int] = None
     id_gasto: Optional[int] = None
     created_at: Optional[datetime] = None
     estado_registro: Optional[str] = None
     es_ajuste_sistema: Optional[bool] = None
     tipo_cambio_aplicado: Optional[Decimal] = None
+    # [SPRINT 1] Columnas de Voucher
+    voucher_id: Optional[int] = None
+    pago_moneda_cruzada: Optional[bool] = None
+    gasto_financiero_tc: Optional[Decimal] = None
+    monto_moneda_origen: Optional[Decimal] = None
+
+class VoucherEliminadoResponse(AuditoriaBaseResponse):
+    id_voucher: Optional[int] = None
+    banco_id: Optional[int] = None
+    numero_operacion: Optional[str] = None
+    monto_total: Optional[Decimal] = None
+    saldo_disponible: Optional[Decimal] = None
+    moneda: Optional[str] = None
+    fecha_transferencia: Optional[date] = None
+    estado_registro: Optional[str] = None
+    version: Optional[int] = None

@@ -70,6 +70,26 @@ class CatImportador(Base):
     nombre = Column(String(150), unique=True, nullable=False)
     ruc = Column(String(11), unique=True)
 
+# --- 1.5 VOUCHERS BANCARIOS ---
+
+class VoucherBancario(Base):
+    __tablename__ = "vouchers_bancarios"
+
+    id_voucher = Column(Integer, primary_key=True, index=True)
+    banco_id = Column(Integer, ForeignKey("cat_bancos.id_banco"), nullable=False)
+    numero_operacion = Column(String(100), nullable=False)
+    monto_total = Column(Numeric(15, 2), nullable=False)
+    saldo_disponible = Column(Numeric(15, 2), nullable=False)
+    moneda = Column(String(3), nullable=False) # 'USD' o 'PEN'
+    fecha_transferencia = Column(Date, nullable=False)
+    estado_registro = Column(String(20), default="ACTIVO")
+
+    version = Column(Integer, nullable=False, default=1)
+    __mapper_args__ = {"version_id_col": version}
+
+    banco_rel = relationship("CatBanco")
+    pagos_rel = relationship("RegistroPago", back_populates="voucher_rel")
+
 # --- 2. TABLAS PRINCIPALES ---
 
 class MaestroImportacion(Base):
@@ -155,22 +175,27 @@ class RegistroPago(Base):
     tipo_cambio = Column(Numeric(15, 2), nullable=False)
     estado_pago = Column(String(50))
     fecha_pago = Column(Date)
-    numero_operacion = Column(String(100))
-    id_banco = Column(Integer, ForeignKey("cat_bancos.id_banco"))
     id_empresa = Column(Integer, ForeignKey("cat_empresas.id_empresa"))
     id_gasto = Column(Integer, ForeignKey("registro_gastos.id_gasto"), nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     estado_registro = Column(String(20), default="ACTIVO")
     
-    # [NUEVO] Parches de Auditoría
+    # Parches de Auditoría
     es_ajuste_sistema = Column(Boolean, default=False)
     tipo_cambio_aplicado = Column(Numeric(15, 4))
     
+    # [SPRINT 1] Vinculación a Voucher Bancario
+    # El voucher puede ser nulo solo si es un Ajuste ZD del sistema
+    voucher_id = Column(Integer, ForeignKey("vouchers_bancarios.id_voucher"), nullable=True)
+    pago_moneda_cruzada = Column(Boolean, default=False)
+    gasto_financiero_tc = Column(Numeric(15, 2), default=0.00)
+    monto_moneda_origen = Column(Numeric(15, 2), nullable=False)
+    
     dam = relationship("DetalleDam", back_populates="pagos")
-    banco = relationship("CatBanco", backref="pagos")
     empresa = relationship("CatEmpresa", backref="pagos")
     concepto_rel = relationship("CatConceptoPago", back_populates="pagos")
     gasto_rel = relationship("RegistroGasto", back_populates="pagos")
+    voucher_rel = relationship("VoucherBancario", back_populates="pagos_rel")
 
 # --- 3. TABLAS DE SEGURIDAD, RBAC Y AUDITORÍA ---
 
@@ -284,11 +309,27 @@ class PagoEliminado(AuditoriaMixin, Base):
     tipo_cambio = Column(Numeric(15, 2), nullable=False)
     estado_pago = Column(String(50))
     fecha_pago = Column(Date)
-    numero_operacion = Column(String(100))
-    id_banco = Column(Integer)
     id_empresa = Column(Integer)
     id_gasto = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     estado_registro = Column(String(20), default="ACTIVO")
     es_ajuste_sistema = Column(Boolean, default=False)
     tipo_cambio_aplicado = Column(Numeric(15, 4))
+    # [SPRINT 1] Columnas de Voucher
+    voucher_id = Column(Integer)
+    pago_moneda_cruzada = Column(Boolean, default=False)
+    gasto_financiero_tc = Column(Numeric(15, 2), default=0.00)
+    monto_moneda_origen = Column(Numeric(15, 2))
+
+class VoucherEliminado(Base, AuditoriaMixin):
+    __tablename__ = "vouchers_eliminados"
+
+    id_voucher = Column(Integer)
+    banco_id = Column(Integer)
+    numero_operacion = Column(String(100))
+    monto_total = Column(Numeric(15, 2))
+    saldo_disponible = Column(Numeric(15, 2))
+    moneda = Column(String(3))
+    fecha_transferencia = Column(Date)
+    estado_registro = Column(String(20))
+    version = Column(Integer)
