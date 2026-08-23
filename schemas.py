@@ -16,14 +16,17 @@ class CatBanco(BaseModel):
 
 class CatAgenteCreate(BaseModel):
     nombre: str
+    ruc: str
 
 class CatAgente(BaseModel):
     id_agente: int
     nombre: str
+    ruc: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 class CatAgenteUpdate(BaseModel):
     nombre: Optional[str] = None
+    ruc: Optional[str] = None
 
 class CatProveedorCreate(BaseModel):
     nombre: str

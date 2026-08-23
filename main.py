@@ -1,4 +1,6 @@
 from typing import List
+import os
+import requests
 from datetime import date
 from decimal import Decimal
 from fastapi import FastAPI, Depends, HTTPException, Query, Request, status
@@ -165,6 +167,42 @@ def crear_usuario(usuario: schemas.UsuarioCreate, db: Session = Depends(get_db))
     return nuevo_usuario
 
 # --- ENDPOINTS DE CATÁLOGOS ---
+@app.get("/sunat/ruc/{ruc}", tags=["Integraciones"])
+def consultar_ruc_sunat(ruc: str):
+    if len(ruc) != 11 or not ruc.isdigit():
+        raise HTTPException(status_code=400, detail="El RUC debe tener 11 dígitos numéricos.")
+        
+    token = os.getenv("SUNAT_API_TOKEN")
+    if not token:
+        raise HTTPException(status_code=500, detail="Token de SUNAT no configurado en el servidor.")
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Referer": "http://localhost:8000" # Requisito de la API
+    }
+    
+    try:
+        response = requests.get(f"https://api.apis.net.pe/v2/sunat/ruc?numero={ruc}", headers=headers, timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            # Regla de negocio: Bloquear si no está activo o habido
+            if data.get("estado") != "ACTIVO":
+                raise HTTPException(status_code=400, detail=f"El RUC está {data.get('estado')}. No se puede operar.")
+            if data.get("condicion") != "HABIDO":
+                raise HTTPException(status_code=400, detail=f"El RUC tiene condición {data.get('condicion')}.")
+                
+            return {
+                "razon_social": data.get("razonSocial"),
+                "estado": data.get("estado"),
+                "condicion": data.get("condicion")
+            }
+        elif response.status_code == 404:
+            raise HTTPException(status_code=404, detail="RUC no encontrado en SUNAT.")
+        else:
+            raise HTTPException(status_code=response.status_code, detail="Error al consultar SUNAT.")
+    except requests.exceptions.RequestException:
+        raise HTTPException(status_code=503, detail="El servicio de SUNAT no está disponible temporalmente.")
+
 @app.post("/bancos/", response_model=schemas.CatBanco)
 def crear_banco(banco: schemas.CatBancoCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     nuevo_banco = models.CatBanco(nombre=banco.nombre)
@@ -1163,3 +1201,4 @@ def listar_auditoria_gastos(db: Session = Depends(get_db), current_user: models.
 @app.get("/auditoria/pagos/", response_model=List[schemas.PagoEliminadoResponse])
 def listar_auditoria_pagos(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     return db.query(models.PagoEliminado).order_by(models.PagoEliminado.fecha_eliminacion.desc()).all()
+

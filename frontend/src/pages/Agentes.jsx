@@ -4,6 +4,8 @@ import axios from 'axios';
 const Agentes = () => {
   const [agentes, setAgentes] = useState([]);
   const [nombre, setNombre] = useState('');
+  const [ruc, setRuc] = useState('');
+  const [buscandoRuc, setBuscandoRuc] = useState(false);
   const [mensaje, setMensaje] = useState({ texto: '', tipo: '' });
 
   useEffect(() => {
@@ -23,18 +25,41 @@ const Agentes = () => {
     }
   };
 
+  const buscarRuc = async () => {
+    if (ruc.length !== 11 || isNaN(ruc)) {
+      setMensaje({ texto: 'El RUC debe tener 11 dígitos numéricos.', tipo: 'error' });
+      return;
+    }
+    setBuscandoRuc(true);
+    setMensaje({ texto: 'Buscando RUC en SUNAT...', tipo: 'info' });
+    try {
+      const respuesta = await axios.get(`http://127.0.0.1:8000/sunat/ruc/${ruc}`);
+      setNombre(respuesta.data.razon_social);
+      setMensaje({ texto: 'RUC validado correctamente.', tipo: 'exito' });
+    } catch (error) {
+      console.error('Error al consultar RUC:', error);
+      const errorMsg = error.response?.data?.detail || 'Error al consultar SUNAT.';
+      setMensaje({ texto: `❌ ${errorMsg}`, tipo: 'error' });
+      setRuc('');
+      setNombre('');
+    } finally {
+      setBuscandoRuc(false);
+    }
+  };
+
   const registrarAgente = async (e) => {
     e.preventDefault();
     setMensaje({ texto: 'Guardando...', tipo: 'info' });
 
     try {
       const token = localStorage.getItem('token');
-      const payload = { nombre: nombre };
+      const payload = { ruc: ruc, nombre: nombre };
 
       await axios.post('http://127.0.0.1:8000/agentes/', payload, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
+      setRuc('');
       setNombre('');
       setMensaje({ texto: '✅ Agente de Aduanas registrado con éxito.', tipo: 'exito' });
       cargarAgentes();
@@ -65,6 +90,39 @@ const Agentes = () => {
         <h4 style={{ marginTop: 0, color: '#7f8c8d' }}>Registrar Nuevo Agente de Aduanas</h4>
         <form onSubmit={registrarAgente} style={{ display: 'flex', gap: '15px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
 
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+            <label style={{ fontSize: '14px', fontWeight: 'bold' }}>RUC</label>
+            <div style={{ display: 'flex', gap: '5px' }}>
+              <input 
+                type="text" 
+                value={ruc} 
+                onChange={(e) => setRuc(e.target.value)} 
+                required 
+                maxLength="11"
+                style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px', width: '150px' }}
+              />
+              <button 
+                type="button" 
+                onClick={buscarRuc}
+                disabled={buscandoRuc}
+                style={{ 
+                  padding: '8px 12px', 
+                  backgroundColor: '#2ecc71', 
+                  color: 'white', 
+                  border: 'none', 
+                  borderRadius: '4px', 
+                  cursor: buscandoRuc ? 'not-allowed' : 'pointer',
+                  fontWeight: 'bold',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                {buscandoRuc ? '...' : '🔍'}
+              </button>
+            </div>
+          </div>
+
           <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', flexGrow: 1, minWidth: '250px' }}>
             <label style={{ fontSize: '14px', fontWeight: 'bold' }}>Nombre del Agente</label>
             <input
@@ -72,7 +130,8 @@ const Agentes = () => {
               value={nombre}
               onChange={(e) => setNombre(e.target.value)}
               required
-              style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px', width: '100%' }}
+              readOnly={true}
+              style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px', width: '100%', backgroundColor: '#e9ecef', cursor: 'not-allowed' }}
             />
           </div>
 
@@ -87,18 +146,20 @@ const Agentes = () => {
         <thead>
           <tr style={{ backgroundColor: '#34495e', color: 'white', textAlign: 'left' }}>
             <th style={{ padding: '12px' }}>ID</th>
+            <th style={{ padding: '12px' }}>RUC</th>
             <th style={{ padding: '12px' }}>Nombre del Agente</th>
           </tr>
         </thead>
         <tbody>
           {agentes.length === 0 ? (
             <tr>
-              <td colSpan="2" style={{ padding: '15px', textAlign: 'center', color: '#7f8c8d' }}>No hay agentes registrados aún.</td>
+              <td colSpan="3" style={{ padding: '15px', textAlign: 'center', color: '#7f8c8d' }}>No hay agentes registrados aún.</td>
             </tr>
           ) : (
             agentes.map((ag) => (
               <tr key={ag.id_agente} style={{ borderBottom: '1px solid #eee' }}>
                 <td style={{ padding: '12px' }}>{ag.id_agente}</td>
+                <td style={{ padding: '12px', fontWeight: 'bold' }}>{ag.ruc || 'N/A'}</td>
                 <td style={{ padding: '12px', fontWeight: 'bold' }}>{ag.nombre}</td>
               </tr>
             ))

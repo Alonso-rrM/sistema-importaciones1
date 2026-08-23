@@ -63,6 +63,7 @@ class CatAgente(Base):
     __tablename__ = "cat_agentes"
     id_agente = Column(Integer, primary_key=True, index=True)
     nombre = Column(String(100), unique=True, nullable=False)
+    ruc = Column(String(11), unique=True)
 
 class CatImportador(Base):
     __tablename__ = "cat_importadores"
