@@ -5,6 +5,7 @@ const Empresas = () => {
   const [empresas, setEmpresas] = useState([]);
   const [ruc, setRuc] = useState('');
   const [razonSocial, setRazonSocial] = useState('');
+  const [buscandoRuc, setBuscandoRuc] = useState(false);
   const [mensaje, setMensaje] = useState({ texto: '', tipo: '' });
 
   useEffect(() => {
@@ -21,6 +22,28 @@ const Empresas = () => {
     } catch (error) {
       console.error('Error al cargar:', error);
       setMensaje({ texto: 'No se pudo conectar con la base de datos.', tipo: 'error' });
+    }
+  };
+
+  const buscarRuc = async () => {
+    if (ruc.length !== 11 || isNaN(ruc)) {
+      setMensaje({ texto: 'El RUC debe tener 11 dígitos numéricos.', tipo: 'error' });
+      return;
+    }
+    setBuscandoRuc(true);
+    setMensaje({ texto: 'Buscando RUC en SUNAT...', tipo: 'info' });
+    try {
+      const respuesta = await axios.get(`http://127.0.0.1:8000/sunat/ruc/${ruc}`);
+      setRazonSocial(respuesta.data.razon_social);
+      setMensaje({ texto: 'RUC validado correctamente.', tipo: 'exito' });
+    } catch (error) {
+      console.error('Error al consultar RUC:', error);
+      const errorMsg = error.response?.data?.detail || 'Error al consultar SUNAT.';
+      setMensaje({ texto: `❌ ${errorMsg}`, tipo: 'error' });
+      setRuc('');
+      setRazonSocial('');
+    } finally {
+      setBuscandoRuc(false);
     }
   };
 
@@ -72,14 +95,35 @@ const Empresas = () => {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
             <label style={{ fontSize: '14px', fontWeight: 'bold' }}>RUC</label>
-            <input
-              type="text"
-              value={ruc}
-              onChange={(e) => setRuc(e.target.value)}
-              required
-              maxLength="11"
-              style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px', width: '150px' }}
-            />
+            <div style={{ display: 'flex', gap: '5px' }}>
+              <input
+                type="text"
+                value={ruc}
+                onChange={(e) => setRuc(e.target.value)}
+                required
+                maxLength="11"
+                style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px', width: '150px' }}
+              />
+              <button 
+                type="button" 
+                onClick={buscarRuc}
+                disabled={buscandoRuc}
+                style={{ 
+                  padding: '8px 12px', 
+                  backgroundColor: '#2ecc71', 
+                  color: 'white', 
+                  border: 'none', 
+                  borderRadius: '4px', 
+                  cursor: buscandoRuc ? 'not-allowed' : 'pointer',
+                  fontWeight: 'bold',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                {buscandoRuc ? '...' : '🔍'}
+              </button>
+            </div>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', flexGrow: 1, minWidth: '250px' }}>
@@ -89,7 +133,8 @@ const Empresas = () => {
               value={razonSocial}
               onChange={(e) => setRazonSocial(e.target.value)}
               required
-              style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px', width: '100%' }}
+              readOnly={true}
+              style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px', width: '100%', backgroundColor: '#e9ecef', cursor: 'not-allowed' }}
             />
           </div>
 

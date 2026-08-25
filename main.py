@@ -174,34 +174,42 @@ def consultar_ruc_sunat(ruc: str):
         
     token = os.getenv("SUNAT_API_TOKEN")
     if not token:
-        raise HTTPException(status_code=500, detail="Token de SUNAT no configurado en el servidor.")
+        raise HTTPException(status_code=500, detail="Token de SUNAT (ApiPeru) no configurado en el servidor.")
 
     headers = {
         "Authorization": f"Bearer {token}",
-        "Referer": "http://localhost:8000" # Requisito de la API
+        "Content-Type": "application/json"
     }
     
     try:
-        response = requests.get(f"https://api.apis.net.pe/v2/sunat/ruc?numero={ruc}", headers=headers, timeout=5)
+        # Endpoint oficial de ApiPeru.dev
+        response = requests.get(f"https://apiperu.dev/api/ruc/{ruc}", headers=headers, timeout=5)
+        
         if response.status_code == 200:
-            data = response.json()
-            # Regla de negocio: Bloquear si no está activo o habido
-            if data.get("estado") != "ACTIVO":
-                raise HTTPException(status_code=400, detail=f"El RUC está {data.get('estado')}. No se puede operar.")
-            if data.get("condicion") != "HABIDO":
-                raise HTTPException(status_code=400, detail=f"El RUC tiene condición {data.get('condicion')}.")
+            res_json = response.json()
+            
+            if not res_json.get("success"):
+                raise HTTPException(status_code=404, detail="RUC no encontrado en SUNAT.")
+                
+            data = res_json.get("data", {})
+            estado = data.get("estado")
+            condicion = data.get("condicion")
+            
+            # Validaciones estrictas de negocio
+            if estado != "ACTIVO":
+                raise HTTPException(status_code=400, detail=f"El RUC está {estado}. No se puede operar.")
+            if condicion != "HABIDO":
+                raise HTTPException(status_code=400, detail=f"El RUC tiene condición {condicion}.")
                 
             return {
-                "razon_social": data.get("razonSocial"),
-                "estado": data.get("estado"),
-                "condicion": data.get("condicion")
+                "razon_social": data.get("nombre_o_razon_social"),
+                "estado": estado,
+                "condicion": condicion
             }
-        elif response.status_code == 404:
-            raise HTTPException(status_code=404, detail="RUC no encontrado en SUNAT.")
         else:
-            raise HTTPException(status_code=response.status_code, detail="Error al consultar SUNAT.")
+            raise HTTPException(status_code=response.status_code, detail="Error al consultar SUNAT a través de ApiPeru.")
     except requests.exceptions.RequestException:
-        raise HTTPException(status_code=503, detail="El servicio de SUNAT no está disponible temporalmente.")
+        raise HTTPException(status_code=503, detail="El servicio de consulta no está disponible temporalmente.")
 
 @app.post("/bancos/", response_model=schemas.CatBanco)
 def crear_banco(banco: schemas.CatBancoCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):

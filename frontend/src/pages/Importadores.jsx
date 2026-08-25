@@ -43,6 +43,7 @@ const Importadores = () => {
     } catch (error) {
       console.error('Error al consultar RUC:', error);
       const errorMsg = error.response?.data?.detail || 'Error al consultar SUNAT.';
+      alert(errorMsg);
       setMensaje({ texto: `❌ ${errorMsg}`, tipo: 'error' });
       setRuc('');
       setRazonSocial('');
@@ -132,7 +133,7 @@ const Importadores = () => {
                   justifyContent: 'center'
                 }}
               >
-                {buscandoRuc ? '...' : '🔍'}
+                {buscandoRuc ? 'Cargando...' : '🔍'}
               </button>
             </div>
           </div>
