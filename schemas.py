@@ -12,7 +12,11 @@ class CatBancoCreate(BaseModel):
 class CatBanco(BaseModel):
     id_banco: int
     nombre: str
+    estado_registro: str = "ACTIVO"
     model_config = ConfigDict(from_attributes=True)
+
+class CatBancoUpdate(BaseModel):
+    nombre: Optional[str] = None
 
 class CatAgenteCreate(BaseModel):
     nombre: str
@@ -22,6 +26,7 @@ class CatAgente(BaseModel):
     id_agente: int
     nombre: str
     ruc: Optional[str] = None
+    estado_registro: str = "ACTIVO"
     model_config = ConfigDict(from_attributes=True)
 
 class CatAgenteUpdate(BaseModel):
@@ -38,6 +43,7 @@ class CatProveedor(BaseModel):
     nombre: str
     ruc: Optional[str] = None
     categoria: str = "NACIONAL"
+    estado_registro: str = "ACTIVO"
     model_config = ConfigDict(from_attributes=True)
 
 class CatProveedorUpdate(BaseModel):
@@ -51,6 +57,7 @@ class CatAlmacenCreate(BaseModel):
 class CatAlmacen(BaseModel):
     id_almacen: int
     nombre: str
+    estado_registro: str = "ACTIVO"
     model_config = ConfigDict(from_attributes=True)
 
 class CatAlmacenUpdate(BaseModel):
@@ -63,7 +70,8 @@ class CatImportadorCreate(BaseModel):
 class CatImportador(BaseModel):
     id_importador: int
     nombre: str
-    ruc: Optional[str] = None 
+    ruc: Optional[str] = None
+    estado_registro: str = "ACTIVO"
     model_config = ConfigDict(from_attributes=True)
 
 class CatImportadorUpdate(BaseModel):
@@ -78,6 +86,7 @@ class CatEmpresa(BaseModel):
     id_empresa: int
     nombre: str
     ruc: Optional[str] = None
+    estado_registro: str = "ACTIVO"
     model_config = ConfigDict(from_attributes=True)
 
 class CatEmpresaUpdate(BaseModel):
@@ -92,6 +101,10 @@ class CatConceptoPago(CatConceptoPagoCreate):
     id_concepto: int
     estado_registro: str
     model_config = ConfigDict(from_attributes=True)
+
+class CatConceptoPagoUpdate(BaseModel):
+    nombre: Optional[str] = None
+    descripcion: Optional[str] = None
 
 # --- NUEVOS CATÁLOGOS: DOCUMENTOS Y TIPO DE CAMBIO ---
 

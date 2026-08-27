@@ -40,6 +40,7 @@ class CatProveedor(Base):
     ruc = Column(String(11), unique=True)
     # [NUEVO] Clasificación del proveedor
     categoria = Column(String(30), default="NACIONAL")
+    estado_registro = Column(String(20), default="ACTIVO")
     
     gastos = relationship("RegistroGasto", back_populates="proveedor_rel")
 
@@ -47,29 +48,34 @@ class CatAlmacen(Base):
     __tablename__ = "cat_almacenes"
     id_almacen = Column(Integer, primary_key=True, index=True)
     nombre = Column(String(100), unique=True, nullable=False)
+    estado_registro = Column(String(20), default="ACTIVO")
 
 class CatBanco(Base):
     __tablename__ = "cat_bancos"
     id_banco = Column(Integer, primary_key=True, index=True)
     nombre = Column(String(100), unique=True, nullable=False)
+    estado_registro = Column(String(20), default="ACTIVO")
 
 class CatEmpresa(Base):
     __tablename__ = "cat_empresas"
     id_empresa = Column(Integer, primary_key=True, index=True)
     nombre = Column(String(150), unique=True, nullable=False)
     ruc = Column(String(11), unique=True)
+    estado_registro = Column(String(20), default="ACTIVO")
 
 class CatAgente(Base):
     __tablename__ = "cat_agentes"
     id_agente = Column(Integer, primary_key=True, index=True)
     nombre = Column(String(100), unique=True, nullable=False)
     ruc = Column(String(11), unique=True)
+    estado_registro = Column(String(20), default="ACTIVO")
 
 class CatImportador(Base):
     __tablename__ = "cat_importadores"
     id_importador = Column(Integer, primary_key=True, index=True)
     nombre = Column(String(150), unique=True, nullable=False)
     ruc = Column(String(11), unique=True)
+    estado_registro = Column(String(20), default="ACTIVO")
 
 # --- 1.5 VOUCHERS BANCARIOS ---
 
