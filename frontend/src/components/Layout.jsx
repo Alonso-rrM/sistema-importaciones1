@@ -51,6 +51,9 @@ function Layout() {
                     <Link to="/app/conceptos" style={{ color: 'white', textDecoration: 'none', padding: '12px 20px', borderBottom: '1px solid #34495e', display: 'flex', alignItems: 'center', gap: '10px' }}>
                         🏷️ Conceptos de Gasto
                     </Link>
+                    <Link to="/app/comprobantes" style={{ color: 'white', textDecoration: 'none', padding: '12px 20px', borderBottom: '1px solid #34495e', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        📄 Tipos de Comprobante
+                    </Link>
                     <Link to="/app/bancos" style={{ color: 'white', textDecoration: 'none', padding: '12px 20px', borderBottom: '1px solid #34495e', display: 'flex', alignItems: 'center', gap: '10px' }}>
                         🏦 Bancos y Cuentas
                     </Link>

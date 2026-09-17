@@ -14,6 +14,7 @@ class CatalogoDocumentoPago(Base):
     id_tipo_doc = Column(Integer, primary_key=True, index=True)
     nombre_documento = Column(String(50), unique=True, nullable=False)
     multiplicador_financiero = Column(Integer, nullable=False)
+    estado_registro = Column(String(20), default="ACTIVO")
     
     gastos = relationship("RegistroGasto", back_populates="tipo_doc_rel")
 
@@ -155,7 +156,8 @@ class RegistroGasto(Base):
     id_gasto = Column(Integer, primary_key=True, index=True)
     id_dam = Column(Integer, ForeignKey("detalle_dams.id_dam"), nullable=False)
     id_concepto = Column(Integer, ForeignKey("cat_conceptos_pagos.id_concepto"), nullable=False)
-    monto_usd = Column(Numeric(15, 2), nullable=False)
+    monto_original = Column(Numeric(15, 2), nullable=False)
+    moneda = Column(String(3), default="USD", nullable=False)
     estado_pago = Column(String(50), default="PENDIENTE")
     estado_registro = Column(String(20), default="ACTIVO")
     created_at = Column(DateTime, default=datetime.datetime.utcnow)

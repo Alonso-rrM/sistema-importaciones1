@@ -29,7 +29,8 @@ const Gastos = () => {
     id_tipo_doc: null,
     numero_documento: '',
     fecha_vencimiento: '',
-    monto_usd: ''
+    monto_original: '',
+    moneda: 'USD'
   };
 
   const [form, setForm] = useState(estadoInicialForm);
@@ -108,7 +109,8 @@ const Gastos = () => {
         id_tipo_doc: gasto.id_tipo_doc,
         numero_documento: gasto.numero_documento || '',
         fecha_vencimiento: gasto.fecha_vencimiento || '',
-        monto_usd: gasto.monto_usd || ''
+        monto_original: gasto.monto_original || '',
+        moneda: gasto.moneda || 'USD'
       });
     }
   };
@@ -171,7 +173,8 @@ const Gastos = () => {
         id_concepto: form.id_concepto,
         id_proveedor: form.id_proveedor,
         id_tipo_doc: form.id_tipo_doc,
-        monto_usd: parseFloat(form.monto_usd),
+        monto_original: parseFloat(form.monto_original),
+        moneda: form.moneda,
         numero_documento: form.numero_documento || null,
         fecha_vencimiento: form.fecha_vencimiento || null
       };
@@ -298,7 +301,8 @@ const Gastos = () => {
                 <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>Proveedor</th>
                 <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>Concepto</th>
                 <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>Documento</th>
-                <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>Monto (USD)</th>
+                <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>Monto</th>
+                <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>Moneda</th>
                 <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>Estado Pago</th>
                 <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>ID DAM</th>
               </tr>
@@ -317,7 +321,8 @@ const Gastos = () => {
                     <td style={{ padding: '12px', fontWeight: 'bold' }}>{prov ? prov.label : `ID: ${g.id_proveedor}`}</td>
                     <td style={{ padding: '12px' }}>{conc ? conc.label : `ID: ${g.id_concepto}`}</td>
                     <td style={{ padding: '12px' }}>{g.numero_documento || 'Sin documento'}</td>
-                    <td style={{ padding: '12px', fontWeight: '500' }}>${parseFloat(g.monto_usd).toFixed(2)}</td>
+                    <td style={{ padding: '12px', fontWeight: '500' }}>{parseFloat(g.monto_original).toFixed(2)}</td>
+                    <td style={{ padding: '12px', fontWeight: 'bold' }}>{g.moneda || 'USD'}</td>
                     <td style={{ padding: '12px' }}>
                       <span style={{ 
                         padding: '4px 8px', 
@@ -440,14 +445,28 @@ const Gastos = () => {
                 disabled={isReadOnly}
               />
             </div>
+            <div>
+              <label style={labelStyle}>Moneda *</label>
+              <select 
+                name="moneda" 
+                value={form.moneda} 
+                onChange={handleChangeTexto} 
+                required 
+                style={inputStyle} 
+                disabled={isReadOnly}
+              >
+                <option value="USD">Dólares (USD)</option>
+                <option value="PEN">Soles (PEN)</option>
+              </select>
+            </div>
             <div style={{ position: 'relative' }}>
-              <label style={labelStyle}>Monto Total (USD) *</label>
-              <span style={{ position: 'absolute', left: '12px', top: '38px', color: '#7f8c8d', fontWeight: 'bold' }}>$</span>
+              <label style={labelStyle}>Monto Total *</label>
+              <span style={{ position: 'absolute', left: '12px', top: '38px', color: '#7f8c8d', fontWeight: 'bold' }}>{form.moneda === 'PEN' ? 'S/' : '$'}</span>
               <input 
                 type="number" 
                 step="0.01" 
-                name="monto_usd" 
-                value={form.monto_usd} 
+                name="monto_original" 
+                value={form.monto_original} 
                 onChange={handleChangeTexto} 
                 required 
                 style={{ ...inputStyle, paddingLeft: '25px' }} 

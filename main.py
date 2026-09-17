@@ -147,6 +147,15 @@ ESTRATEGIAS_VALIDACION_DAM = {
 def ruta_principal():
     return {"mensaje": "¡Servidor de Importaciones funcionando al 100%!"}
 
+# --- ENDPOINTS DE ROLES ---
+@app.post("/roles/", response_model=schemas.CatRol, tags=["Catalogos"])
+def crear_rol(rol: schemas.CatRolCreate, db: Session = Depends(get_db)):
+    nuevo_rol = models.CatRol(**rol.model_dump())
+    db.add(nuevo_rol)
+    db.commit()
+    db.refresh(nuevo_rol)
+    return nuevo_rol
+
 # --- ENDPOINTS DE USUARIOS ---
 @app.post("/usuarios/", response_model=schemas.Usuario)
 def crear_usuario(usuario: schemas.UsuarioCreate, db: Session = Depends(get_db)):
@@ -921,7 +930,7 @@ async def registrar_pago(
         elif p.moneda == "PEN":
             total_ya_pagado += (importe_db / tc_db)
 
-    monto_gasto_usd = Decimal(str(gasto.monto_usd))
+    monto_gasto_base = Decimal(str(gasto.monto_original))
     saldo_pendiente = monto_gasto_usd - total_ya_pagado
 
     # Calcular el importe real ingresado a moneda dura (USD)
@@ -1040,8 +1049,11 @@ def estado_cuenta_factura(
         # 1. Sumar gastos de la DAM
         for gasto in dam.gastos:
             if gasto.estado_registro == "ACTIVO":
-                monto_usd = Decimal(str(gasto.monto_usd)) if gasto.monto_usd else Decimal("0.00")
-                total_gastos_dam_pen += monto_usd * tipo_cambio_referencial
+                monto_original = Decimal(str(gasto.monto_original)) if gasto.monto_original else Decimal("0.00")
+                if gasto.moneda == "USD":
+                    total_gastos_dam_pen += monto_original * tipo_cambio_referencial
+                else:
+                    total_gastos_dam_pen += monto_original
 
         # 2. Sumar pagos de la DAM
         for pago in dam.pagos:
@@ -1157,8 +1169,11 @@ def actualizar_concepto(id_concepto: int, concepto_editado: schemas.CatConceptoP
 
 # --- ENDPOINTS PARA TIPOS DE DOCUMENTO ---
 @app.get("/tipos-documento/", response_model=List[schemas.CatalogoDocumentoPago])
-def listar_tipos_documento(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
-    return db.query(models.CatalogoDocumentoPago).all()
+def listar_tipos_documento(mostrar_inactivos: bool = False, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    query = db.query(models.CatalogoDocumentoPago)
+    if not mostrar_inactivos:
+        query = query.filter(models.CatalogoDocumentoPago.estado_registro == "ACTIVO")
+    return query.all()
 
 @app.post("/tipos-documento/", response_model=schemas.CatalogoDocumentoPago)
 def crear_tipo_documento(tipo_doc: schemas.CatalogoDocumentoPagoCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
@@ -1171,6 +1186,58 @@ def crear_tipo_documento(tipo_doc: schemas.CatalogoDocumentoPagoCreate, db: Sess
     except IntegrityError:
         db.rollback()
         raise HTTPException(status_code=400, detail="El nombre del documento ya existe.")
+
+@app.put("/tipos-documento/{id}", response_model=schemas.CatalogoDocumentoPago)
+def actualizar_tipo_documento(id: int, tipo_doc: schemas.CatalogoDocumentoPagoUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    doc_bd = db.query(models.CatalogoDocumentoPago).filter(models.CatalogoDocumentoPago.id_tipo_doc == id).first()
+    if not doc_bd:
+        raise HTTPException(status_code=404, detail="Documento no encontrado")
+    
+    update_data = tipo_doc.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(doc_bd, key, value)
+        
+    try:
+        db.commit()
+        db.refresh(doc_bd)
+        return doc_bd
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="El nombre del documento ya existe.")
+
+@app.delete("/tipos-documento/{id}")
+def eliminar_tipo_documento_logico(id: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    doc_bd = db.query(models.CatalogoDocumentoPago).filter(models.CatalogoDocumentoPago.id_tipo_doc == id).first()
+    if not doc_bd:
+        raise HTTPException(status_code=404, detail="Documento no encontrado")
+    
+    doc_bd.estado_registro = "INACTIVO"
+    db.commit()
+    return {"mensaje": "Documento desactivado lógicamente"}
+
+@app.put("/tipos-documento/{id}/restaurar")
+def restaurar_tipo_documento(id: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    doc_bd = db.query(models.CatalogoDocumentoPago).filter(models.CatalogoDocumentoPago.id_tipo_doc == id).first()
+    if not doc_bd:
+        raise HTTPException(status_code=404, detail="Documento no encontrado")
+    
+    doc_bd.estado_registro = "ACTIVO"
+    db.commit()
+    return {"mensaje": "Documento restaurado exitosamente"}
+
+@app.delete("/tipos-documento/{id}/fisico")
+def eliminar_tipo_documento_fisico(id: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    doc_bd = db.query(models.CatalogoDocumentoPago).filter(models.CatalogoDocumentoPago.id_tipo_doc == id).first()
+    if not doc_bd:
+        raise HTTPException(status_code=404, detail="Documento no encontrado")
+    
+    try:
+        db.delete(doc_bd)
+        db.commit()
+        return {"mensaje": "Documento eliminado físicamente de la base de datos"}
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="No se puede eliminar el documento físicamente porque tiene gastos asociados.")
 
 # --- RUTAS DE LECTURA (GET) GENERALES ---
 @app.get("/bancos/", response_model=List[schemas.CatBanco])
@@ -1290,7 +1357,7 @@ def eliminar_gasto(id_gasto: int, req: schemas.EliminacionRequest, db: Session =
         motivo_eliminacion=req.motivo, 
         usuario_id=current_user.id_usuario,
         nombre_usuario_ejecutor=current_user.username,
-        identificador_principal=f"Gasto USD: {gasto.monto_usd} (DAM: {gasto.id_dam})",
+        identificador_principal=f"Gasto {gasto.moneda}: {gasto.monto_original} (DAM: {gasto.id_dam})",
         detalles_legibles=snapshot
     )
     
@@ -1320,7 +1387,7 @@ def eliminar_pago(id_pago: int, req: schemas.EliminacionRequest, db: Session = D
         "Empresa": pago.empresa.nombre if pago.empresa else "N/A",
         "Concepto": pago.concepto_rel.nombre if pago.concepto_rel else "N/A",
         "DAM": pago.dam.numero_de_dam if pago.dam else "N/A",
-        "Ref. Gasto USD": f"{pago.gasto_rel.monto_usd}" if pago.gasto_rel else "N/A"
+        "Ref. Gasto": f"{pago.gasto_rel.monto_original} {pago.gasto_rel.moneda}" if pago.gasto_rel else "N/A"
     }
     respaldo = models.PagoEliminado(
         **datos, 
@@ -1359,7 +1426,7 @@ def eliminar_pago(id_pago: int, req: schemas.EliminacionRequest, db: Session = D
                         "Empresa": pago_zd.empresa.nombre if pago_zd.empresa else "N/A",
                         "Concepto": pago_zd.concepto_rel.nombre if pago_zd.concepto_rel else "N/A",
                         "DAM": pago_zd.dam.numero_de_dam if pago_zd.dam else "N/A",
-                        "Ref. Gasto USD": f"{pago_zd.gasto_rel.monto_usd}" if pago_zd.gasto_rel else "N/A"
+                        "Ref. Gasto": f"{pago_zd.gasto_rel.monto_original} {pago_zd.gasto_rel.moneda}" if pago_zd.gasto_rel else "N/A"
                     }
                     respaldo_zd = models.PagoEliminado(
                         **datos_zd,
@@ -1385,13 +1452,13 @@ def eliminar_pago(id_pago: int, req: schemas.EliminacionRequest, db: Session = D
             ).filter(models.RegistroPago.id_gasto == id_gasto_afectado).scalar()
             
             total_pagado_usd = Decimal(str(total_pagado_usd)) if total_pagado_usd else Decimal("0.00")
-            monto_gasto_usd = Decimal(str(gasto.monto_usd))
+            monto_gasto_base = Decimal(str(gasto.monto_original))
             
             saldo_pendiente = monto_gasto_usd - total_pagado_usd
             margen_tolerancia = Decimal("0.05")
             
             # C. Asignación Dinámica del Estado
-            if saldo_pendiente >= monto_gasto_usd:
+            if saldo_pendiente >= monto_gasto_base:
                 gasto.estado_pago = "PENDIENTE"
             elif saldo_pendiente > margen_tolerancia:
                 gasto.estado_pago = "PARCIAL"

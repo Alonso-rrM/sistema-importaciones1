@@ -61,13 +61,15 @@ const Pagos = () => {
           pagosAsociados.forEach(p => {
             const importe = parseFloat(p.importe) || 0;
             const tc = parseFloat(p.tipo_cambio_aplicado || p.tipo_cambio) || 1;
-            if (p.moneda === 'USD') {
-              totalYaPagado += importe;
-            } else if (p.moneda === 'PEN') {
-              totalYaPagado += (importe / tc);
+            if (foundGasto.moneda === 'USD' || !foundGasto.moneda) {
+              if (p.moneda === 'USD') totalYaPagado += importe;
+              if (p.moneda === 'PEN') totalYaPagado += (importe / tc);
+            } else {
+              if (p.moneda === 'PEN') totalYaPagado += importe;
+              if (p.moneda === 'USD') totalYaPagado += (importe * tc);
             }
           });
-          const saldoRestante = Math.max(0, parseFloat(foundGasto.monto_usd) - totalYaPagado);
+          const saldoRestante = Math.max(0, parseFloat(foundGasto.monto_original) - totalYaPagado);
 
           setForm(prev => ({
             ...prev,
@@ -126,7 +128,7 @@ const Pagos = () => {
 
       setOpcionesGastos(resGastos.data.map(g => ({ 
         value: g.id_gasto, 
-        label: `[Gasto #${g.id_gasto}] Doc: ${g.numero_documento || 'S/N'} — Deuda original: $${parseFloat(g.monto_usd).toFixed(2)} USD (${g.estado_pago})` 
+        label: `[Gasto #${g.id_gasto}] Doc: ${g.numero_documento || 'S/N'} — Deuda original: ${g.moneda==='PEN'?'S/':'$'}${parseFloat(g.monto_original).toFixed(2)} ${g.moneda||'USD'} (${g.estado_pago})` 
       })));
       
       setOpcionesEmpresas(resEmpresas.data.map(e => ({ value: e.id_empresa, label: `${e.ruc} - ${e.nombre}` })));
@@ -293,7 +295,16 @@ const Pagos = () => {
   
   const importeNum = parseFloat(form.importe) || 0;
   const tcNum = parseFloat(form.tipo_cambio) || 0;
-  const amortizacionCalculada = tcNum > 0 ? (form.moneda === 'USD' ? importeNum : importeNum / tcNum).toFixed(2) : '0.00';
+  let amortCalculadaNum = 0;
+  if (gastoSeleccionado) {
+    const monedaGasto = gastoSeleccionado.moneda || 'USD';
+    if (monedaGasto === 'USD') {
+      amortCalculadaNum = tcNum > 0 ? (form.moneda === 'USD' ? importeNum : importeNum / tcNum) : 0;
+    } else {
+      amortCalculadaNum = tcNum > 0 ? (form.moneda === 'PEN' ? importeNum : (importeNum * tcNum)) : 0;
+    }
+  }
+  const amortizacionCalculada = amortCalculadaNum.toFixed(2);
 
   const colorMoneda = form.moneda === 'USD' ? '#27ae60' : '#e67e22';
   const simboloMoneda = form.moneda === 'USD' ? '$' : 'S/';
@@ -438,7 +449,7 @@ const Pagos = () => {
                 <div style={{ marginTop: '5px', fontSize: '15px' }}>
                   📄 Gasto ID: <strong>#{inheritedGasto.id_gasto}</strong> | 
                   Documento: <strong>{inheritedGasto.numero_documento || 'S/N'}</strong> | 
-                  Deuda Original: <strong>${parseFloat(inheritedGasto.monto_usd).toFixed(2)} USD</strong>
+                  Deuda Original: <strong>{inheritedGasto.moneda==='PEN'?'S/':'$'}{parseFloat(inheritedGasto.monto_original).toFixed(2)} {inheritedGasto.moneda||'USD'}</strong>
                 </div>
                 <span style={{ fontSize: '11px', display: 'block', marginTop: '5px', color: '#7f8c8d' }}>
                   * El Gasto ha sido pre-seleccionado desde el Puente de Acción del Módulo de Gastos.
@@ -466,7 +477,7 @@ const Pagos = () => {
 
             {gastoSeleccionado && (
               <div style={{ marginTop: '12px', padding: '10px', backgroundColor: '#fff', borderRadius: '5px', border: '1px solid #d5b8d5', fontSize: '13px', color: '#2c3e50' }}>
-                <strong>Deuda del Gasto:</strong> Original: <strong style={{ color: '#c0392b' }}>${parseFloat(gastoSeleccionado.monto_usd).toFixed(2)} USD</strong> 
+                <strong>Deuda del Gasto:</strong> Original: <strong style={{ color: '#c0392b' }}>{gastoSeleccionado.moneda==='PEN'?'S/':'$'}{parseFloat(gastoSeleccionado.monto_original).toFixed(2)} {gastoSeleccionado.moneda||'USD'}</strong> 
                 {' | '}Estado: <strong style={{ color: gastoSeleccionado.estado_pago === 'PENDIENTE' ? '#e67e22' : '#27ae60' }}>{gastoSeleccionado.estado_pago}</strong>
                 {' | '}Doc: {gastoSeleccionado.numero_documento || 'S/N'}
               </div>
@@ -608,7 +619,7 @@ const Pagos = () => {
               </div>
               <div style={{ marginTop: '10px', textAlign: 'right' }}>
                 <span style={{ fontSize: '12px', color: '#7f8c8d' }}>Amortización estimada a la deuda: </span>
-                <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#27ae60' }}>$ {amortizacionCalculada} USD</span>
+                <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#27ae60' }}>{gastoSeleccionado?.moneda === 'PEN' ? 'S/' : '$'} {amortizacionCalculada} {gastoSeleccionado?.moneda || 'USD'}</span>
               </div>
               
               {gastoSeleccionado && parseFloat(amortizacionCalculada) > (parseFloat(gastoSeleccionado.monto_usd) + 0.05) && (

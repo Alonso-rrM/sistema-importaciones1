@@ -115,8 +115,13 @@ class CatalogoDocumentoPagoBase(BaseModel):
 class CatalogoDocumentoPagoCreate(CatalogoDocumentoPagoBase):
     pass
 
+class CatalogoDocumentoPagoUpdate(BaseModel):
+    nombre_documento: Optional[str] = None
+    multiplicador_financiero: Optional[int] = None
+
 class CatalogoDocumentoPago(CatalogoDocumentoPagoBase):
     id_tipo_doc: int
+    estado_registro: str
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -249,7 +254,8 @@ class RegistroGastoCreate(BaseModel):
     id_tipo_doc: int
     numero_documento: Optional[str] = None
     fecha_vencimiento: Optional[date] = None
-    monto_usd: Decimal
+    monto_original: Decimal
+    moneda: str = "USD"
 
 class RegistroGasto(RegistroGastoCreate):
     id_gasto: int
@@ -265,7 +271,8 @@ class RegistroGastoUpdate(BaseModel):
     id_tipo_doc: int | None = None
     numero_documento: str | None = None
     fecha_vencimiento: date | None = None
-    monto_usd: Decimal | None = None
+    monto_original: Decimal | None = None
+    moneda: str | None = None
 
 
 # --- 5. ESQUEMAS PARA REGISTRO_PAGOS ---
@@ -441,7 +448,8 @@ class GastoEliminadoResponse(AuditoriaBaseResponse):
     id_gasto: Optional[int] = None
     id_dam: int
     id_concepto: int
-    monto_usd: Decimal
+    monto_original: Decimal
+    moneda: str = "USD"
     estado_pago: Optional[str] = None
     estado_registro: Optional[str] = None
     created_at: Optional[datetime] = None

@@ -8,6 +8,7 @@ import Almacenes from './pages/Almacenes'
 import Bancos from './pages/Bancos'
 import Empresas from './pages/Empresas'
 import Conceptos from './pages/Conceptos'
+import Comprobantes from './pages/Comprobantes'
 import Logistica from './pages/Logistica'
 import Dams from './pages/Dams'
 import Gastos from './pages/Gastos'
@@ -34,6 +35,7 @@ function App() {
           <Route path="almacenes" element={<Almacenes />} />
           <Route path="empresas" element={<Empresas />} />
           <Route path="conceptos" element={<Conceptos />} />
+          <Route path="comprobantes" element={<Comprobantes />} />
           <Route path="bancos" element={<Bancos />} />
 
           {/* Finanzas */}
