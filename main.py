@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 import os
 import requests
 from datetime import date
@@ -1322,7 +1322,7 @@ def eliminar_pago(id_pago: int, req: schemas.EliminacionRequest, db: Session = D
     snapshot = {
         "Voucher": pago.voucher_rel.numero_operacion if pago.voucher_rel else "N/A",
         "Banco": pago.voucher_rel.banco_rel.nombre if (pago.voucher_rel and pago.voucher_rel.banco_rel) else "N/A",
-        "Empresa": pago.empresa.nombre if pago.empresa else "N/A",
+        "Importador": pago.importador.nombre if pago.importador else "N/A",
         "Concepto": pago.concepto_rel.nombre if pago.concepto_rel else "N/A",
         "DAM": pago.dam.numero_de_dam if pago.dam else "N/A",
         "Ref. Gasto": f"{pago.gasto_rel.monto_original} {pago.gasto_rel.moneda}" if pago.gasto_rel else "N/A"
@@ -1361,7 +1361,7 @@ def eliminar_pago(id_pago: int, req: schemas.EliminacionRequest, db: Session = D
                     snapshot_zd = {
                         "Voucher": pago_zd.voucher_rel.numero_operacion if pago_zd.voucher_rel else "N/A",
                         "Banco": pago_zd.voucher_rel.banco_rel.nombre if (pago_zd.voucher_rel and pago_zd.voucher_rel.banco_rel) else "N/A",
-                        "Empresa": pago_zd.empresa.nombre if pago_zd.empresa else "N/A",
+                        "Importador": pago_zd.importador.nombre if pago_zd.importador else "N/A",
                         "Concepto": pago_zd.concepto_rel.nombre if pago_zd.concepto_rel else "N/A",
                         "DAM": pago_zd.dam.numero_de_dam if pago_zd.dam else "N/A",
                         "Ref. Gasto": f"{pago_zd.gasto_rel.monto_original} {pago_zd.gasto_rel.moneda}" if pago_zd.gasto_rel else "N/A"

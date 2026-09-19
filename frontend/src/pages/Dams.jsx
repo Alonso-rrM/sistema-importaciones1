@@ -340,8 +340,8 @@ const Dams = () => {
                       {d.monto_valor_provisional_usd ? `$${parseFloat(d.monto_valor_provisional_usd).toFixed(2)}` : '-'}
                     </td>
                     <td style={{ padding: '12px' }}>{d.aforo_realizado ? '✅ SÍ' : '❌ NO'}</td>
-                    <td style={{ padding: '12px', fontWeight: '500' }}>{parent ? parent.numero_factura : `ID: ${d.id_maestro}`}</td>
-                    <td style={{ padding: '12px' }}>{parent?.n_cont_fisico || '-'}</td>
+                    <td style={{ padding: '12px', fontWeight: '500' }}>{maestroParent ? maestroParent.numero_factura : `ID: ${d.id_maestro}`}</td>
+                    <td style={{ padding: '12px' }}>{maestroParent?.n_cont_fisico || '-'}</td>
                   </tr>
                 );
               })}

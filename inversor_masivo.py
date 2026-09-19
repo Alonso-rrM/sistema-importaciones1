@@ -4,7 +4,7 @@ import requests
 # --- CONFIGURACIÓN ---
 API_URL = "http://localhost:8000"
 # IMPORTANTE: Reemplaza este string por el Token JWT del administrador
-TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsImlkX3JvbCI6MSwiaWRfdXN1YXJpbyI6MSwiZXhwIjoxNzg5NzA1NTc2fQ.NeMmgTKcbOK7p1CNXYrHMdX6JSZVTOv_hdkjAFyQEao"
+TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsImlkX3JvbCI6MSwiaWRfdXN1YXJpbyI6MSwiZXhwIjoxNzg5ODgyNzg3fQ.zcFbzk6GlOwWsIh59Rlsmj9R1Q8X-YaW7HNpszECk3s"
 HEADERS = {
     "Authorization": f"Bearer {TOKEN}",
     "Content-Type": "application/json"
