@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import Select from 'react-select';
@@ -17,6 +17,7 @@ const Dams = () => {
   const [maestros, setMaestros] = useState([]);
   const [opcionesMaestros, setOpcionesMaestros] = useState([]);
   const [inheritedMaestro, setInheritedMaestro] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const estadoInicial = {
     id_maestro: null,
@@ -80,6 +81,18 @@ const Dams = () => {
       console.error('Error al obtener DAMs:', error);
     }
   };
+
+  const damsFiltradas = useMemo(() => {
+    if (!searchTerm) return dams;
+    const lowerTerm = searchTerm.toLowerCase();
+    return dams.filter(dam => {
+      const parentMaestro = maestros.find(m => m.id_maestro === dam.id_maestro);
+      const factura = parentMaestro ? parentMaestro.numero_factura : '';
+      const canal = dam.canal_control || '';
+      const text = `${dam.numero_de_dam} ${dam.serie} ${factura} ${canal}`.toLowerCase();
+      return text.includes(lowerTerm);
+    });
+  }, [dams, searchTerm, maestros]);
 
   const handleRowClick = (dam) => {
     if (viewMode !== 'LISTA') return;
@@ -259,13 +272,21 @@ const Dams = () => {
 
       {/* TOP COMMAND BAR */}
       <div style={commandBarStyle}>
-        <button style={getBtnStyle(false, '#2ecc71')} onClick={() => { setViewMode('NUEVO'); setFormData(estadoInicial); setSelectedId(null); setInheritedMaestro(null); }}>➕ NUEVO</button>
+        <button style={getBtnStyle(false, '#2ecc71')} onClick={() => { setViewMode('NUEVO'); setFormData(estadoInicial); setSelectedId(null); }}>➕ NUEVO</button>
         <button style={getBtnStyle(!selectedId, '#f39c12')} disabled={!selectedId} onClick={() => setViewMode('MODIFICAR')}>✏️ MODIFICAR</button>
         <button style={getBtnStyle(!selectedId, '#3498db')} disabled={!selectedId} onClick={() => setViewMode('CONSULTAR')}>👁️ CONSULTAR</button>
         <button style={getBtnStyle(!selectedId, '#e74c3c')} disabled={!selectedId} onClick={handleEliminar}>🗑️ ELIMINAR</button>
         
+        <input 
+          type="search" 
+          placeholder="Buscar por DAM, Serie, Factura o Canal..." 
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          style={{ padding: '10px', marginLeft: 'auto', width: '300px', borderRadius: '5px', border: '1px solid #ccc' }}
+        />
+
         {viewMode !== 'LISTA' && (
-          <button style={{ ...getBtnStyle(false, '#95a5a6'), marginLeft: 'auto' }} onClick={() => { setViewMode('LISTA'); setSelectedId(null); setFormData(estadoInicial); setInheritedMaestro(null); }}>⬅️ VOLVER A LISTA</button>
+          <button style={{ ...getBtnStyle(false, '#95a5a6'), marginLeft: '10px' }} onClick={() => { setViewMode('LISTA'); setSelectedId(null); setFormData(estadoInicial); setInheritedMaestro(null); }}>⬅️ VOLVER A LISTA</button>
         )}
       </div>
 
@@ -292,8 +313,8 @@ const Dams = () => {
               </tr>
             </thead>
             <tbody>
-              {dams.map(d => {
-                const parent = maestros.find(m => m.id_maestro === d.id_maestro);
+              {damsFiltradas.map(d => {
+                const maestroParent = maestros.find(m => m.id_maestro === d.id_maestro);
                 return (
                   <tr 
                     key={d.id_dam} 

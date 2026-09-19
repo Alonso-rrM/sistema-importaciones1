@@ -6,7 +6,7 @@ import Importadores from './pages/Importadores'
 import Agentes from './pages/Agentes'
 import Almacenes from './pages/Almacenes'
 import Bancos from './pages/Bancos'
-import Empresas from './pages/Empresas'
+
 import Conceptos from './pages/Conceptos'
 import Comprobantes from './pages/Comprobantes'
 import Logistica from './pages/Logistica'
@@ -33,7 +33,7 @@ function App() {
           <Route path="proveedores" element={<Proveedores />} />
           <Route path="agentes" element={<Agentes />} />
           <Route path="almacenes" element={<Almacenes />} />
-          <Route path="empresas" element={<Empresas />} />
+
           <Route path="conceptos" element={<Conceptos />} />
           <Route path="comprobantes" element={<Comprobantes />} />
           <Route path="bancos" element={<Bancos />} />

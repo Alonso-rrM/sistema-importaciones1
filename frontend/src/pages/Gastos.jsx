@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import Select from 'react-select';
@@ -15,6 +15,7 @@ const Gastos = () => {
   const [gastos, setGastos] = useState([]);
   const [maestrosRaw, setMaestrosRaw] = useState([]);
   const [damsRaw, setDamsRaw] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
   
   const [opcionesMaestros, setOpcionesMaestros] = useState([]);
   const [opcionesConceptos, setOpcionesConceptos] = useState([]);
@@ -90,6 +91,18 @@ const Gastos = () => {
   const opcionesDamsFiltradas = damsRaw
     .filter(dam => dam.id_maestro === form.id_maestro_temp)
     .map(dam => ({ value: dam.id_dam, label: `DAM: ${dam.numero_de_dam}` }));
+
+  const gastosFiltrados = useMemo(() => {
+    if (!searchTerm) return gastos;
+    const lowerTerm = searchTerm.toLowerCase();
+    return gastos.filter(g => {
+      const prov = opcionesProveedores.find(p => p.value === g.id_proveedor)?.label || '';
+      const conc = opcionesConceptos.find(c => c.value === g.id_concepto)?.label || '';
+      const dam = damsRaw.find(d => d.id_dam === g.id_dam)?.numero_de_dam || '';
+      const text = `${g.id_gasto} ${g.numero_documento} ${prov} ${conc} ${dam} ${g.estado_pago}`.toLowerCase();
+      return text.includes(lowerTerm);
+    });
+  }, [gastos, searchTerm, opcionesProveedores, opcionesConceptos, damsRaw]);
 
   const handleChangeTexto = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
@@ -278,10 +291,18 @@ const Gastos = () => {
         <button style={getBtnStyle(!selectedId || isGastoPagado, '#f39c12')} disabled={!selectedId || isGastoPagado} title={isGastoPagado ? "No se permite modificar gastos PAGADOS" : ""} onClick={() => setViewMode('MODIFICAR')}>✏️ MODIFICAR</button>
         <button style={getBtnStyle(!selectedId, '#3498db')} disabled={!selectedId} onClick={() => setViewMode('CONSULTAR')}>👁️ CONSULTAR</button>
         <button style={getBtnStyle(!selectedId, '#e74c3c')} disabled={!selectedId} onClick={handleEliminar}>🗑️ ELIMINAR</button>
-        <button style={getBtnStyle(!selectedId, '#8e44ad')} disabled={!selectedId} onClick={handleRegistrarPago}>📑 REGISTRAR PAGO</button>
+        <button style={getBtnStyle(!selectedId, '#8e44ad')} disabled={!selectedId} onClick={handleRegistrarPago}>🏦 REGISTRAR PAGO</button>
+        
+        <input 
+          type="search" 
+          placeholder="Buscar por Doc, Concepto, Proveedor o Estado..." 
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          style={{ padding: '10px', marginLeft: 'auto', width: '300px', borderRadius: '5px', border: '1px solid #ccc' }}
+        />
         
         {viewMode !== 'LISTA' && (
-          <button style={{ ...getBtnStyle(false, '#95a5a6'), marginLeft: 'auto' }} onClick={() => { setViewMode('LISTA'); setSelectedId(null); setForm(estadoInicialForm); }}>⬅️ VOLVER A LISTA</button>
+          <button style={{ ...getBtnStyle(false, '#95a5a6'), marginLeft: '10px' }} onClick={() => { setViewMode('LISTA'); setSelectedId(null); setForm(estadoInicialForm); }}>⬅️ VOLVER A LISTA</button>
         )}
       </div>
 
@@ -308,8 +329,8 @@ const Gastos = () => {
               </tr>
             </thead>
             <tbody>
-              {gastos.map(g => {
-                const prov = opcionesProveedores.find(p => p.value === g.id_proveedor);
+              {gastosFiltrados.map((g) => {
+                const prov = opcionesProveedores.find(op => op.value === g.id_proveedor);
                 const conc = opcionesConceptos.find(c => c.value === g.id_concepto);
                 return (
                   <tr 

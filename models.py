@@ -57,12 +57,7 @@ class CatBanco(Base):
     nombre = Column(String(100), unique=True, nullable=False)
     estado_registro = Column(String(20), default="ACTIVO")
 
-class CatEmpresa(Base):
-    __tablename__ = "cat_empresas"
-    id_empresa = Column(Integer, primary_key=True, index=True)
-    nombre = Column(String(150), unique=True, nullable=False)
-    ruc = Column(String(11), unique=True)
-    estado_registro = Column(String(20), default="ACTIVO")
+
 
 class CatAgente(Base):
     __tablename__ = "cat_agentes"
@@ -85,6 +80,7 @@ class VoucherBancario(Base):
 
     id_voucher = Column(Integer, primary_key=True, index=True)
     banco_id = Column(Integer, ForeignKey("cat_bancos.id_banco"), nullable=False)
+    id_importador = Column(Integer, ForeignKey("cat_importadores.id_importador"), nullable=False)
     numero_operacion = Column(String(100), nullable=False)
     monto_total = Column(Numeric(15, 2), nullable=False)
     saldo_disponible = Column(Numeric(15, 2), nullable=False)
@@ -96,6 +92,7 @@ class VoucherBancario(Base):
     __mapper_args__ = {"version_id_col": version}
 
     banco_rel = relationship("CatBanco")
+    importador_rel = relationship("CatImportador")
     pagos_rel = relationship("RegistroPago", back_populates="voucher_rel")
 
 # --- 2. TABLAS PRINCIPALES ---
@@ -184,7 +181,7 @@ class RegistroPago(Base):
     tipo_cambio = Column(Numeric(15, 2), nullable=False)
     estado_pago = Column(String(50))
     fecha_pago = Column(Date)
-    id_empresa = Column(Integer, ForeignKey("cat_empresas.id_empresa"))
+    id_importador = Column(Integer, ForeignKey("cat_importadores.id_importador"))
     id_gasto = Column(Integer, ForeignKey("registro_gastos.id_gasto"), nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     estado_registro = Column(String(20), default="ACTIVO")
@@ -201,7 +198,7 @@ class RegistroPago(Base):
     monto_moneda_origen = Column(Numeric(15, 2), nullable=False)
     
     dam = relationship("DetalleDam", back_populates="pagos")
-    empresa = relationship("CatEmpresa", backref="pagos")
+    importador = relationship("CatImportador", backref="pagos")
     concepto_rel = relationship("CatConceptoPago", back_populates="pagos")
     gasto_rel = relationship("RegistroGasto", back_populates="pagos")
     voucher_rel = relationship("VoucherBancario", back_populates="pagos_rel")
@@ -318,7 +315,7 @@ class PagoEliminado(AuditoriaMixin, Base):
     tipo_cambio = Column(Numeric(15, 2), nullable=False)
     estado_pago = Column(String(50))
     fecha_pago = Column(Date)
-    id_empresa = Column(Integer)
+    id_importador = Column(Integer)
     id_gasto = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     estado_registro = Column(String(20), default="ACTIVO")

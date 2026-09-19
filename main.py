@@ -484,74 +484,6 @@ def eliminar_importadores_fisico(id_importador: int, db: Session = Depends(get_d
         db.rollback()
         raise HTTPException(status_code=400, detail="No se puede eliminar porque este registro está siendo usado en otros módulos.")
 
-@app.post("/empresas/", response_model=schemas.CatEmpresa)
-def crear_empresa(empresa: schemas.CatEmpresaCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
-    try:
-        nueva_empresa = models.CatEmpresa(**empresa.model_dump())
-        db.add(nueva_empresa)
-        db.commit()
-        db.refresh(nueva_empresa)
-        return nueva_empresa
-    except IntegrityError:
-        db.rollback() 
-        raise HTTPException(status_code=400, detail="Error: El Nombre o RUC ya están registrados.")
-
-@app.get("/empresas/", response_model=List[schemas.CatEmpresa])
-def listar_empresas(mostrar_inactivos: bool = False, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
-    query = db.query(models.CatEmpresa)
-    if not mostrar_inactivos:
-        query = query.filter(models.CatEmpresa.estado_registro == "ACTIVO")
-    return query.all()
-
-@app.put("/empresas/{id_empresa}", response_model=schemas.CatEmpresa)
-def actualizar_empresa(id_empresa: int, empresa_editada: schemas.CatEmpresaUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
-    db_empresa = db.query(models.CatEmpresa).filter(models.CatEmpresa.id_empresa == id_empresa).first()
-    if not db_empresa:
-        raise HTTPException(status_code=404, detail="Empresa no encontrada")
-    
-    update_data = empresa_editada.model_dump(exclude_unset=True)
-    for key, value in update_data.items():
-        setattr(db_empresa, key, value)
-        
-    try:
-        db.commit()
-        db.refresh(db_empresa)
-        return db_empresa
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(status_code=400, detail="Error: El Nombre o RUC ya están registrados.")
-
-@app.delete("/empresas/{id_empresa}")
-def eliminar_empresa(id_empresa: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
-    empresa = db.query(models.CatEmpresa).filter(models.CatEmpresa.id_empresa == id_empresa).first()
-    if not empresa:
-        raise HTTPException(status_code=404, detail="Empresa no encontrada")
-    empresa.estado_registro = "INACTIVO"
-    db.commit()
-    return {"mensaje": f"La empresa '{empresa.nombre}' ha sido desactivada correctamente."}
-
-@app.put("/empresas/{id_empresa}/restaurar", response_model=schemas.CatEmpresa)
-def restaurar_empresas(id_empresa: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
-    db_item = db.query(models.CatEmpresa).filter(models.CatEmpresa.id_empresa == id_empresa).first()
-    if not db_item:
-        raise HTTPException(status_code=404, detail="Registro no encontrado")
-    db_item.estado_registro = "ACTIVO"
-    db.commit()
-    db.refresh(db_item)
-    return db_item
-
-@app.delete("/empresas/{id_empresa}/fisico")
-def eliminar_empresas_fisico(id_empresa: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
-    db_item = db.query(models.CatEmpresa).filter(models.CatEmpresa.id_empresa == id_empresa).first()
-    if not db_item:
-        raise HTTPException(status_code=404, detail="Registro no encontrado")
-    try:
-        db.delete(db_item)
-        db.commit()
-        return {"mensaje": "Registro eliminado definitivamente"}
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail="No se puede eliminar porque este registro está siendo usado en otros módulos.")
 
 
 
@@ -817,10 +749,12 @@ def crear_voucher(voucher: schemas.VoucherBancarioCreate, db: Session = Depends(
     return nuevo_voucher
 
 @app.get("/vouchers/", response_model=List[schemas.VoucherBancarioResponse])
-def listar_vouchers(saldo_mayor_cero: bool = False, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def listar_vouchers(saldo_mayor_cero: bool = False, id_importador: Optional[int] = None, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     query = db.query(models.VoucherBancario).filter(models.VoucherBancario.estado_registro == "ACTIVO")
     if saldo_mayor_cero:
         query = query.filter(models.VoucherBancario.saldo_disponible > 0)
+    if id_importador is not None:
+        query = query.filter(models.VoucherBancario.id_importador == id_importador)
     return query.all()
 
 @app.delete("/vouchers/{id_voucher}")
@@ -884,6 +818,10 @@ async def registrar_pago(
         if not voucher:
             raise HTTPException(status_code=404, detail="El voucher especificado no existe.")
             
+        if voucher.id_importador != gasto.dam.maestro.id_importador:
+            raise HTTPException(status_code=400, detail="Violación de integridad transaccional: El voucher no pertenece a la entidad importadora del gasto.")
+
+            
         # Matemática y Validación de Saldos
         if voucher.saldo_disponible < pago.monto_moneda_origen:
             raise HTTPException(status_code=400, detail="Saldo insuficiente en el voucher.")
@@ -931,19 +869,19 @@ async def registrar_pago(
             total_ya_pagado += (importe_db / tc_db)
 
     monto_gasto_base = Decimal(str(gasto.monto_original))
-    saldo_pendiente = monto_gasto_usd - total_ya_pagado
+    saldo_pendiente = monto_gasto_base - total_ya_pagado
 
-    # Calcular el importe real ingresado a moneda dura (USD)
-    nuevo_importe_usd = Decimal("0.00")
+    # Calcular el importe real ingresado a moneda dura (moneda base)
+    nuevo_importe_base = Decimal("0.00")
     if pago_dict["moneda"] == "USD":
-        nuevo_importe_usd = pago_dict["importe"]
+        nuevo_importe_base = pago_dict["importe"]
     elif pago_dict["moneda"] == "PEN":
-        nuevo_importe_usd = pago_dict["importe"] / tc_aplicado
+        nuevo_importe_base = pago_dict["importe"] / tc_aplicado
 
     # Tolerancia por diferenciales cambiarios
     margen_tolerancia = Decimal("0.05")
     
-    if nuevo_importe_usd > (saldo_pendiente + margen_tolerancia):
+    if nuevo_importe_base > (saldo_pendiente + margen_tolerancia):
         saldo_formateado = saldo_pendiente.quantize(Decimal("0.01"))
         raise HTTPException(
             status_code=400, 
@@ -955,7 +893,7 @@ async def registrar_pago(
         nuevo_pago = models.RegistroPago(**pago_dict)
         db.add(nuevo_pago)
         
-        saldo_pendiente_nuevo = saldo_pendiente - nuevo_importe_usd
+        saldo_pendiente_nuevo = saldo_pendiente - nuevo_importe_base
 
         # Cerrar el gasto si el pago es exacto (o se pasa por centavos permitidos)
         if saldo_pendiente_nuevo <= Decimal("0.00"):
@@ -972,7 +910,7 @@ async def registrar_pago(
                 tipo_cambio_aplicado=Decimal("1.00"),
                 estado_pago="PAGADO",
                 fecha_pago=date.today(),
-                id_empresa=pago_dict.get("id_empresa"),
+                id_importador=pago_dict.get("id_importador"),
                 id_gasto=gasto.id_gasto,
                 es_ajuste_sistema=True,
                 voucher_id=None,
@@ -1441,7 +1379,7 @@ def eliminar_pago(id_pago: int, req: schemas.EliminacionRequest, db: Session = D
                     db.flush() 
             
             # B. Cálculo de saldos dinámicos
-            total_pagado_usd = db.query(
+            total_pagado_base = db.query(
                 func.sum(
                     case(
                         (models.RegistroPago.moneda == "USD", models.RegistroPago.importe),
@@ -1451,10 +1389,10 @@ def eliminar_pago(id_pago: int, req: schemas.EliminacionRequest, db: Session = D
                 )
             ).filter(models.RegistroPago.id_gasto == id_gasto_afectado).scalar()
             
-            total_pagado_usd = Decimal(str(total_pagado_usd)) if total_pagado_usd else Decimal("0.00")
+            total_pagado_base = Decimal(str(total_pagado_base)) if total_pagado_base else Decimal("0.00")
             monto_gasto_base = Decimal(str(gasto.monto_original))
             
-            saldo_pendiente = monto_gasto_usd - total_pagado_usd
+            saldo_pendiente = monto_gasto_base - total_pagado_base
             margen_tolerancia = Decimal("0.05")
             
             # C. Asignación Dinámica del Estado

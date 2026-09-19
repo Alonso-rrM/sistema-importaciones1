@@ -78,20 +78,7 @@ class CatImportadorUpdate(BaseModel):
     nombre: Optional[str] = None
     ruc: Optional[str] = None
 
-class CatEmpresaCreate(BaseModel):
-    nombre: str
-    ruc: str
 
-class CatEmpresa(BaseModel):
-    id_empresa: int
-    nombre: str
-    ruc: Optional[str] = None
-    estado_registro: str = "ACTIVO"
-    model_config = ConfigDict(from_attributes=True)
-
-class CatEmpresaUpdate(BaseModel):
-    nombre: Optional[str] = None
-    ruc: Optional[str] = None
 
 class CatConceptoPagoCreate(BaseModel):
     nombre: str
@@ -144,6 +131,7 @@ class HistorialTipoCambio(HistorialTipoCambioBase):
 
 class VoucherBancarioBase(BaseModel):
     banco_id: int
+    id_importador: int
     numero_operacion: str
     monto_total: Decimal
     moneda: str  # 'USD' o 'PEN'
@@ -289,7 +277,7 @@ class RegistroPagoCreate(BaseModel):
     tipo_cambio: Decimal
     estado_pago: Optional[str] = "PAGADO"
     fecha_pago: Optional[date] = None
-    id_empresa: Optional[int] = None
+    id_importador: Optional[int] = None
     id_gasto: Optional[int] = None
     es_ajuste_sistema: bool = False
     tipo_cambio_aplicado: Optional[Decimal] = None
@@ -308,7 +296,7 @@ class RegistroPagoUpdate(BaseModel):
     moneda: MonedaEnum | None = None
     importe: Decimal | None = None
     tipo_cambio: Decimal | None = None
-    id_empresa: int | None = None
+    id_importador: int | None = None
     id_gasto: int | None = None
     es_ajuste_sistema: bool | None = None
     tipo_cambio_aplicado: Decimal | None = None
@@ -467,7 +455,7 @@ class PagoEliminadoResponse(AuditoriaBaseResponse):
     tipo_cambio: Decimal
     estado_pago: Optional[str] = None
     fecha_pago: Optional[date] = None
-    id_empresa: Optional[int] = None
+    id_importador: Optional[int] = None
     id_gasto: Optional[int] = None
     created_at: Optional[datetime] = None
     estado_registro: Optional[str] = None
