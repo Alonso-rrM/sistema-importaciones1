@@ -39,7 +39,7 @@ function App() {
           <Route path="bancos" element={<Bancos />} />
 
           {/* Finanzas */}
-          <Route path="tesoreria" element={<h2 style={{ color: '#2c3e50' }}>Pantalla en construcción: Movimientos y Pagos</h2>} />
+
           <Route path="vouchers" element={<Vouchers />} />
           <Route path="gastos" element={<Gastos />} />
           <Route path="pagos" element={<Pagos />} />

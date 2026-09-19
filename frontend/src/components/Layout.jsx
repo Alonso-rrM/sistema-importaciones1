@@ -68,9 +68,7 @@ function Layout() {
                     <Link to="/app/pagos" style={{ color: 'white', textDecoration: 'none', padding: '12px 20px', borderBottom: '1px solid #34495e', display: 'flex', alignItems: 'center', gap: '10px' }}>
                         🏦 Liquidación de Pagos
                     </Link>
-                    <Link to="/app/tesoreria" style={{ color: 'white', textDecoration: 'none', padding: '12px 20px', borderBottom: '1px solid #34495e', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        💰 Tesorería y Pagos
-                    </Link>
+
 
                     <div style={{ color: '#7f8c8d', fontSize: '12px', padding: '20px 20px 10px 20px', textTransform: 'uppercase', letterSpacing: '1px' }}>
                         Seguridad y Control
