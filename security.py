@@ -3,12 +3,18 @@ from datetime import datetime, timedelta, timezone
 from passlib.context import CryptContext
 import jwt
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 # Configuración de bcrypt para el hashing de contraseñas
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# Constantes de Seguridad (En producción, SECRET_KEY debe venir de un archivo .env)
-# Ejemplo: SECRET_KEY = os.getenv("SECRET_KEY", "tu_clave_super_secreta_aqui")
-SECRET_KEY = "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7" # CÁMBIALO EN PRODUCCIÓN
+# Constantes de Seguridad (Obligatorio desde variable de entorno)
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise ValueError("La variable de entorno SECRET_KEY no está configurada. Verifica tu archivo .env")
+
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 horas
 

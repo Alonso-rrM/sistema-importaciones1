@@ -28,9 +28,15 @@ models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="API de Importaciones y Pagos")
 
+cors_origins_env = os.getenv("CORS_ORIGINS")
+if cors_origins_env:
+    origins = [origin.strip() for origin in cors_origins_env.split(",") if origin.strip()]
+else:
+    origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # En producción lo cambiaremos al dominio real
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -96,7 +102,7 @@ async def registrar_auditoria(db: Session, id_usuario: int, endpoint: str, accio
         ip_address=ip_address
     )
     db.add(nuevo_log)
-    db.commit()
+    db.flush()
 
 
 @app.post("/login")
@@ -555,21 +561,25 @@ async def desbloquear_maestro_con_levante(
     if not maestro:
         raise HTTPException(status_code=404, detail="Maestro de importación no encontrado")
 
-    maestro.estado_levante = "SIN LEVANTE"
-    
-    db.commit()
-    db.refresh(maestro)
-    
-    await registrar_auditoria(
-        db=db,
-        id_usuario=current_user.id_usuario,
-        endpoint=request.url.path,
-        accion="DESBLOQUEO LEVANTE",
-        detalles=f'{{"id_maestro": {id_maestro}, "nuevo_estado": "SIN LEVANTE"}}',
-        ip_address=request.client.host if request.client else "IP Desconocida"
-    )
+    try:
+        maestro.estado_levante = "SIN LEVANTE"
+        db.flush()
+        
+        await registrar_auditoria(
+            db=db,
+            id_usuario=current_user.id_usuario,
+            endpoint=request.url.path,
+            accion="DESBLOQUEO LEVANTE",
+            detalles=f'{{"id_maestro": {id_maestro}, "nuevo_estado": "SIN LEVANTE"}}',
+            ip_address=request.client.host if request.client else "IP Desconocida"
+        )
 
-    return maestro
+        db.commit()
+        db.refresh(maestro)
+        return maestro
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"Error al desbloquear levante: {str(e)}")
 
 # --- ENDPOINT DE LEVANTE (MÁQUINA DE ESTADOS) ---
 @app.put("/maestros/{id_maestro}/autorizar-levante", response_model=schemas.MaestroImportacion)
@@ -597,24 +607,29 @@ async def autorizar_levante(
                     detail=f"Operación denegada: El Canal Rojo Definitivo exige Aforo Físico antes del Levante para la DAM {dam.numero_de_dam}."
                 )
 
-    # 3. Aplicar el Levante
-    maestro.estado_levante = 'CON LEVANTE'
-    db.commit()
-    db.refresh(maestro)
+    # 3. Aplicar el Levante y Auditoría Atómica
+    try:
+        maestro.estado_levante = 'CON LEVANTE'
+        db.flush()
 
-    # 4. Bitácora de Auditoría
-    detalles_auditoria = f'{{"id_maestro": {id_maestro}, "nuevo_estado": "CON LEVANTE"}}'
-    
-    await registrar_auditoria(
-        db=db,
-        id_usuario=current_user.id_usuario,
-        endpoint=request.url.path,
-        accion="AUTORIZACION LEVANTE",
-        detalles=detalles_auditoria,
-        ip_address=request.client.host if request.client else "IP Desconocida"
-    )
+        # 4. Bitácora de Auditoría
+        detalles_auditoria = f'{{"id_maestro": {id_maestro}, "nuevo_estado": "CON LEVANTE"}}'
+        
+        await registrar_auditoria(
+            db=db,
+            id_usuario=current_user.id_usuario,
+            endpoint=request.url.path,
+            accion="AUTORIZACION LEVANTE",
+            detalles=detalles_auditoria,
+            ip_address=request.client.host if request.client else "IP Desconocida"
+        )
 
-    return maestro
+        db.commit()
+        db.refresh(maestro)
+        return maestro
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"Error al autorizar levante: {str(e)}")
 
 # --- ENDPOINTS PARA DAMS ---
 @app.get("/dams/", response_model=List[schemas.DetalleDam])
@@ -690,12 +705,11 @@ async def crear_gasto(
                 detail=f"Duplicidad detectada: Ya existe un gasto registrado con el documento {gasto.numero_documento} para este proveedor."
             )
 
-    # 4. Guardar en Base de Datos
+    # 4. Guardar en Base de Datos (Transacción Atómica ACID)
     try:
         nuevo_gasto = models.RegistroGasto(**gasto.model_dump())
         db.add(nuevo_gasto)
-        db.commit()
-        db.refresh(nuevo_gasto)
+        db.flush()
         
         # --- AUDITORÍA: Registro de Creación ---
         await registrar_auditoria(
@@ -707,6 +721,8 @@ async def crear_gasto(
             ip_address=request.client.host if request.client else "IP Desconocida"
         )
         
+        db.commit()
+        db.refresh(nuevo_gasto)
         return nuevo_gasto
     except Exception as e:
         db.rollback()
@@ -851,9 +867,16 @@ async def registrar_pago(
         tc_aplicado = tc_sunat.precio_venta
         pago_dict["tipo_cambio"] = tc_aplicado
     
-    pago_dict["tipo_cambio_aplicado"] = tc_aplicado
+    # 3. Validación Financiera Estricta (Saldos en moneda del gasto)
+    def amortizar(moneda_gasto: str, moneda_pago: str, importe: Decimal, tc: Decimal) -> Decimal:
+        if moneda_gasto == moneda_pago:
+            return importe
+        if moneda_gasto == "USD" and moneda_pago == "PEN":
+            return importe / tc
+        if moneda_gasto == "PEN" and moneda_pago == "USD":
+            return importe * tc
+        return importe
 
-    # 3. Validación Financiera Estricta (Saldos)
     pagos_existentes = db.query(models.RegistroPago).filter(
         models.RegistroPago.id_gasto == pago_dict["id_gasto"],
         models.RegistroPago.estado_registro == "ACTIVO"
@@ -862,38 +885,38 @@ async def registrar_pago(
     total_ya_pagado = Decimal("0.00")
     for p in pagos_existentes:
         importe_db = Decimal(str(p.importe))
-        tc_db = Decimal(str(p.tipo_cambio_aplicado or p.tipo_cambio))
-        if p.moneda == "USD":
-            total_ya_pagado += importe_db
-        elif p.moneda == "PEN":
-            total_ya_pagado += (importe_db / tc_db)
+        tc_db = Decimal(str(p.tipo_cambio_aplicado or p.tipo_cambio or "1.00"))
+        if tc_db <= Decimal("0.00"):
+            tc_db = Decimal("1.00")
+        total_ya_pagado += amortizar(gasto.moneda, p.moneda, importe_db, tc_db)
 
     monto_gasto_base = Decimal(str(gasto.monto_original))
     saldo_pendiente = monto_gasto_base - total_ya_pagado
 
-    # Calcular el importe real ingresado a moneda dura (moneda base)
-    nuevo_importe_base = Decimal("0.00")
-    if pago_dict["moneda"] == "USD":
-        nuevo_importe_base = pago_dict["importe"]
-    elif pago_dict["moneda"] == "PEN":
-        nuevo_importe_base = pago_dict["importe"] / tc_aplicado
+    # Calcular el importe amortizado por el nuevo pago en la moneda del gasto
+    nuevo_importe_amortizado = amortizar(
+        gasto.moneda,
+        pago_dict["moneda"],
+        Decimal(str(pago_dict["importe"])),
+        tc_aplicado
+    )
 
     # Tolerancia por diferenciales cambiarios
     margen_tolerancia = Decimal("0.05")
     
-    if nuevo_importe_base > (saldo_pendiente + margen_tolerancia):
+    if nuevo_importe_amortizado > (saldo_pendiente + margen_tolerancia):
         saldo_formateado = saldo_pendiente.quantize(Decimal("0.01"))
         raise HTTPException(
             status_code=400, 
-            detail=f"Sobrepago detectado. El importe ingresado supera el saldo pendiente. Saldo restante original: USD {saldo_formateado}"
+            detail=f"Sobrepago detectado. El importe ingresado supera el saldo pendiente. Saldo restante: {gasto.moneda} {saldo_formateado}"
         )
 
-    # 4. Guardar Pago Principal
+    # 4. Guardar Pago Principal y Registrar Auditoría (Transacción Atómica ACID)
     try:
         nuevo_pago = models.RegistroPago(**pago_dict)
         db.add(nuevo_pago)
         
-        saldo_pendiente_nuevo = saldo_pendiente - nuevo_importe_base
+        saldo_pendiente_nuevo = saldo_pendiente - nuevo_importe_amortizado
 
         # Cerrar el gasto si el pago es exacto (o se pasa por centavos permitidos)
         if saldo_pendiente_nuevo <= Decimal("0.00"):
@@ -904,7 +927,7 @@ async def registrar_pago(
             pago_ajuste = models.RegistroPago(
                 id_dam=gasto.id_dam,
                 id_concepto=gasto.id_concepto,
-                moneda="USD",
+                moneda=gasto.moneda,
                 importe=saldo_pendiente_nuevo,
                 tipo_cambio=Decimal("1.00"),
                 tipo_cambio_aplicado=Decimal("1.00"),
@@ -920,10 +943,12 @@ async def registrar_pago(
             )
             db.add(pago_ajuste)
             gasto.estado_pago = "PAGADO"
+        else:
+            gasto.estado_pago = "PARCIAL"
 
-        db.commit()
-        db.refresh(nuevo_pago)
-        
+        # db.flush() asigna los IDs autoincrementales sin cerrar la transacción física
+        db.flush()
+
         # --- AUDITORÍA: Registro de Creación ---
         await registrar_auditoria(
             db=db,
@@ -934,6 +959,9 @@ async def registrar_pago(
             ip_address=request.client.host if request.client else "IP Desconocida"
         )
 
+        # db.commit() al final absoluto para sellar pago + ajuste + auditoría simultáneamente
+        db.commit()
+        db.refresh(nuevo_pago)
         return nuevo_pago
         
     except Exception as e:
@@ -1313,98 +1341,110 @@ def eliminar_pago(id_pago: int, req: schemas.EliminacionRequest, db: Session = D
     id_gasto_afectado = pago.id_gasto
     es_ajuste_actual = pago.es_ajuste_sistema
 
-    # Reversión de Dinero al Voucher
-    if pago.voucher_rel:
-        pago.voucher_rel.saldo_disponible += pago.monto_moneda_origen
-        
-    # 1. Respaldo del pago principal
-    datos = {c.name: getattr(pago, c.name) for c in pago.__table__.columns}
-    snapshot = {
-        "Voucher": pago.voucher_rel.numero_operacion if pago.voucher_rel else "N/A",
-        "Banco": pago.voucher_rel.banco_rel.nombre if (pago.voucher_rel and pago.voucher_rel.banco_rel) else "N/A",
-        "Importador": pago.importador.nombre if pago.importador else "N/A",
-        "Concepto": pago.concepto_rel.nombre if pago.concepto_rel else "N/A",
-        "DAM": pago.dam.numero_de_dam if pago.dam else "N/A",
-        "Ref. Gasto": f"{pago.gasto_rel.monto_original} {pago.gasto_rel.moneda}" if pago.gasto_rel else "N/A"
-    }
-    respaldo = models.PagoEliminado(
-        **datos, 
-        motivo_eliminacion=req.motivo, 
-        usuario_id=current_user.id_usuario,
-        nombre_usuario_ejecutor=current_user.username,
-        identificador_principal=f"Pago {pago.id_pago}",
-        detalles_legibles=snapshot
-    )
-    db.add(respaldo)
-    
-    # 2. Ejecución Física del pago principal
-    db.delete(pago)
-    db.flush() 
-    
-    # 3. Lógica Contable: Reversión ZD y Recálculo Dinámico
-    if id_gasto_afectado:
-        gasto = db.query(models.RegistroGasto).filter(models.RegistroGasto.id_gasto == id_gasto_afectado).first()
-        
-        if gasto:
-            # A. Reversión de Ajuste ZD huérfano
-            if not es_ajuste_actual:
-                pago_zd = db.query(models.RegistroPago).filter(
-                    models.RegistroPago.id_gasto == id_gasto_afectado,
-                    models.RegistroPago.es_ajuste_sistema == True
-                ).first()
-                
-                if pago_zd:
-                    if pago_zd.voucher_rel:
-                        pago_zd.voucher_rel.saldo_disponible += pago_zd.monto_moneda_origen
-                    
-                    datos_zd = {c.name: getattr(pago_zd, c.name) for c in pago_zd.__table__.columns}
-                    snapshot_zd = {
-                        "Voucher": pago_zd.voucher_rel.numero_operacion if pago_zd.voucher_rel else "N/A",
-                        "Banco": pago_zd.voucher_rel.banco_rel.nombre if (pago_zd.voucher_rel and pago_zd.voucher_rel.banco_rel) else "N/A",
-                        "Importador": pago_zd.importador.nombre if pago_zd.importador else "N/A",
-                        "Concepto": pago_zd.concepto_rel.nombre if pago_zd.concepto_rel else "N/A",
-                        "DAM": pago_zd.dam.numero_de_dam if pago_zd.dam else "N/A",
-                        "Ref. Gasto": f"{pago_zd.gasto_rel.monto_original} {pago_zd.gasto_rel.moneda}" if pago_zd.gasto_rel else "N/A"
-                    }
-                    respaldo_zd = models.PagoEliminado(
-                        **datos_zd,
-                        motivo_eliminacion=f"Reversión contable automática por eliminación del pago padre ID: {id_pago}",
-                        usuario_id=current_user.id_usuario,
-                        nombre_usuario_ejecutor=current_user.username,
-                        identificador_principal=f"Pago ZD {pago_zd.id_pago}",
-                        detalles_legibles=snapshot_zd
-                    )
-                    db.add(respaldo_zd)
-                    db.delete(pago_zd)
-                    db.flush() 
+    try:
+        # Reversión de Dinero al Voucher
+        if pago.voucher_rel:
+            pago.voucher_rel.saldo_disponible += pago.monto_moneda_origen
             
-            # B. Cálculo de saldos dinámicos
-            total_pagado_base = db.query(
-                func.sum(
-                    case(
+        # 1. Respaldo del pago principal
+        datos = {c.name: getattr(pago, c.name) for c in pago.__table__.columns}
+        snapshot = {
+            "Voucher": pago.voucher_rel.numero_operacion if pago.voucher_rel else "N/A",
+            "Banco": pago.voucher_rel.banco_rel.nombre if (pago.voucher_rel and pago.voucher_rel.banco_rel) else "N/A",
+            "Importador": pago.importador.nombre if pago.importador else "N/A",
+            "Concepto": pago.concepto_rel.nombre if pago.concepto_rel else "N/A",
+            "DAM": pago.dam.numero_de_dam if pago.dam else "N/A",
+            "Ref. Gasto": f"{pago.gasto_rel.monto_original} {pago.gasto_rel.moneda}" if pago.gasto_rel else "N/A"
+        }
+        respaldo = models.PagoEliminado(
+            **datos, 
+            motivo_eliminacion=req.motivo, 
+            usuario_id=current_user.id_usuario,
+            nombre_usuario_ejecutor=current_user.username,
+            identificador_principal=f"Pago {pago.id_pago}",
+            detalles_legibles=snapshot
+        )
+        db.add(respaldo)
+        
+        # 2. Ejecución Física del pago principal
+        db.delete(pago)
+        db.flush() 
+        
+        # 3. Lógica Contable: Reversión ZD y Recálculo Dinámico
+        if id_gasto_afectado:
+            gasto = db.query(models.RegistroGasto).filter(models.RegistroGasto.id_gasto == id_gasto_afectado).first()
+            
+            if gasto:
+                # A. Reversión de Ajuste ZD huérfano
+                if not es_ajuste_actual:
+                    pago_zd = db.query(models.RegistroPago).filter(
+                        models.RegistroPago.id_gasto == id_gasto_afectado,
+                        models.RegistroPago.es_ajuste_sistema == True
+                    ).first()
+                    
+                    if pago_zd:
+                        if pago_zd.voucher_rel:
+                            pago_zd.voucher_rel.saldo_disponible += pago_zd.monto_moneda_origen
+                        
+                        datos_zd = {c.name: getattr(pago_zd, c.name) for c in pago_zd.__table__.columns}
+                        snapshot_zd = {
+                            "Voucher": pago_zd.voucher_rel.numero_operacion if pago_zd.voucher_rel else "N/A",
+                            "Banco": pago_zd.voucher_rel.banco_rel.nombre if (pago_zd.voucher_rel and pago_zd.voucher_rel.banco_rel) else "N/A",
+                            "Importador": pago_zd.importador.nombre if pago_zd.importador else "N/A",
+                            "Concepto": pago_zd.concepto_rel.nombre if pago_zd.concepto_rel else "N/A",
+                            "DAM": pago_zd.dam.numero_de_dam if pago_zd.dam else "N/A",
+                            "Ref. Gasto": f"{pago_zd.gasto_rel.monto_original} {pago_zd.gasto_rel.moneda}" if pago_zd.gasto_rel else "N/A"
+                        }
+                        respaldo_zd = models.PagoEliminado(
+                            **datos_zd,
+                            motivo_eliminacion=f"Reversión contable automática por eliminación del pago padre ID: {id_pago}",
+                            usuario_id=current_user.id_usuario,
+                            nombre_usuario_ejecutor=current_user.username,
+                            identificador_principal=f"Pago ZD {pago_zd.id_pago}",
+                            detalles_legibles=snapshot_zd
+                        )
+                        db.add(respaldo_zd)
+                        db.delete(pago_zd)
+                        db.flush() 
+                
+                # B. Cálculo de saldos dinámicos según la moneda del gasto
+                if gasto.moneda == "USD":
+                    case_expr = case(
                         (models.RegistroPago.moneda == "USD", models.RegistroPago.importe),
                         (models.RegistroPago.moneda == "PEN", models.RegistroPago.importe / func.coalesce(models.RegistroPago.tipo_cambio_aplicado, models.RegistroPago.tipo_cambio, 1)),
                         else_=0
                     )
-                )
-            ).filter(models.RegistroPago.id_gasto == id_gasto_afectado).scalar()
-            
-            total_pagado_base = Decimal(str(total_pagado_base)) if total_pagado_base else Decimal("0.00")
-            monto_gasto_base = Decimal(str(gasto.monto_original))
-            
-            saldo_pendiente = monto_gasto_base - total_pagado_base
-            margen_tolerancia = Decimal("0.05")
-            
-            # C. Asignación Dinámica del Estado
-            if saldo_pendiente >= monto_gasto_base:
-                gasto.estado_pago = "PENDIENTE"
-            elif saldo_pendiente > margen_tolerancia:
-                gasto.estado_pago = "PARCIAL"
-            else:
-                gasto.estado_pago = "PAGADO"
+                else: # gasto.moneda == "PEN"
+                    case_expr = case(
+                        (models.RegistroPago.moneda == "PEN", models.RegistroPago.importe),
+                        (models.RegistroPago.moneda == "USD", models.RegistroPago.importe * func.coalesce(models.RegistroPago.tipo_cambio_aplicado, models.RegistroPago.tipo_cambio, 1)),
+                        else_=0
+                    )
+
+                total_pagado_base = db.query(func.sum(case_expr)).filter(
+                    models.RegistroPago.id_gasto == id_gasto_afectado,
+                    models.RegistroPago.estado_registro == "ACTIVO"
+                ).scalar()
                 
-    db.commit()
-    return {"mensaje": f"Pago {id_pago} eliminado exitosamente. Saldos recalculados y sincronizados en los registros de auditoría."}
+                total_pagado_base = Decimal(str(total_pagado_base)) if total_pagado_base else Decimal("0.00")
+                monto_gasto_base = Decimal(str(gasto.monto_original))
+                
+                saldo_pendiente = monto_gasto_base - total_pagado_base
+                margen_tolerancia = Decimal("0.05")
+                
+                # C. Asignación Dinámica del Estado
+                if saldo_pendiente >= monto_gasto_base:
+                    gasto.estado_pago = "PENDIENTE"
+                elif saldo_pendiente > margen_tolerancia:
+                    gasto.estado_pago = "PARCIAL"
+                else:
+                    gasto.estado_pago = "PAGADO"
+                    
+        db.commit()
+        return {"mensaje": f"Pago {id_pago} eliminado exitosamente. Saldos recalculados y sincronizados en los registros de auditoría."}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"Error al eliminar pago: {str(e)}")
 
 @app.put("/bancos/{id_banco}", response_model=schemas.CatBanco)
 def actualizar_banco(id_banco: int, banco_editado: schemas.CatBancoUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
