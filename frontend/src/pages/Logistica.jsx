@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import api from '../services/api';
 import Select from 'react-select';
+import Paginador from '../components/Paginador';
+import useDebounce from '../hooks/useDebounce';
 
 const Logistica = () => {
   const navigate = useNavigate();
@@ -12,6 +14,16 @@ const Logistica = () => {
 
   // --- DATOS ---
   const [maestros, setMaestros] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const debouncedSearch = useDebounce(searchTerm, 400);
+
+  // --- PAGINACIÓN ---
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalRegistros, setTotalRegistros] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+
   const [opcionesImportadores, setOpcionesImportadores] = useState([]);
   const [opcionesAgentes, setOpcionesAgentes] = useState([]);
   const [opcionesProveedores, setOpcionesProveedores] = useState([]);
@@ -39,40 +51,53 @@ const Logistica = () => {
 
   useEffect(() => {
     cargarCatalogos();
-    cargarMaestros();
   }, []);
+
+  useEffect(() => {
+    cargarMaestros();
+  }, [debouncedSearch, page, limit]);
 
   const cargarCatalogos = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const config = { headers: { Authorization: `Bearer ${token}` } };
       const [resImp, resAg, resProv, resAlm] = await Promise.all([
-        axios.get('http://127.0.0.1:8000/importadores/', config),
-        axios.get('http://127.0.0.1:8000/agentes/', config),
-        axios.get('http://127.0.0.1:8000/proveedores/', config),
-        axios.get('http://127.0.0.1:8000/almacenes/', config)
+        api.get('/importadores/'),
+        api.get('/agentes/'),
+        api.get('/proveedores/'),
+        api.get('/almacenes/')
       ]);
-      setOpcionesImportadores(resImp.data.map(i => ({ value: i.id_importador, label: `${i.ruc} - ${i.nombre}` })));
-      setOpcionesAgentes(resAg.data.map(a => ({ value: a.id_agente, label: a.nombre })));
-      setOpcionesProveedores(resProv.data.map(p => ({ value: p.id_proveedor, label: `${p.ruc} - ${p.nombre}` })));
-      setOpcionesAlmacenes(resAlm.data.map(a => ({ value: a.id_almacen, label: a.nombre })));
+      const impList = resImp.data?.data ?? (Array.isArray(resImp.data) ? resImp.data : []);
+      const agList = resAg.data?.data ?? (Array.isArray(resAg.data) ? resAg.data : []);
+      const provList = resProv.data?.data ?? (Array.isArray(resProv.data) ? resProv.data : []);
+      const almList = resAlm.data?.data ?? (Array.isArray(resAlm.data) ? resAlm.data : []);
+
+      setOpcionesImportadores(impList.map(i => ({ value: i.id_importador, label: `${i.ruc} - ${i.nombre}` })));
+      setOpcionesAgentes(agList.map(a => ({ value: a.id_agente, label: a.nombre })));
+      setOpcionesProveedores(provList.map(p => ({ value: p.id_proveedor, label: `${p.ruc} - ${p.nombre}` })));
+      setOpcionesAlmacenes(almList.map(a => ({ value: a.id_almacen, label: a.nombre })));
     } catch (error) {
       console.error('Error al cargar catálogos:', error);
     }
   };
 
   const cargarMaestros = async () => {
+    setIsLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('http://127.0.0.1:8000/maestros/', {
-        headers: { 'Authorization': `Bearer ${token}` }
+      const response = await api.get('/maestros/', {
+        params: {
+          search: debouncedSearch.trim() || undefined,
+          page,
+          limit
+        }
       });
-      if (response.ok) {
-        const data = await response.json();
-        setMaestros(data);
-      }
+      const dataList = response.data?.data ?? (Array.isArray(response.data) ? response.data : []);
+      setMaestros(dataList);
+      setTotalPages(response.data?.total_paginas ?? 1);
+      setTotalRegistros(response.data?.total_registros ?? dataList.length);
     } catch (error) {
       console.error('Error al obtener maestros:', error);
+      setMensaje({ texto: 'Error al obtener maestros del servidor.', tipo: 'error' });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -111,27 +136,17 @@ const Logistica = () => {
       return;
     }
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`http://127.0.0.1:8000/maestros/${selectedId}`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ motivo: motivo.trim() })
+      await api.delete(`/maestros/${selectedId}`, {
+        data: { motivo: motivo.trim() }
       });
-      if (response.ok) {
-        alert("Registro eliminado exitosamente.");
-        setSelectedId(null);
-        setFormData(estadoInicial);
-        cargarMaestros();
-      } else {
-        const errorData = await response.json();
-        alert(`Error: ${errorData.detail}`);
-      }
+      alert("Registro eliminado exitosamente.");
+      setSelectedId(null);
+      setFormData(estadoInicial);
+      cargarMaestros();
     } catch (error) {
       console.error(error);
-      alert('Error de conexión al eliminar');
+      const detail = error.response?.data?.detail || 'Error de conexión al eliminar';
+      alert(`Error: ${detail}`);
     }
   };
 
@@ -160,14 +175,11 @@ const Logistica = () => {
     payload.venta_sucesiva = payload.venta_sucesiva || null;
 
     try {
-      const token = localStorage.getItem('token');
-      const config = { headers: { Authorization: `Bearer ${token}` } };
-      
       if (viewMode === 'NUEVO') {
-        await axios.post('http://127.0.0.1:8000/maestros/', payload, config);
+        await api.post('/maestros/', payload);
         setMensaje({ texto: '✅ Maestro registrado exitosamente.', tipo: 'exito' });
       } else if (viewMode === 'MODIFICAR') {
-        await axios.put(`http://127.0.0.1:8000/maestros/${selectedId}`, payload, config);
+        await api.put(`/maestros/${selectedId}`, payload);
         setMensaje({ texto: '✅ Maestro actualizado exitosamente.', tipo: 'exito' });
       }
       
@@ -256,8 +268,19 @@ const Logistica = () => {
         <button style={getBtnStyle(!selectedId, '#e74c3c')} disabled={!selectedId} onClick={handleEliminar}>🗑️ ELIMINAR</button>
         <button style={getBtnStyle(!selectedId, '#9b59b6')} disabled={!selectedId} onClick={handleRegistrarDam}>📑 REGISTRAR DAM</button>
         
+        <input 
+          type="search" 
+          placeholder="Buscar por Factura, BL..." 
+          value={searchTerm}
+          onChange={(e) => {
+            setSearchTerm(e.target.value);
+            setPage(1);
+          }}
+          style={{ padding: '10px', marginLeft: 'auto', width: '280px', borderRadius: '5px', border: '1px solid #ccc' }}
+        />
+
         {viewMode !== 'LISTA' && (
-          <button style={{ ...getBtnStyle(false, '#95a5a6'), marginLeft: 'auto' }} onClick={() => { setViewMode('LISTA'); setSelectedId(null); setFormData(estadoInicial); }}>⬅️ VOLVER A LISTA</button>
+          <button style={{ ...getBtnStyle(false, '#95a5a6'), marginLeft: '10px' }} onClick={() => { setViewMode('LISTA'); setSelectedId(null); setFormData(estadoInicial); }}>⬅️ VOLVER A LISTA</button>
         )}
       </div>
 
@@ -302,11 +325,19 @@ const Logistica = () => {
                   </td>
                 </tr>
               ))}
-              {maestros.length === 0 && (
+              {maestros.length === 0 && !isLoading && (
                 <tr><td colSpan="7" style={{ padding: '20px', textAlign: 'center', color: '#7f8c8d' }}>No hay registros disponibles.</td></tr>
               )}
             </tbody>
           </table>
+          <Paginador 
+            page={page} 
+            totalPages={totalPages} 
+            setPage={setPage} 
+            limit={limit} 
+            setLimit={setLimit} 
+            totalRegistros={totalRegistros} 
+          />
         </div>
       ) : (
         // ======================= VISTA: NUEVO / MODIFICAR / CONSULTAR =======================

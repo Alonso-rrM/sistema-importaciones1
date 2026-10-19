@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../services/api';
 
 const Agentes = () => {
   // --- ESTADOS DE VISTA Y SELECCIÓN ---
@@ -26,10 +26,7 @@ const Agentes = () => {
 
   const cargarAgentes = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const respuesta = await axios.get(`http://127.0.0.1:8000/agentes/?mostrar_inactivos=${mostrarInactivos}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const respuesta = await api.get(`/agentes/?mostrar_inactivos=${mostrarInactivos}`);
       setAgentes(respuesta.data);
     } catch (error) {
       console.error('Error al cargar:', error);
@@ -60,7 +57,7 @@ const Agentes = () => {
     setBuscandoRuc(true);
     setMensaje({ texto: 'Buscando RUC en SUNAT...', tipo: 'info' });
     try {
-      const respuesta = await axios.get(`http://127.0.0.1:8000/sunat/ruc/${formData.ruc}`);
+      const respuesta = await api.get(`/sunat/ruc/${formData.ruc}`);
       setFormData(prev => ({ ...prev, nombre: respuesta.data.razon_social }));
       setMensaje({ texto: 'RUC validado correctamente.', tipo: 'exito' });
     } catch (error) {
@@ -79,16 +76,13 @@ const Agentes = () => {
     setMensaje({ texto: 'Guardando...', tipo: 'info' });
 
     try {
-      const token = localStorage.getItem('token');
-      const config = { headers: { Authorization: `Bearer ${token}` } };
-      
       const payload = { ...formData };
 
       if (viewMode === 'NUEVO') {
-        await axios.post('http://127.0.0.1:8000/agentes/', payload, config);
+        await api.post('/agentes/', payload);
         setMensaje({ texto: '✅ Agente registrado exitosamente.', tipo: 'exito' });
       } else if (viewMode === 'MODIFICAR') {
-        await axios.put(`http://127.0.0.1:8000/agentes/${selectedId}`, payload, config);
+        await api.put(`/agentes/${selectedId}`, payload);
         setMensaje({ texto: '✅ Agente actualizado exitosamente.', tipo: 'exito' });
       }
 
@@ -113,10 +107,7 @@ const Agentes = () => {
     if (!confirmar) return;
 
     try {
-      const token = localStorage.getItem('token');
-      await axios.delete(`http://127.0.0.1:8000/agentes/${selectedId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await api.delete(`/agentes/${selectedId}`);
       setMensaje({ texto: `✅ Agente "${agenteSeleccionado.nombre}" desactivado correctamente.`, tipo: 'exito' });
       cargarAgentes();
       setSelectedId(null);
@@ -135,10 +126,7 @@ const Agentes = () => {
     if (!agenteSeleccionado) return;
 
     try {
-      const token = localStorage.getItem('token');
-      await axios.put(`http://127.0.0.1:8000/agentes/${selectedId}/restaurar`, {}, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await api.put(`/agentes/${selectedId}/restaurar`);
       setMensaje({ texto: `✅ Agente "${agenteSeleccionado.nombre}" restaurado correctamente.`, tipo: 'exito' });
       cargarAgentes();
       setSelectedId(null);
@@ -159,10 +147,7 @@ const Agentes = () => {
     if (!confirmar) return;
 
     try {
-      const token = localStorage.getItem('token');
-      await axios.delete(`http://127.0.0.1:8000/agentes/${selectedId}/fisico`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await api.delete(`/agentes/${selectedId}/fisico`);
       setMensaje({ texto: `✅ Agente "${agenteSeleccionado.nombre}" eliminado definitivamente.`, tipo: 'exito' });
       cargarAgentes();
       setSelectedId(null);

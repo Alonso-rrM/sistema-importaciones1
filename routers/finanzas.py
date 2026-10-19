@@ -3,8 +3,7 @@ from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 import json
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from fastapi.encoders import jsonable_encoder
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy import func, case
 
@@ -99,9 +98,105 @@ def actualizar_gasto(id_gasto: int, gasto_editado: schemas.RegistroGastoUpdate, 
     db.refresh(db_gasto)
     return db_gasto
 
-@router.get("/gastos/", response_model=List[schemas.RegistroGasto])
-def listar_gastos(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
-    return db.query(models.RegistroGasto).all()
+@router.get("/gastos/", response_model=schemas.PaginatedResponse[schemas.RegistroGasto])
+def listar_gastos(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    search: Optional[str] = None,
+    estado_pago: Optional[str] = None,
+    db: Session = Depends(get_db), 
+    current_user: models.Usuario = Depends(get_current_user)
+):
+    query = (
+        db.query(models.RegistroGasto)
+        .outerjoin(models.RegistroGasto.dam)
+        .outerjoin(models.DetalleDam.maestro)
+        .outerjoin(models.MaestroImportacion.importador_rel)
+    )
+
+    filtros = [models.RegistroGasto.estado_registro == "ACTIVO"]
+    if estado_pago:
+        if "," in estado_pago:
+            estados = [e.strip() for e in estado_pago.split(",")]
+            filtros.append(models.RegistroGasto.estado_pago.in_(estados))
+        else:
+            filtros.append(models.RegistroGasto.estado_pago == estado_pago)
+
+    if search:
+        termino = f"%{search}%"
+        filtros.append(
+            models.RegistroGasto.numero_documento.ilike(termino) |
+            models.RegistroGasto.estado_pago.ilike(termino) |
+            models.DetalleDam.numero_de_dam.ilike(termino) |
+            models.MaestroImportacion.numero_factura.ilike(termino) |
+            models.CatImportador.nombre.ilike(termino)
+        )
+
+    total_registros = query.filter(*filtros).with_entities(func.count(models.RegistroGasto.id_gasto)).scalar() or 0
+    total_paginas = (total_registros + limit - 1) // limit if total_registros > 0 else 0
+
+    data = (
+        query
+        .filter(*filtros)
+        .options(
+            joinedload(models.RegistroGasto.dam)
+            .joinedload(models.DetalleDam.maestro)
+            .joinedload(models.MaestroImportacion.importador_rel),
+            joinedload(models.RegistroGasto.pagos)
+        )
+        .order_by(models.RegistroGasto.id_gasto.desc())
+        .offset((page - 1) * limit)
+        .limit(limit)
+        .all()
+    )
+
+    resultado = []
+    for g in data:
+        total_pagado = Decimal("0.00")
+        for p in g.pagos:
+            if p.estado_registro == "ACTIVO":
+                importe_db = Decimal(str(p.importe))
+                tc_db = Decimal(str(p.tipo_cambio_aplicado or p.tipo_cambio or "1.00"))
+                if tc_db <= Decimal("0.00"):
+                    tc_db = Decimal("1.00")
+                total_pagado += calcular_amortizacion_cruzada(importe_db, tc_db, g.moneda, p.moneda)
+
+        monto_base = Decimal(str(g.monto_original)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        saldo_calc = max(Decimal("0.00"), (monto_base - total_pagado).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+        dam_obj = g.dam
+        maestro_obj = dam_obj.maestro if dam_obj else None
+        imp_obj = maestro_obj.importador_rel if maestro_obj else None
+
+        g_dict = schemas.RegistroGasto(
+            id_gasto=g.id_gasto,
+            id_dam=g.id_dam,
+            id_concepto=g.id_concepto,
+            id_proveedor=g.id_proveedor,
+            id_tipo_doc=g.id_tipo_doc,
+            numero_documento=g.numero_documento,
+            fecha_vencimiento=g.fecha_vencimiento,
+            monto_original=g.monto_original,
+            moneda=g.moneda,
+            estado_pago=g.estado_pago,
+            estado_registro=g.estado_registro,
+            created_at=g.created_at,
+            saldo_pendiente=saldo_calc,
+            dam_numero=dam_obj.numero_de_dam if dam_obj else "N/A",
+            maestro_factura=maestro_obj.numero_factura if maestro_obj else "N/A",
+            id_importador=imp_obj.id_importador if imp_obj else None,
+            importador_nombre=imp_obj.nombre if imp_obj else "Desconocido"
+        )
+        resultado.append(g_dict)
+
+    return {
+        "total_registros": total_registros,
+        "pagina": page,
+        "limite": limit,
+        "total_paginas": total_paginas,
+        "data": resultado
+    }
+
 
 @router.delete("/gastos/{id_gasto}")
 def eliminar_gasto(id_gasto: int, req: schemas.EliminacionRequest, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
@@ -155,14 +250,43 @@ def crear_voucher(voucher: schemas.VoucherBancarioCreate, db: Session = Depends(
     db.refresh(nuevo_voucher)
     return nuevo_voucher
 
-@router.get("/vouchers/", response_model=List[schemas.VoucherBancarioResponse])
-def listar_vouchers(saldo_mayor_cero: bool = False, id_importador: Optional[int] = None, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
-    query = db.query(models.VoucherBancario).filter(models.VoucherBancario.estado_registro == "ACTIVO")
+@router.get("/vouchers/", response_model=schemas.PaginatedResponse[schemas.VoucherBancarioResponse])
+def listar_vouchers(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    search: Optional[str] = None,
+    saldo_mayor_cero: bool = False, 
+    id_importador: Optional[int] = None, 
+    db: Session = Depends(get_db), 
+    current_user: models.Usuario = Depends(get_current_user)
+):
+    filtros = [models.VoucherBancario.estado_registro == "ACTIVO"]
     if saldo_mayor_cero:
-        query = query.filter(models.VoucherBancario.saldo_disponible > 0)
+        filtros.append(models.VoucherBancario.saldo_disponible > 0)
     if id_importador is not None:
-        query = query.filter(models.VoucherBancario.id_importador == id_importador)
-    return query.all()
+        filtros.append(models.VoucherBancario.id_importador == id_importador)
+    if search:
+        filtros.append(models.VoucherBancario.numero_operacion.ilike(f"%{search}%"))
+
+    total_registros = db.query(func.count(models.VoucherBancario.id_voucher)).filter(*filtros).scalar() or 0
+    total_paginas = (total_registros + limit - 1) // limit if total_registros > 0 else 0
+
+    data = (
+        db.query(models.VoucherBancario)
+        .filter(*filtros)
+        .order_by(models.VoucherBancario.id_voucher.desc())
+        .offset((page - 1) * limit)
+        .limit(limit)
+        .all()
+    )
+
+    return {
+        "total_registros": total_registros,
+        "pagina": page,
+        "limite": limit,
+        "total_paginas": total_paginas,
+        "data": data
+    }
 
 @router.delete("/vouchers/{id_voucher}")
 def eliminar_voucher(id_voucher: int, req: schemas.EliminacionRequest, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
@@ -393,9 +517,41 @@ def actualizar_pago(id_pago: int, pago_editado: schemas.RegistroPagoUpdate, db: 
     db.refresh(db_pago)
     return db_pago
 
-@router.get("/pagos/", response_model=List[schemas.RegistroPago])
-def listar_pagos(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
-    return db.query(models.RegistroPago).all()
+@router.get("/pagos/", response_model=schemas.PaginatedResponse[schemas.RegistroPago])
+def listar_pagos(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    search: Optional[str] = None,
+    db: Session = Depends(get_db), 
+    current_user: models.Usuario = Depends(get_current_user)
+):
+    filtros = []
+    if search:
+        termino = f"%{search}%"
+        filtros.append(
+            models.RegistroPago.estado_pago.ilike(termino) |
+            models.RegistroPago.moneda.ilike(termino)
+        )
+
+    total_registros = db.query(func.count(models.RegistroPago.id_pago)).filter(*filtros).scalar() or 0
+    total_paginas = (total_registros + limit - 1) // limit if total_registros > 0 else 0
+
+    data = (
+        db.query(models.RegistroPago)
+        .filter(*filtros)
+        .order_by(models.RegistroPago.id_pago.desc())
+        .offset((page - 1) * limit)
+        .limit(limit)
+        .all()
+    )
+
+    return {
+        "total_registros": total_registros,
+        "pagina": page,
+        "limite": limit,
+        "total_paginas": total_paginas,
+        "data": data
+    }
 
 @router.delete("/pagos/{id_pago}")
 def eliminar_pago(id_pago: int, req: schemas.EliminacionRequest, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):

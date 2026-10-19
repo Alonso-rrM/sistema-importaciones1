@@ -1,8 +1,9 @@
-from typing import List
+from typing import List, Optional
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import StaleDataError
+from sqlalchemy import func
 
 import models
 import schemas
@@ -169,9 +170,41 @@ async def autorizar_levante(
         db.rollback()
         raise HTTPException(status_code=400, detail=f"Error al autorizar levante: {str(e)}")
 
-@router.get("/maestros/", response_model=List[schemas.MaestroImportacion])
-def listar_facturas(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
-    return db.query(models.MaestroImportacion).all()
+@router.get("/maestros/", response_model=schemas.PaginatedResponse[schemas.MaestroImportacion])
+def listar_facturas(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    search: Optional[str] = None,
+    db: Session = Depends(get_db), 
+    current_user: models.Usuario = Depends(get_current_user)
+):
+    filtros = []
+    if search:
+        termino = f"%{search}%"
+        filtros.append(
+            models.MaestroImportacion.numero_factura.ilike(termino) |
+            models.MaestroImportacion.documento_transporte.ilike(termino)
+        )
+
+    total_registros = db.query(func.count(models.MaestroImportacion.id_maestro)).filter(*filtros).scalar() or 0
+    total_paginas = (total_registros + limit - 1) // limit if total_registros > 0 else 0
+
+    data = (
+        db.query(models.MaestroImportacion)
+        .filter(*filtros)
+        .order_by(models.MaestroImportacion.id_maestro.desc())
+        .offset((page - 1) * limit)
+        .limit(limit)
+        .all()
+    )
+
+    return {
+        "total_registros": total_registros,
+        "pagina": page,
+        "limite": limit,
+        "total_paginas": total_paginas,
+        "data": data
+    }
 
 @router.get("/reporte-maestro/{id_maestro}", response_model=schemas.MaestroConDetalles)
 def reporte_completo_factura(id_maestro: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
@@ -287,9 +320,40 @@ def eliminar_maestro(id_maestro: int, req: schemas.EliminacionRequest, db: Sessi
 # 2. DETALLE DAMS
 # ==========================================
 
-@router.get("/dams/", response_model=List[schemas.DetalleDam])
-def listar_dams(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
-    return db.query(models.DetalleDam).all()
+@router.get("/dams/", response_model=schemas.PaginatedResponse[schemas.DetalleDam])
+def listar_dams(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    search: Optional[str] = None,
+    db: Session = Depends(get_db), 
+    current_user: models.Usuario = Depends(get_current_user)
+):
+    filtros = []
+    if search:
+        termino = f"%{search}%"
+        filtros.append(
+            models.DetalleDam.numero_de_dam.ilike(termino)
+        )
+
+    total_registros = db.query(func.count(models.DetalleDam.id_dam)).filter(*filtros).scalar() or 0
+    total_paginas = (total_registros + limit - 1) // limit if total_registros > 0 else 0
+
+    data = (
+        db.query(models.DetalleDam)
+        .filter(*filtros)
+        .order_by(models.DetalleDam.id_dam.desc())
+        .offset((page - 1) * limit)
+        .limit(limit)
+        .all()
+    )
+
+    return {
+        "total_registros": total_registros,
+        "pagina": page,
+        "limite": limit,
+        "total_paginas": total_paginas,
+        "data": data
+    }
 
 @router.post("/dams/", response_model=schemas.DetalleDam)
 def crear_dam(dam: schemas.DetalleDamCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):

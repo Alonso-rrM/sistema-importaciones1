@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../services/api';
 import Select from 'react-select';
+import Paginador from '../components/Paginador';
+import useDebounce from '../hooks/useDebounce';
 
 const Vouchers = () => {
   // --- ESTADOS DE VISTA Y SELECCIÓN ---
@@ -11,6 +13,15 @@ const Vouchers = () => {
   // --- DATOS ---
   const [vouchers, setVouchers] = useState([]);
   const [opcionesBancos, setOpcionesBancos] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const debouncedSearch = useDebounce(searchTerm, 400);
+
+  // --- PAGINACIÓN ---
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalRegistros, setTotalRegistros] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
 
   const estadoInicial = {
     banco_id: null,
@@ -24,32 +35,41 @@ const Vouchers = () => {
 
   useEffect(() => {
     cargarCatalogos();
-    cargarVouchers();
   }, []);
+
+  useEffect(() => {
+    cargarVouchers();
+  }, [debouncedSearch, page, limit]);
 
   const cargarCatalogos = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const config = { headers: { Authorization: `Bearer ${token}` } };
-      const resBancos = await axios.get('http://127.0.0.1:8000/bancos/', config);
-      setOpcionesBancos(resBancos.data.map(b => ({ value: b.id_banco, label: b.nombre })));
+      const resBancos = await api.get('/bancos/');
+      const bList = resBancos.data?.data ?? (Array.isArray(resBancos.data) ? resBancos.data : []);
+      setOpcionesBancos(bList.map(b => ({ value: b.id_banco, label: b.nombre })));
     } catch (error) {
       console.error('Error al cargar bancos:', error);
     }
   };
 
   const cargarVouchers = async () => {
+    setIsLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('http://127.0.0.1:8000/vouchers/', {
-        headers: { 'Authorization': `Bearer ${token}` }
+      const response = await api.get('/vouchers/', {
+        params: {
+          search: debouncedSearch.trim() || undefined,
+          page,
+          limit
+        }
       });
-      if (response.ok) {
-        const data = await response.json();
-        setVouchers(data);
-      }
+      const dataList = response.data?.data ?? (Array.isArray(response.data) ? response.data : []);
+      setVouchers(dataList);
+      setTotalPages(response.data?.total_paginas ?? 1);
+      setTotalRegistros(response.data?.total_registros ?? dataList.length);
     } catch (error) {
       console.error('Error al obtener vouchers:', error);
+      setMensaje({ texto: 'Error al obtener vouchers del servidor.', tipo: 'error' });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -78,27 +98,17 @@ const Vouchers = () => {
       return;
     }
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`http://127.0.0.1:8000/vouchers/${selectedId}`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ motivo: motivo.trim() })
+      await api.delete(`/vouchers/${selectedId}`, {
+        data: { motivo: motivo.trim() }
       });
-      if (response.ok) {
-        alert("Registro eliminado exitosamente.");
-        setSelectedId(null);
-        setFormData(estadoInicial);
-        cargarVouchers();
-      } else {
-        const errorData = await response.json();
-        alert(`Error: ${errorData.detail}`);
-      }
+      alert("Registro eliminado exitosamente.");
+      setSelectedId(null);
+      setFormData(estadoInicial);
+      cargarVouchers();
     } catch (error) {
       console.error(error);
-      alert('Error de conexión al eliminar');
+      const detail = error.response?.data?.detail || 'Error de conexión al eliminar';
+      alert(`Error: ${detail}`);
     }
   };
 
@@ -114,11 +124,8 @@ const Vouchers = () => {
     payload.monto_total = parseFloat(payload.monto_total);
 
     try {
-      const token = localStorage.getItem('token');
-      const config = { headers: { Authorization: `Bearer ${token}` } };
-      
       if (viewMode === 'NUEVO') {
-        await axios.post('http://127.0.0.1:8000/vouchers/', payload, config);
+        await api.post('/vouchers/', payload);
         setMensaje({ texto: '✅ Voucher registrado exitosamente.', tipo: 'exito' });
       } else if (viewMode === 'MODIFICAR') {
         // En el futuro, si hay un endpoint PUT para vouchers
@@ -204,8 +211,19 @@ const Vouchers = () => {
         <button style={getBtnStyle(!selectedId, '#3498db')} disabled={!selectedId} onClick={() => setViewMode('CONSULTAR')}>👁️ CONSULTAR</button>
         <button style={getBtnStyle(!selectedId, '#e74c3c')} disabled={!selectedId} onClick={handleEliminar}>🗑️ ELIMINAR</button>
         
+        <input 
+          type="search" 
+          placeholder="Buscar por Nº Operación..." 
+          value={searchTerm}
+          onChange={(e) => {
+            setSearchTerm(e.target.value);
+            setPage(1);
+          }}
+          style={{ padding: '10px', marginLeft: 'auto', width: '280px', borderRadius: '5px', border: '1px solid #ccc' }}
+        />
+
         {viewMode !== 'LISTA' && (
-          <button style={{ ...getBtnStyle(false, '#95a5a6'), marginLeft: 'auto' }} onClick={() => { setViewMode('LISTA'); setSelectedId(null); setFormData(estadoInicial); }}>⬅️ VOLVER A LISTA</button>
+          <button style={{ ...getBtnStyle(false, '#95a5a6'), marginLeft: '10px' }} onClick={() => { setViewMode('LISTA'); setSelectedId(null); setFormData(estadoInicial); }}>⬅️ VOLVER A LISTA</button>
         )}
       </div>
 
@@ -253,11 +271,19 @@ const Vouchers = () => {
                   </tr>
                 );
               })}
-              {vouchers.length === 0 && (
+              {vouchers.length === 0 && !isLoading && (
                 <tr><td colSpan="7" style={{ padding: '20px', textAlign: 'center', color: '#7f8c8d' }}>No hay registros disponibles.</td></tr>
               )}
             </tbody>
           </table>
+          <Paginador 
+            page={page} 
+            totalPages={totalPages} 
+            setPage={setPage} 
+            limit={limit} 
+            setLimit={setLimit} 
+            totalRegistros={totalRegistros} 
+          />
         </div>
       ) : (
         // ======================= VISTA: NUEVO / MODIFICAR / CONSULTAR =======================

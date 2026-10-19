@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../services/api';
 
 const Proveedores = () => {
   // --- ESTADOS DE VISTA Y SELECCIÓN ---
@@ -27,10 +27,7 @@ const Proveedores = () => {
 
   const cargarProveedores = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const respuesta = await axios.get(`http://127.0.0.1:8000/proveedores/?mostrar_inactivos=${mostrarInactivos}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const respuesta = await api.get(`/proveedores/?mostrar_inactivos=${mostrarInactivos}`);
       setProveedores(respuesta.data);
     } catch (error) {
       console.error('Error al cargar:', error);
@@ -62,7 +59,7 @@ const Proveedores = () => {
     setBuscandoRuc(true);
     setMensaje({ texto: 'Buscando RUC en SUNAT...', tipo: 'info' });
     try {
-      const respuesta = await axios.get(`http://127.0.0.1:8000/sunat/ruc/${formData.ruc}`);
+      const respuesta = await api.get(`/sunat/ruc/${formData.ruc}`);
       setFormData(prev => ({ ...prev, nombre: respuesta.data.razon_social }));
       setMensaje({ texto: 'RUC validado correctamente.', tipo: 'exito' });
     } catch (error) {
@@ -81,16 +78,13 @@ const Proveedores = () => {
     setMensaje({ texto: 'Guardando...', tipo: 'info' });
 
     try {
-      const token = localStorage.getItem('token');
-      const config = { headers: { Authorization: `Bearer ${token}` } };
-      
       const payload = { ...formData };
 
       if (viewMode === 'NUEVO') {
-        await axios.post('http://127.0.0.1:8000/proveedores/', payload, config);
+        await api.post('/proveedores/', payload);
         setMensaje({ texto: '✅ Proveedor registrado exitosamente.', tipo: 'exito' });
       } else if (viewMode === 'MODIFICAR') {
-        await axios.put(`http://127.0.0.1:8000/proveedores/${selectedId}`, payload, config);
+        await api.put(`/proveedores/${selectedId}`, payload);
         setMensaje({ texto: '✅ Proveedor actualizado exitosamente.', tipo: 'exito' });
       }
 
@@ -115,10 +109,7 @@ const Proveedores = () => {
     if (!confirmar) return;
 
     try {
-      const token = localStorage.getItem('token');
-      await axios.delete(`http://127.0.0.1:8000/proveedores/${selectedId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await api.delete(`/proveedores/${selectedId}`);
       setMensaje({ texto: `✅ Proveedor "${proveedorSeleccionado.nombre}" desactivado correctamente.`, tipo: 'exito' });
       cargarProveedores();
       setSelectedId(null);
@@ -137,10 +128,7 @@ const Proveedores = () => {
     if (!proveedorSeleccionado) return;
 
     try {
-      const token = localStorage.getItem('token');
-      await axios.put(`http://127.0.0.1:8000/proveedores/${selectedId}/restaurar`, {}, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await api.put(`/proveedores/${selectedId}/restaurar`);
       setMensaje({ texto: `✅ Proveedor "${proveedorSeleccionado.nombre}" restaurado correctamente.`, tipo: 'exito' });
       cargarProveedores();
       setSelectedId(null);
@@ -161,10 +149,7 @@ const Proveedores = () => {
     if (!confirmar) return;
 
     try {
-      const token = localStorage.getItem('token');
-      await axios.delete(`http://127.0.0.1:8000/proveedores/${selectedId}/fisico`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await api.delete(`/proveedores/${selectedId}/fisico`);
       setMensaje({ texto: `✅ Proveedor "${proveedorSeleccionado.nombre}" eliminado definitivamente.`, tipo: 'exito' });
       cargarProveedores();
       setSelectedId(null);

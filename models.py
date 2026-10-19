@@ -1,6 +1,6 @@
 import datetime
 # Agregamos 'Boolean' a las importaciones para el ZAJUSTE
-from sqlalchemy import Column, Integer, String, Numeric, Date, ForeignKey, DateTime, Text, Boolean, JSON
+from sqlalchemy import Column, Integer, String, Numeric, Date, ForeignKey, DateTime, Text, Boolean, JSON, Index
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
@@ -88,6 +88,10 @@ class VoucherBancario(Base):
     fecha_transferencia = Column(Date, nullable=False)
     estado_registro = Column(String(20), default="ACTIVO")
 
+    __table_args__ = (
+        Index("idx_voucher_fecha_estado", "fecha_transferencia", "estado_registro"),
+    )
+
     version = Column(Integer, nullable=False, default=1)
     __mapper_args__ = {"version_id_col": version}
 
@@ -99,6 +103,9 @@ class VoucherBancario(Base):
 
 class MaestroImportacion(Base):
     __tablename__ = "maestro_importaciones"
+    __table_args__ = (
+        Index("idx_maestro_created_id", "created_at", "id_maestro"),
+    )
     id_maestro = Column(Integer, primary_key=True, index=True)
     numero_factura = Column(String(100), unique=True, nullable=False)
     n_cont_fisico = Column(String(100))
@@ -150,6 +157,10 @@ class DetalleDam(Base):
 
 class RegistroGasto(Base):
     __tablename__ = "registro_gastos"
+    __table_args__ = (
+        Index("idx_gasto_vencimiento_id", "fecha_vencimiento", "id_gasto"),
+        Index("idx_gasto_dam_created", "id_dam", "created_at"),
+    )
     id_gasto = Column(Integer, primary_key=True, index=True)
     id_dam = Column(Integer, ForeignKey("detalle_dams.id_dam"), nullable=False)
     id_concepto = Column(Integer, ForeignKey("cat_conceptos_pagos.id_concepto"), nullable=False)
@@ -173,6 +184,9 @@ class RegistroGasto(Base):
 
 class RegistroPago(Base):
     __tablename__ = "registro_pagos"
+    __table_args__ = (
+        Index("idx_pago_fecha_id", "fecha_pago", "id_pago"),
+    )
     id_pago = Column(Integer, primary_key=True, index=True)
     id_dam = Column(Integer, ForeignKey("detalle_dams.id_dam"), nullable=False)
     id_concepto = Column(Integer, ForeignKey("cat_conceptos_pagos.id_concepto"), nullable=False)

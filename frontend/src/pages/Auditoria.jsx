@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import api from '../services/api';
 
 const Auditoria = () => {
   const [registros, setRegistros] = useState([]);
@@ -18,23 +19,10 @@ const Auditoria = () => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const token = localStorage.getItem("access_token") || localStorage.getItem("token") || "";
-        const response = await fetch(`http://127.0.0.1:8000/auditoria/${activeTab}/`, {
-          headers: {
-            "Authorization": `Bearer ${token}`,
-            "Content-Type": "application/json"
-          }
-        });
-        
-        if (response.ok) {
-          const result = await response.json();
-          setRegistros(result);
-        } else {
-          console.error("Error al obtener los datos de auditoría");
-          setRegistros([]);
-        }
+        const response = await api.get(`/auditoria/${activeTab}/`);
+        setRegistros(response.data);
       } catch (error) {
-        console.error("Error de red:", error);
+        console.error("Error al obtener los datos de auditoría:", error);
         setRegistros([]);
       } finally {
         setLoading(false);

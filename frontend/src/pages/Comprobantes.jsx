@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../services/api';
 
 const Comprobantes = () => {
   // --- ESTADOS DE VISTA Y SELECCIÓN ---
@@ -25,10 +25,7 @@ const Comprobantes = () => {
 
   const cargarComprobantes = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const respuesta = await axios.get(`http://127.0.0.1:8000/tipos-documento/?mostrar_inactivos=${mostrarInactivos}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const respuesta = await api.get(`/tipos-documento/?mostrar_inactivos=${mostrarInactivos}`);
       setComprobantes(respuesta.data);
     } catch (error) {
       console.error('Error al cargar:', error);
@@ -56,19 +53,16 @@ const Comprobantes = () => {
     setMensaje({ texto: 'Guardando...', tipo: 'info' });
 
     try {
-      const token = localStorage.getItem('token');
-      const config = { headers: { Authorization: `Bearer ${token}` } };
-      
       const payload = {
         nombre_documento: formData.nombre_documento,
         multiplicador_financiero: parseInt(formData.multiplicador_financiero)
       };
 
       if (viewMode === 'NUEVO') {
-        await axios.post('http://127.0.0.1:8000/tipos-documento/', payload, config);
+        await api.post('/tipos-documento/', payload);
         setMensaje({ texto: '✅ Tipo de Comprobante registrado exitosamente.', tipo: 'exito' });
       } else if (viewMode === 'MODIFICAR') {
-        await axios.put(`http://127.0.0.1:8000/tipos-documento/${selectedId}`, payload, config);
+        await api.put(`/tipos-documento/${selectedId}`, payload);
         setMensaje({ texto: '✅ Tipo de Comprobante actualizado exitosamente.', tipo: 'exito' });
       }
 
@@ -93,10 +87,7 @@ const Comprobantes = () => {
     if (!confirmar) return;
 
     try {
-      const token = localStorage.getItem('token');
-      await axios.delete(`http://127.0.0.1:8000/tipos-documento/${selectedId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await api.delete(`/tipos-documento/${selectedId}`);
       setMensaje({ texto: `✅ Comprobante "${compSeleccionado.nombre_documento}" desactivado correctamente.`, tipo: 'exito' });
       cargarComprobantes();
       setSelectedId(null);
@@ -115,10 +106,7 @@ const Comprobantes = () => {
     if (!compSeleccionado) return;
 
     try {
-      const token = localStorage.getItem('token');
-      await axios.put(`http://127.0.0.1:8000/tipos-documento/${selectedId}/restaurar`, {}, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await api.put(`/tipos-documento/${selectedId}/restaurar`);
       setMensaje({ texto: `✅ Comprobante "${compSeleccionado.nombre_documento}" restaurado correctamente.`, tipo: 'exito' });
       cargarComprobantes();
       setSelectedId(null);
@@ -139,10 +127,7 @@ const Comprobantes = () => {
     if (!confirmar) return;
 
     try {
-      const token = localStorage.getItem('token');
-      await axios.delete(`http://127.0.0.1:8000/tipos-documento/${selectedId}/fisico`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await api.delete(`/tipos-documento/${selectedId}/fisico`);
       setMensaje({ texto: `✅ Comprobante "${compSeleccionado.nombre_documento}" eliminado definitivamente.`, tipo: 'exito' });
       cargarComprobantes();
       setSelectedId(null);

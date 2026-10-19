@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../services/api';
 
 const Importadores = () => {
   // --- ESTADOS DE VISTA Y SELECCIÓN ---
@@ -26,10 +26,7 @@ const Importadores = () => {
 
   const cargarImportadores = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const respuesta = await axios.get(`http://127.0.0.1:8000/importadores/?mostrar_inactivos=${mostrarInactivos}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const respuesta = await api.get(`/importadores/?mostrar_inactivos=${mostrarInactivos}`);
       setImportadores(respuesta.data);
     } catch (error) {
       console.error('Error al cargar:', error);
@@ -60,7 +57,7 @@ const Importadores = () => {
     setBuscandoRuc(true);
     setMensaje({ texto: 'Buscando RUC en SUNAT...', tipo: 'info' });
     try {
-      const respuesta = await axios.get(`http://127.0.0.1:8000/sunat/ruc/${formData.ruc}`);
+      const respuesta = await api.get(`/sunat/ruc/${formData.ruc}`);
       setFormData(prev => ({ ...prev, nombre: respuesta.data.razon_social }));
       setMensaje({ texto: 'RUC validado correctamente.', tipo: 'exito' });
     } catch (error) {
@@ -79,16 +76,13 @@ const Importadores = () => {
     setMensaje({ texto: 'Guardando...', tipo: 'info' });
 
     try {
-      const token = localStorage.getItem('token');
-      const config = { headers: { Authorization: `Bearer ${token}` } };
-      
       const payload = { ...formData };
 
       if (viewMode === 'NUEVO') {
-        await axios.post('http://127.0.0.1:8000/importadores/', payload, config);
+        await api.post('/importadores/', payload);
         setMensaje({ texto: '✅ Importador registrado exitosamente.', tipo: 'exito' });
       } else if (viewMode === 'MODIFICAR') {
-        await axios.put(`http://127.0.0.1:8000/importadores/${selectedId}`, payload, config);
+        await api.put(`/importadores/${selectedId}`, payload);
         setMensaje({ texto: '✅ Importador actualizado exitosamente.', tipo: 'exito' });
       }
 
@@ -113,10 +107,7 @@ const Importadores = () => {
     if (!confirmar) return;
 
     try {
-      const token = localStorage.getItem('token');
-      await axios.delete(`http://127.0.0.1:8000/importadores/${selectedId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await api.delete(`/importadores/${selectedId}`);
       setMensaje({ texto: `✅ Importador "${importadorSeleccionado.nombre}" desactivado correctamente.`, tipo: 'exito' });
       cargarImportadores();
       setSelectedId(null);
@@ -135,10 +126,7 @@ const Importadores = () => {
     if (!importadorSeleccionado) return;
 
     try {
-      const token = localStorage.getItem('token');
-      await axios.put(`http://127.0.0.1:8000/importadores/${selectedId}/restaurar`, {}, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await api.put(`/importadores/${selectedId}/restaurar`);
       setMensaje({ texto: `✅ Importador "${importadorSeleccionado.nombre}" restaurado correctamente.`, tipo: 'exito' });
       cargarImportadores();
       setSelectedId(null);
@@ -159,10 +147,7 @@ const Importadores = () => {
     if (!confirmar) return;
 
     try {
-      const token = localStorage.getItem('token');
-      await axios.delete(`http://127.0.0.1:8000/importadores/${selectedId}/fisico`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await api.delete(`/importadores/${selectedId}/fisico`);
       setMensaje({ texto: `✅ Importador "${importadorSeleccionado.nombre}" eliminado definitivamente.`, tipo: 'exito' });
       cargarImportadores();
       setSelectedId(null);

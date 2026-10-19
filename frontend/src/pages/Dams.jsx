@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import api from '../services/api';
 import Select from 'react-select';
+import Paginador from '../components/Paginador';
+import useDebounce from '../hooks/useDebounce';
 
 const Dams = () => {
   const location = useLocation();
@@ -18,6 +20,14 @@ const Dams = () => {
   const [opcionesMaestros, setOpcionesMaestros] = useState([]);
   const [inheritedMaestro, setInheritedMaestro] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const debouncedSearch = useDebounce(searchTerm, 400);
+
+  // --- PAGINACIÓN ---
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalRegistros, setTotalRegistros] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
 
   const estadoInicial = {
     id_maestro: null,
@@ -32,8 +42,11 @@ const Dams = () => {
 
   useEffect(() => {
     cargarMaestros();
-    cargarDams();
   }, []);
+
+  useEffect(() => {
+    cargarDams();
+  }, [debouncedSearch, page, limit]);
 
   // Escuchar si viene heredado desde Logística
   useEffect(() => {
@@ -54,11 +67,10 @@ const Dams = () => {
 
   const cargarMaestros = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const config = { headers: { Authorization: `Bearer ${token}` } };
-      const response = await axios.get('http://127.0.0.1:8000/maestros/', config);
-      setMaestros(response.data);
-      setOpcionesMaestros(response.data.map(m => ({
+      const response = await api.get('/maestros/?limit=100');
+      const mList = response.data?.data ?? (Array.isArray(response.data) ? response.data : []);
+      setMaestros(mList);
+      setOpcionesMaestros(mList.map(m => ({
         value: m.id_maestro,
         label: `Factura: ${m.numero_factura} - Contenedor: ${m.n_cont_fisico || 'N/A'} (${m.tipo_valor})`
       })));
@@ -68,31 +80,26 @@ const Dams = () => {
   };
 
   const cargarDams = async () => {
+    setIsLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('http://127.0.0.1:8000/dams/', {
-        headers: { 'Authorization': `Bearer ${token}` }
+      const response = await api.get('/dams/', {
+        params: {
+          search: debouncedSearch.trim() || undefined,
+          page,
+          limit
+        }
       });
-      if (response.ok) {
-        const data = await response.json();
-        setDams(data);
-      }
+      const dataList = response.data?.data ?? (Array.isArray(response.data) ? response.data : []);
+      setDams(dataList);
+      setTotalPages(response.data?.total_paginas ?? 1);
+      setTotalRegistros(response.data?.total_registros ?? dataList.length);
     } catch (error) {
       console.error('Error al obtener DAMs:', error);
+      setMensaje({ texto: 'Error al obtener DAMs del servidor.', tipo: 'error' });
+    } finally {
+      setIsLoading(false);
     }
   };
-
-  const damsFiltradas = useMemo(() => {
-    if (!searchTerm) return dams;
-    const lowerTerm = searchTerm.toLowerCase();
-    return dams.filter(dam => {
-      const parentMaestro = maestros.find(m => m.id_maestro === dam.id_maestro);
-      const factura = parentMaestro ? parentMaestro.numero_factura : '';
-      const canal = dam.canal_control || '';
-      const text = `${dam.numero_de_dam} ${dam.serie} ${factura} ${canal}`.toLowerCase();
-      return text.includes(lowerTerm);
-    });
-  }, [dams, searchTerm, maestros]);
 
   const handleRowClick = (dam) => {
     if (viewMode !== 'LISTA') return;
@@ -123,28 +130,18 @@ const Dams = () => {
       return;
     }
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`http://127.0.0.1:8000/dams/${selectedId}`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ motivo: motivo.trim() })
+      await api.delete(`/dams/${selectedId}`, {
+        data: { motivo: motivo.trim() }
       });
-      if (response.ok) {
-        alert("DAM eliminada exitosamente.");
-        setSelectedId(null);
-        setFormData(estadoInicial);
-        setInheritedMaestro(null);
-        cargarDams();
-      } else {
-        const errorData = await response.json();
-        alert(`Error: ${errorData.detail}`);
-      }
+      alert("DAM eliminada exitosamente.");
+      setSelectedId(null);
+      setFormData(estadoInicial);
+      setInheritedMaestro(null);
+      cargarDams();
     } catch (error) {
       console.error(error);
-      alert('Error de conexión al eliminar');
+      const detail = error.response?.data?.detail || 'Error de conexión al eliminar';
+      alert(`Error: ${detail}`);
     }
   };
 
@@ -180,14 +177,11 @@ const Dams = () => {
     payload.canal_control = payload.canal_control || null;
 
     try {
-      const token = localStorage.getItem('token');
-      const config = { headers: { Authorization: `Bearer ${token}` } };
-      
       if (viewMode === 'NUEVO') {
-        await axios.post('http://127.0.0.1:8000/dams/', payload, config);
+        await api.post('/dams/', payload);
         setMensaje({ texto: '✅ DAM registrada exitosamente.', tipo: 'exito' });
       } else if (viewMode === 'MODIFICAR') {
-        await axios.put(`http://127.0.0.1:8000/dams/${selectedId}`, payload, config);
+        await api.put(`/dams/${selectedId}`, payload);
         setMensaje({ texto: '✅ DAM actualizada exitosamente.', tipo: 'exito' });
       }
       
@@ -279,9 +273,12 @@ const Dams = () => {
         
         <input 
           type="search" 
-          placeholder="Buscar por DAM, Serie, Factura o Canal..." 
+          placeholder="Buscar por DAM, Serie..." 
           value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
+          onChange={(e) => {
+            setSearchTerm(e.target.value);
+            setPage(1);
+          }}
           style={{ padding: '10px', marginLeft: 'auto', width: '300px', borderRadius: '5px', border: '1px solid #ccc' }}
         />
 
@@ -313,7 +310,7 @@ const Dams = () => {
               </tr>
             </thead>
             <tbody>
-              {damsFiltradas.map(d => {
+              {dams.map(d => {
                 const maestroParent = maestros.find(m => m.id_maestro === d.id_maestro);
                 return (
                   <tr 
@@ -345,11 +342,19 @@ const Dams = () => {
                   </tr>
                 );
               })}
-              {dams.length === 0 && (
+              {dams.length === 0 && !isLoading && (
                 <tr><td colSpan="8" style={{ padding: '20px', textAlign: 'center', color: '#7f8c8d' }}>No hay registros disponibles.</td></tr>
               )}
             </tbody>
           </table>
+          <Paginador 
+            page={page} 
+            totalPages={totalPages} 
+            setPage={setPage} 
+            limit={limit} 
+            setLimit={setLimit} 
+            totalRegistros={totalRegistros} 
+          />
         </div>
       ) : (
         // ======================= VISTA: NUEVO / MODIFICAR / CONSULTAR =======================

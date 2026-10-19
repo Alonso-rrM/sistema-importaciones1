@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../services/api';
 
 const Bancos = () => {
   // --- ESTADOS DE VISTA Y SELECCIÓN ---
@@ -24,10 +24,7 @@ const Bancos = () => {
 
   const cargarBancos = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const respuesta = await axios.get(`http://127.0.0.1:8000/bancos/?mostrar_inactivos=${mostrarInactivos}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const respuesta = await api.get(`/bancos/?mostrar_inactivos=${mostrarInactivos}`);
       setBancos(respuesta.data);
     } catch (error) {
       console.error('Error al cargar:', error);
@@ -54,16 +51,13 @@ const Bancos = () => {
     setMensaje({ texto: 'Guardando...', tipo: 'info' });
 
     try {
-      const token = localStorage.getItem('token');
-      const config = { headers: { Authorization: `Bearer ${token}` } };
-      
       const payload = { ...formData };
 
       if (viewMode === 'NUEVO') {
-        await axios.post('http://127.0.0.1:8000/bancos/', payload, config);
+        await api.post('/bancos/', payload);
         setMensaje({ texto: '✅ Banco registrado exitosamente.', tipo: 'exito' });
       } else if (viewMode === 'MODIFICAR') {
-        await axios.put(`http://127.0.0.1:8000/bancos/${selectedId}`, payload, config);
+        await api.put(`/bancos/${selectedId}`, payload);
         setMensaje({ texto: '✅ Banco actualizado exitosamente.', tipo: 'exito' });
       }
 
@@ -88,10 +82,7 @@ const Bancos = () => {
     if (!confirmar) return;
 
     try {
-      const token = localStorage.getItem('token');
-      await axios.delete(`http://127.0.0.1:8000/bancos/${selectedId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await api.delete(`/bancos/${selectedId}`);
       setMensaje({ texto: `✅ Banco "${bancoSeleccionado.nombre}" desactivado correctamente.`, tipo: 'exito' });
       cargarBancos();
       setSelectedId(null);
@@ -110,10 +101,7 @@ const Bancos = () => {
     if (!bancoSeleccionado) return;
 
     try {
-      const token = localStorage.getItem('token');
-      await axios.put(`http://127.0.0.1:8000/bancos/${selectedId}/restaurar`, {}, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await api.put(`/bancos/${selectedId}/restaurar`);
       setMensaje({ texto: `✅ Banco "${bancoSeleccionado.nombre}" restaurado correctamente.`, tipo: 'exito' });
       cargarBancos();
       setSelectedId(null);
@@ -134,10 +122,7 @@ const Bancos = () => {
     if (!confirmar) return;
 
     try {
-      const token = localStorage.getItem('token');
-      await axios.delete(`http://127.0.0.1:8000/bancos/${selectedId}/fisico`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await api.delete(`/bancos/${selectedId}/fisico`);
       setMensaje({ texto: `✅ Banco "${bancoSeleccionado.nombre}" eliminado definitivamente.`, tipo: 'exito' });
       cargarBancos();
       setSelectedId(null);

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../services/api';
 
 const Conceptos = () => {
   // --- ESTADOS DE VISTA Y SELECCIÓN ---
@@ -25,10 +25,7 @@ const Conceptos = () => {
 
   const cargarConceptos = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const respuesta = await axios.get(`http://127.0.0.1:8000/conceptos/?mostrar_inactivos=${mostrarInactivos}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const respuesta = await api.get(`/conceptos/?mostrar_inactivos=${mostrarInactivos}`);
       setConceptos(respuesta.data);
     } catch (error) {
       console.error('Error al cargar:', error);
@@ -56,19 +53,16 @@ const Conceptos = () => {
     setMensaje({ texto: 'Guardando...', tipo: 'info' });
 
     try {
-      const token = localStorage.getItem('token');
-      const config = { headers: { Authorization: `Bearer ${token}` } };
-      
       const payload = {
         nombre: formData.nombre,
         descripcion: formData.descripcion || null
       };
 
       if (viewMode === 'NUEVO') {
-        await axios.post('http://127.0.0.1:8000/conceptos/', payload, config);
+        await api.post('/conceptos/', payload);
         setMensaje({ texto: '✅ Concepto de gasto registrado exitosamente.', tipo: 'exito' });
       } else if (viewMode === 'MODIFICAR') {
-        await axios.put(`http://127.0.0.1:8000/conceptos/${selectedId}`, payload, config);
+        await api.put(`/conceptos/${selectedId}`, payload);
         setMensaje({ texto: '✅ Concepto actualizado exitosamente.', tipo: 'exito' });
       }
 
@@ -93,10 +87,7 @@ const Conceptos = () => {
     if (!confirmar) return;
 
     try {
-      const token = localStorage.getItem('token');
-      await axios.delete(`http://127.0.0.1:8000/conceptos/${selectedId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await api.delete(`/conceptos/${selectedId}`);
       setMensaje({ texto: `✅ Concepto "${conceptoSeleccionado.nombre}" desactivado correctamente.`, tipo: 'exito' });
       cargarConceptos();
       setSelectedId(null);
@@ -115,10 +106,7 @@ const Conceptos = () => {
     if (!conceptoSeleccionado) return;
 
     try {
-      const token = localStorage.getItem('token');
-      await axios.put(`http://127.0.0.1:8000/conceptos/${selectedId}/restaurar`, {}, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await api.put(`/conceptos/${selectedId}/restaurar`);
       setMensaje({ texto: `✅ Concepto "${conceptoSeleccionado.nombre}" restaurado correctamente.`, tipo: 'exito' });
       cargarConceptos();
       setSelectedId(null);
@@ -139,10 +127,7 @@ const Conceptos = () => {
     if (!confirmar) return;
 
     try {
-      const token = localStorage.getItem('token');
-      await axios.delete(`http://127.0.0.1:8000/conceptos/${selectedId}/fisico`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await api.delete(`/conceptos/${selectedId}/fisico`);
       setMensaje({ texto: `✅ Concepto "${conceptoSeleccionado.nombre}" eliminado definitivamente.`, tipo: 'exito' });
       cargarConceptos();
       setSelectedId(null);

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../services/api';
 
 const Almacenes = () => {
   // --- ESTADOS DE VISTA Y SELECCIÓN ---
@@ -25,10 +25,7 @@ const Almacenes = () => {
 
   const cargarAlmacenes = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const respuesta = await axios.get(`http://127.0.0.1:8000/almacenes/?mostrar_inactivos=${mostrarInactivos}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const respuesta = await api.get(`/almacenes/?mostrar_inactivos=${mostrarInactivos}`);
       setAlmacenes(respuesta.data);
     } catch (error) {
       console.error('Error al cargar:', error);
@@ -56,19 +53,16 @@ const Almacenes = () => {
     setMensaje({ texto: 'Guardando...', tipo: 'info' });
 
     try {
-      const token = localStorage.getItem('token');
-      const config = { headers: { Authorization: `Bearer ${token}` } };
-      
       const payload = {
         nombre: formData.nombre,
         ubicacion: formData.ubicacion || null
       };
 
       if (viewMode === 'NUEVO') {
-        await axios.post('http://127.0.0.1:8000/almacenes/', payload, config);
+        await api.post('/almacenes/', payload);
         setMensaje({ texto: '✅ Almacén registrado exitosamente.', tipo: 'exito' });
       } else if (viewMode === 'MODIFICAR') {
-        await axios.put(`http://127.0.0.1:8000/almacenes/${selectedId}`, payload, config);
+        await api.put(`/almacenes/${selectedId}`, payload);
         setMensaje({ texto: '✅ Almacén actualizado exitosamente.', tipo: 'exito' });
       }
 
@@ -93,10 +87,7 @@ const Almacenes = () => {
     if (!confirmar) return;
 
     try {
-      const token = localStorage.getItem('token');
-      await axios.delete(`http://127.0.0.1:8000/almacenes/${selectedId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await api.delete(`/almacenes/${selectedId}`);
       setMensaje({ texto: `✅ Almacén "${almacenSeleccionado.nombre}" desactivado correctamente.`, tipo: 'exito' });
       cargarAlmacenes();
       setSelectedId(null);
@@ -115,10 +106,7 @@ const Almacenes = () => {
     if (!almacenSeleccionado) return;
 
     try {
-      const token = localStorage.getItem('token');
-      await axios.put(`http://127.0.0.1:8000/almacenes/${selectedId}/restaurar`, {}, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await api.put(`/almacenes/${selectedId}/restaurar`);
       setMensaje({ texto: `✅ Almacén "${almacenSeleccionado.nombre}" restaurado correctamente.`, tipo: 'exito' });
       cargarAlmacenes();
       setSelectedId(null);
@@ -139,10 +127,7 @@ const Almacenes = () => {
     if (!confirmar) return;
 
     try {
-      const token = localStorage.getItem('token');
-      await axios.delete(`http://127.0.0.1:8000/almacenes/${selectedId}/fisico`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await api.delete(`/almacenes/${selectedId}/fisico`);
       setMensaje({ texto: `✅ Almacén "${almacenSeleccionado.nombre}" eliminado definitivamente.`, tipo: 'exito' });
       cargarAlmacenes();
       setSelectedId(null);

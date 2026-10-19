@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import api from '../services/api';
 import Select from 'react-select';
+import Paginador from '../components/Paginador';
+import useDebounce from '../hooks/useDebounce';
 
 const Gastos = () => {
   const navigate = useNavigate();
@@ -16,6 +18,14 @@ const Gastos = () => {
   const [maestrosRaw, setMaestrosRaw] = useState([]);
   const [damsRaw, setDamsRaw] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const debouncedSearch = useDebounce(searchTerm, 400);
+
+  // --- PAGINACIÓN ---
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalRegistros, setTotalRegistros] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
   
   const [opcionesMaestros, setOpcionesMaestros] = useState([]);
   const [opcionesConceptos, setOpcionesConceptos] = useState([]);
@@ -38,46 +48,59 @@ const Gastos = () => {
   const [isGuardando, setIsGuardando] = useState(false);
 
   useEffect(() => {
-    cargarListaGastos();
     cargarCatalogos();
   }, []);
 
+  useEffect(() => {
+    cargarListaGastos();
+  }, [debouncedSearch, page, limit]);
+
   const cargarListaGastos = async () => {
+    setIsLoading(true);
     try {
-      const token = localStorage.getItem("token") || "";
-      const response = await fetch("http://127.0.0.1:8000/gastos/", {
-        headers: { "Authorization": `Bearer ${token}` }
+      const response = await api.get('/gastos/', {
+        params: {
+          search: debouncedSearch.trim() || undefined,
+          page,
+          limit
+        }
       });
-      if (response.ok) {
-        const data = await response.json();
-        setGastos(data);
-      }
+      const dataList = response.data?.data ?? (Array.isArray(response.data) ? response.data : []);
+      setGastos(dataList);
+      setTotalPages(response.data?.total_paginas ?? 1);
+      setTotalRegistros(response.data?.total_registros ?? dataList.length);
     } catch (error) {
       console.error("Error al obtener gastos:", error);
+      setMensaje({ texto: "Error al obtener gastos del servidor.", tipo: "error" });
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const cargarCatalogos = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const config = { headers: { Authorization: `Bearer ${token}` } };
-
       const [resMaestros, resDams, resConceptos, resProveedores, resTiposDoc] = await Promise.all([
-        axios.get('http://127.0.0.1:8000/maestros/', config),
-        axios.get('http://127.0.0.1:8000/dams/', config),
-        axios.get('http://127.0.0.1:8000/conceptos/', config),
-        axios.get('http://127.0.0.1:8000/proveedores/', config),
-        axios.get('http://127.0.0.1:8000/tipos-documento/', config)
+        api.get('/maestros/?limit=100'),
+        api.get('/dams/?limit=100'),
+        api.get('/conceptos/'),
+        api.get('/proveedores/'),
+        api.get('/tipos-documento/')
       ]);
 
-      setMaestrosRaw(resMaestros.data);
-      setDamsRaw(resDams.data);
+      const maestrosList = resMaestros.data?.data ?? (Array.isArray(resMaestros.data) ? resMaestros.data : []);
+      const damsList = resDams.data?.data ?? (Array.isArray(resDams.data) ? resDams.data : []);
+      const conceptosList = resConceptos.data?.data ?? (Array.isArray(resConceptos.data) ? resConceptos.data : []);
+      const proveedoresList = resProveedores.data?.data ?? (Array.isArray(resProveedores.data) ? resProveedores.data : []);
+      const tiposDocList = resTiposDoc.data?.data ?? (Array.isArray(resTiposDoc.data) ? resTiposDoc.data : []);
 
-      setOpcionesMaestros(resMaestros.data.map(m => ({ value: m.id_maestro, label: `Factura: ${m.numero_factura} (BL: ${m.documento_transporte || 'N/A'})` })));
-      setOpcionesConceptos(resConceptos.data.map(c => ({ value: c.id_concepto, label: c.nombre })));
-      setOpcionesProveedores(resProveedores.data.map(p => ({ value: p.id_proveedor, label: `${p.ruc} - ${p.nombre}` })));
+      setMaestrosRaw(maestrosList);
+      setDamsRaw(damsList);
+
+      setOpcionesMaestros(maestrosList.map(m => ({ value: m.id_maestro, label: `Factura: ${m.numero_factura} (BL: ${m.documento_transporte || 'N/A'})` })));
+      setOpcionesConceptos(conceptosList.map(c => ({ value: c.id_concepto, label: c.nombre })));
+      setOpcionesProveedores(proveedoresList.map(p => ({ value: p.id_proveedor, label: `${p.ruc} - ${p.nombre}` })));
       
-      setOpcionesTiposDoc(resTiposDoc.data.map(t => ({ 
+      setOpcionesTiposDoc(tiposDocList.map(t => ({ 
         value: t.id_tipo_doc,
         label: t.nombre_documento || t.nombre || t.descripcion 
       })));
@@ -91,18 +114,6 @@ const Gastos = () => {
   const opcionesDamsFiltradas = damsRaw
     .filter(dam => dam.id_maestro === form.id_maestro_temp)
     .map(dam => ({ value: dam.id_dam, label: `DAM: ${dam.numero_de_dam}` }));
-
-  const gastosFiltrados = useMemo(() => {
-    if (!searchTerm) return gastos;
-    const lowerTerm = searchTerm.toLowerCase();
-    return gastos.filter(g => {
-      const prov = opcionesProveedores.find(p => p.value === g.id_proveedor)?.label || '';
-      const conc = opcionesConceptos.find(c => c.value === g.id_concepto)?.label || '';
-      const dam = damsRaw.find(d => d.id_dam === g.id_dam)?.numero_de_dam || '';
-      const text = `${g.id_gasto} ${g.numero_documento} ${prov} ${conc} ${dam} ${g.estado_pago}`.toLowerCase();
-      return text.includes(lowerTerm);
-    });
-  }, [gastos, searchTerm, opcionesProveedores, opcionesConceptos, damsRaw]);
 
   const handleChangeTexto = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
@@ -136,28 +147,18 @@ const Gastos = () => {
       return;
     }
     try {
-      const token = localStorage.getItem("token") || ""; 
-      const response = await fetch(`http://127.0.0.1:8000/gastos/${selectedId}`, {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        },
-        body: JSON.stringify({ motivo: motivo.trim() })
+      await api.delete(`/gastos/${selectedId}`, {
+        data: { motivo: motivo.trim() }
       });
 
-      if (response.ok) {
-        alert("Registro eliminado lógicamente.");
-        setSelectedId(null);
-        setForm(estadoInicialForm);
-        cargarListaGastos();
-      } else {
-        const errorData = await response.json();
-        alert(`Error al eliminar: ${errorData.detail || "Error desconocido"}`);
-      }
+      alert("Registro eliminado lógicamente.");
+      setSelectedId(null);
+      setForm(estadoInicialForm);
+      cargarListaGastos();
     } catch (error) {
       console.error("Error en la solicitud DELETE:", error);
-      alert("Error de conexión al intentar eliminar el registro.");
+      const detail = error.response?.data?.detail || "Error desconocido";
+      alert(`Error al eliminar: ${detail}`);
     }
   };
 
@@ -178,9 +179,6 @@ const Gastos = () => {
     setMensaje({ texto: 'Guardando...', tipo: 'info' });
 
     try {
-      const token = localStorage.getItem('token');
-      const config = { headers: { Authorization: `Bearer ${token}` } };
-      
       const payload = {
         id_dam: form.id_dam,
         id_concepto: form.id_concepto,
@@ -193,10 +191,10 @@ const Gastos = () => {
       };
 
       if (viewMode === 'NUEVO') {
-        await axios.post('http://127.0.0.1:8000/gastos/', payload, config);
+        await api.post('/gastos/', payload);
         setMensaje({ texto: '✅ Gasto registrado con éxito.', tipo: 'exito' });
       } else if (viewMode === 'MODIFICAR') {
-        await axios.put(`http://127.0.0.1:8000/gastos/${selectedId}`, payload, config);
+        await api.put(`/gastos/${selectedId}`, payload);
         setMensaje({ texto: '✅ Gasto actualizado con éxito.', tipo: 'exito' });
       }
 
@@ -295,10 +293,13 @@ const Gastos = () => {
         
         <input 
           type="search" 
-          placeholder="Buscar por Doc, Concepto, Proveedor o Estado..." 
+          placeholder="Buscar por Documento, DAM, Factura, Estado..." 
           value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          style={{ padding: '10px', marginLeft: 'auto', width: '300px', borderRadius: '5px', border: '1px solid #ccc' }}
+          onChange={(e) => {
+            setSearchTerm(e.target.value);
+            setPage(1);
+          }}
+          style={{ padding: '10px', marginLeft: 'auto', width: '320px', borderRadius: '5px', border: '1px solid #ccc' }}
         />
         
         {viewMode !== 'LISTA' && (
@@ -329,7 +330,7 @@ const Gastos = () => {
               </tr>
             </thead>
             <tbody>
-              {gastosFiltrados.map((g) => {
+              {gastos.map((g) => {
                 const prov = opcionesProveedores.find(op => op.value === g.id_proveedor);
                 const conc = opcionesConceptos.find(c => c.value === g.id_concepto);
                 return (
@@ -356,15 +357,23 @@ const Gastos = () => {
                         {g.estado_pago}
                       </span>
                     </td>
-                    <td style={{ padding: '12px' }}>{g.id_dam}</td>
+                    <td style={{ padding: '12px' }}>{g.dam_numero || g.id_dam}</td>
                   </tr>
                 );
               })}
-              {gastos.length === 0 && (
-                <tr><td colSpan="7" style={{ padding: '20px', textAlign: 'center', color: '#7f8c8d' }}>No hay registros disponibles.</td></tr>
+              {gastos.length === 0 && !isLoading && (
+                <tr><td colSpan="8" style={{ padding: '20px', textAlign: 'center', color: '#7f8c8d' }}>No hay registros disponibles.</td></tr>
               )}
             </tbody>
           </table>
+          <Paginador 
+            page={page} 
+            totalPages={totalPages} 
+            setPage={setPage} 
+            limit={limit} 
+            setLimit={setLimit} 
+            totalRegistros={totalRegistros} 
+          />
         </div>
       ) : (
         // ======================= VISTA: NUEVO / MODIFICAR / CONSULTAR =======================

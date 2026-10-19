@@ -1,8 +1,18 @@
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Generic, TypeVar
 from pydantic import BaseModel, ConfigDict, Field
 from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
+
+# --- MODELO GENÉRICO DE PAGINACIÓN ---
+T = TypeVar('T')
+
+class PaginatedResponse(BaseModel, Generic[T]):
+    total_registros: int
+    pagina: int
+    limite: int
+    total_paginas: int
+    data: List[T]
 
 # --- 1. ESQUEMAS PARA CATÁLOGOS ---
 
@@ -250,7 +260,17 @@ class RegistroGasto(RegistroGastoCreate):
     estado_pago: str
     estado_registro: str
     created_at: Optional[datetime] = None
+
+    # Propiedades calculadas / enriquecidas para UI
+    saldo_pendiente: Optional[Decimal] = None
+    dam_numero: Optional[str] = None
+    importador_nombre: Optional[str] = None
+    id_importador: Optional[int] = None
+    maestro_factura: Optional[str] = None
+
     model_config = ConfigDict(from_attributes=True)
+
+RegistroGastoResponse = RegistroGasto
 
 class RegistroGastoUpdate(BaseModel):
     id_dam: int | None = None
