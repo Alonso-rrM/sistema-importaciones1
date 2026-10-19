@@ -339,3 +339,11 @@ class VoucherEliminado(Base, AuditoriaMixin):
     fecha_transferencia = Column(Date)
     estado_registro = Column(String(20))
     version = Column(Integer)
+
+# --- 5. REGISTROS DE IDEMPOTENCIA ---
+class RegistroIdempotencia(Base):
+    __tablename__ = "registro_idempotencia"
+    clave_idempotencia = Column(String(100), primary_key=True, index=True)
+    endpoint = Column(String(255), nullable=False)
+    respuesta_json = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)

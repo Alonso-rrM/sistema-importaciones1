@@ -20,6 +20,7 @@ const Pagos = () => {
   
   const [mensaje, setMensaje] = useState({ texto: '', tipo: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [idempotencyKey, setIdempotencyKey] = useState('');
 
   const [form, setForm] = useState({
     voucher_id: null,
@@ -109,6 +110,11 @@ const Pagos = () => {
 
   const openModal = async (gasto) => {
     setSelectedGasto(gasto);
+    const nuevaClave = (typeof crypto !== 'undefined' && crypto.randomUUID) 
+      ? crypto.randomUUID() 
+      : `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    setIdempotencyKey(nuevaClave);
+
     setForm({
       voucher_id: null,
       fecha_pago: '',
@@ -174,10 +180,14 @@ const Pagos = () => {
 
     setIsSubmitting(true);
     setMensaje({ texto: 'Procesando pago...', tipo: 'info' });
-
     try {
       const token = localStorage.getItem('token');
-      const config = { headers: { Authorization: `Bearer ${token}` } };
+      const config = { 
+        headers: { 
+          Authorization: `Bearer ${token}`,
+          'Idempotency-Key': idempotencyKey
+        } 
+      };
       
       const payload = {
         id_gasto: selectedGasto.id_gasto,

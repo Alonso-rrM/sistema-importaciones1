@@ -1,10 +1,14 @@
+import os
 import pandas as pd
 import requests
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # --- CONFIGURACIÓN ---
-API_URL = "http://localhost:8000"
-# IMPORTANTE: Reemplaza este string por el Token JWT del administrador
-TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsImlkX3JvbCI6MSwiaWRfdXN1YXJpbyI6MSwiZXhwIjoxNzg5ODgyNzg3fQ.zcFbzk6GlOwWsIh59Rlsmj9R1Q8X-YaW7HNpszECk3s"
+API_URL = os.getenv("API_URL", "http://localhost:8000")
+# El Token JWT del administrador debe definirse en .env o en el entorno
+TOKEN = os.getenv("ADMIN_JWT_TOKEN", "")
 HEADERS = {
     "Authorization": f"Bearer {TOKEN}",
     "Content-Type": "application/json"
