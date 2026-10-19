@@ -13,6 +13,7 @@ const Vouchers = () => {
   // --- DATOS ---
   const [vouchers, setVouchers] = useState([]);
   const [opcionesBancos, setOpcionesBancos] = useState([]);
+  const [opcionesImportadores, setOpcionesImportadores] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const debouncedSearch = useDebounce(searchTerm, 400);
 
@@ -25,6 +26,7 @@ const Vouchers = () => {
 
   const estadoInicial = {
     banco_id: null,
+    id_importador: null,
     numero_operacion: '',
     monto_total: '',
     moneda: 'USD',
@@ -43,11 +45,16 @@ const Vouchers = () => {
 
   const cargarCatalogos = async () => {
     try {
-      const resBancos = await api.get('/bancos/');
+      const [resBancos, resImportadores] = await Promise.all([
+        api.get('/bancos/'),
+        api.get('/importadores/')
+      ]);
       const bList = resBancos.data?.data ?? (Array.isArray(resBancos.data) ? resBancos.data : []);
+      const iList = resImportadores.data?.data ?? (Array.isArray(resImportadores.data) ? resImportadores.data : []);
       setOpcionesBancos(bList.map(b => ({ value: b.id_banco, label: b.nombre })));
+      setOpcionesImportadores(iList.map(i => ({ value: i.id_importador, label: `${i.ruc} - ${i.nombre}` })));
     } catch (error) {
-      console.error('Error al cargar bancos:', error);
+      console.error('Error al cargar catálogos:', error);
     }
   };
 
@@ -82,6 +89,7 @@ const Vouchers = () => {
       setSelectedId(voucher.id_voucher);
       setFormData({
         banco_id: voucher.banco_id || null,
+        id_importador: voucher.id_importador || null,
         numero_operacion: voucher.numero_operacion || '',
         monto_total: voucher.monto_total || '',
         moneda: voucher.moneda || 'USD',
@@ -108,7 +116,7 @@ const Vouchers = () => {
     } catch (error) {
       console.error(error);
       const detail = error.response?.data?.detail || 'Error de conexión al eliminar';
-      alert(`Error: ${detail}`);
+      alert(`Error: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
     }
   };
 
@@ -118,6 +126,20 @@ const Vouchers = () => {
 
   const handleGuardar = async (e) => {
     e.preventDefault();
+
+    if (!formData.banco_id) {
+      setMensaje({ texto: '❌ Debe seleccionar una Entidad Bancaria.', tipo: 'error' });
+      return;
+    }
+    if (!formData.id_importador) {
+      setMensaje({ texto: '❌ Debe seleccionar la Empresa Importadora.', tipo: 'error' });
+      return;
+    }
+    if (!formData.monto_total || parseFloat(formData.monto_total) <= 0) {
+      setMensaje({ texto: '❌ El monto total debe ser mayor a 0.', tipo: 'error' });
+      return;
+    }
+
     setMensaje({ texto: 'Guardando...', tipo: 'info' });
 
     const payload = { ...formData };
@@ -128,7 +150,6 @@ const Vouchers = () => {
         await api.post('/vouchers/', payload);
         setMensaje({ texto: '✅ Voucher registrado exitosamente.', tipo: 'exito' });
       } else if (viewMode === 'MODIFICAR') {
-        // En el futuro, si hay un endpoint PUT para vouchers
         setMensaje({ texto: '❌ La modificación directa de vouchers no está soportada todavía.', tipo: 'error' });
         return;
       }
@@ -140,7 +161,16 @@ const Vouchers = () => {
       setTimeout(() => setMensaje({ texto: '', tipo: '' }), 4000);
     } catch (error) {
       console.error(error);
-      setMensaje({ texto: `❌ Error al guardar: ${error.response?.data?.detail || 'Revisa los datos'}`, tipo: 'error' });
+      const rawDetail = error.response?.data?.detail;
+      let errorMsg = 'Revisa los datos';
+      if (typeof rawDetail === 'string') {
+        errorMsg = rawDetail;
+      } else if (Array.isArray(rawDetail)) {
+        errorMsg = rawDetail.map(d => `${d.loc ? d.loc.slice(1).join('.') : 'campo'}: ${d.msg}`).join(', ');
+      } else if (rawDetail && typeof rawDetail === 'object') {
+        errorMsg = JSON.stringify(rawDetail);
+      }
+      setMensaje({ texto: `❌ Error al guardar: ${errorMsg}`, tipo: 'error' });
     }
   };
 
@@ -241,6 +271,7 @@ const Vouchers = () => {
               <tr style={{ backgroundColor: '#ecf0f1', textAlign: 'left' }}>
                 <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>ID</th>
                 <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>Banco</th>
+                <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>Importador</th>
                 <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>N° Operación</th>
                 <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>Moneda</th>
                 <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>Monto Total</th>
@@ -251,6 +282,7 @@ const Vouchers = () => {
             <tbody>
               {vouchers.map(v => {
                 const bancoName = opcionesBancos.find(b => b.value === v.banco_id)?.label || 'Desconocido';
+                const importadorName = opcionesImportadores.find(i => i.value === v.id_importador)?.label || `ID: ${v.id_importador}`;
                 return (
                   <tr 
                     key={v.id_voucher} 
@@ -259,6 +291,7 @@ const Vouchers = () => {
                   >
                     <td style={{ padding: '12px' }}>{v.id_voucher}</td>
                     <td style={{ padding: '12px', fontWeight: 'bold' }}>{bancoName}</td>
+                    <td style={{ padding: '12px' }}>{importadorName}</td>
                     <td style={{ padding: '12px' }}>{v.numero_operacion}</td>
                     <td style={{ padding: '12px' }}>
                       <span style={{ fontWeight: 'bold', color: v.moneda === 'USD' ? '#27ae60' : '#e67e22' }}>{v.moneda}</span>
@@ -272,7 +305,7 @@ const Vouchers = () => {
                 );
               })}
               {vouchers.length === 0 && !isLoading && (
-                <tr><td colSpan="7" style={{ padding: '20px', textAlign: 'center', color: '#7f8c8d' }}>No hay registros disponibles.</td></tr>
+                <tr><td colSpan="8" style={{ padding: '20px', textAlign: 'center', color: '#7f8c8d' }}>No hay registros disponibles.</td></tr>
               )}
             </tbody>
           </table>
@@ -293,7 +326,7 @@ const Vouchers = () => {
           </h3>
 
           <div style={gridStyle}>
-            <div style={{ zIndex: 5 }}>
+            <div style={{ zIndex: 6 }}>
               <label style={labelStyle}>Banco *</label>
               <Select 
                 options={opcionesBancos} 
@@ -302,6 +335,18 @@ const Vouchers = () => {
                 isDisabled={isReadOnly}
                 isClearable 
                 placeholder="Seleccione el banco..."
+                styles={selectStyles}
+              />
+            </div>
+            <div style={{ zIndex: 5 }}>
+              <label style={labelStyle}>Empresa Importadora *</label>
+              <Select 
+                options={opcionesImportadores} 
+                value={opcionesImportadores.find(o => o.value === formData.id_importador) || null} 
+                onChange={op => setFormData({ ...formData, id_importador: op ? op.value : null })} 
+                isDisabled={isReadOnly}
+                isClearable 
+                placeholder="Seleccione la empresa importadora..."
                 styles={selectStyles}
               />
             </div>

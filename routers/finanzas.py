@@ -3,6 +3,7 @@ from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 import json
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy import func, case
@@ -239,6 +240,7 @@ def eliminar_gasto(id_gasto: int, req: schemas.EliminacionRequest, db: Session =
 def crear_voucher(voucher: schemas.VoucherBancarioCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     nuevo_voucher = models.VoucherBancario(
         banco_id=voucher.banco_id,
+        id_importador=voucher.id_importador,
         numero_operacion=voucher.numero_operacion,
         monto_total=voucher.monto_total,
         saldo_disponible=voucher.monto_total, # Saldo inicial = Monto total

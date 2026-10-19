@@ -26,7 +26,8 @@ const Comprobantes = () => {
   const cargarComprobantes = async () => {
     try {
       const respuesta = await api.get(`/tipos-documento/?mostrar_inactivos=${mostrarInactivos}`);
-      setComprobantes(respuesta.data);
+      const data = respuesta.data?.data ?? (Array.isArray(respuesta.data) ? respuesta.data : []);
+      setComprobantes(data);
     } catch (error) {
       console.error('Error al cargar:', error);
       setMensaje({ texto: 'No se pudo conectar con la base de datos.', tipo: 'error' });
