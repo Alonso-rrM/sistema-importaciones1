@@ -348,9 +348,9 @@ def eliminar_voucher(id_voucher: int, req: schemas.EliminacionRequest, db: Sessi
     cols_respaldo = {c.name for c in models.VoucherEliminado.__table__.columns}
     datos = {c.name: getattr(voucher, c.name) for c in voucher.__table__.columns if c.name in cols_respaldo}
     snapshot = {
-        "Banco": voucher.banco_rel.nombre if voucher.banco_rel else "N/A",
+        "Banco": getattr(voucher.banco_rel, "nombre", "N/A") if voucher.banco_rel else "N/A",
         "Numero Operacion": voucher.numero_operacion,
-        "Importador": voucher.importador_rel.razon_social if voucher.importador_rel else "N/A"
+        "Importador": getattr(voucher.importador_rel, "nombre", "N/A") if voucher.importador_rel else "N/A"
     }
     respaldo = models.VoucherEliminado(
         **datos,
