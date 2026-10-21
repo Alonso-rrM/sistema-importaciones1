@@ -35,6 +35,11 @@ const Vouchers = () => {
 
   const [formData, setFormData] = useState(estadoInicial);
 
+  // --- MODAL DE ELIMINACIÓN ---
+  const [voucherAEliminar, setVoucherAEliminar] = useState(null);
+  const [motivoEliminacion, setMotivoEliminacion] = useState('');
+  const [isEliminando, setIsEliminando] = useState(false);
+
   useEffect(() => {
     cargarCatalogos();
   }, []);
@@ -42,6 +47,26 @@ const Vouchers = () => {
   useEffect(() => {
     cargarVouchers();
   }, [debouncedSearch, page, limit]);
+
+  // --- CONTROL GLOBAL TECLA ESCAPE (ESC) ---
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        if (voucherAEliminar) {
+          cerrarModalEliminar();
+        } else if (viewMode !== 'LISTA') {
+          setViewMode('LISTA');
+          setSelectedId(null);
+          setFormData(estadoInicial);
+        } else if (selectedId) {
+          setSelectedId(null);
+          setFormData(estadoInicial);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [voucherAEliminar, viewMode, selectedId]);
 
   const cargarCatalogos = async () => {
     try {
@@ -101,31 +126,56 @@ const Vouchers = () => {
   const selectedVoucher = vouchers.find(v => v.id_voucher === selectedId);
   const tienePagos = selectedVoucher ? parseFloat(selectedVoucher.monto_total) !== parseFloat(selectedVoucher.saldo_disponible) : false;
 
-  const handleEliminar = async () => {
-    if (!selectedId) return;
-
-    if (tienePagos) {
-      alert("❌ Operación Denegada: Este voucher ya tiene pagos amortizados. Para poder eliminarlo, primero debe anular los pagos asociados en el módulo de Pagos.");
-      return;
-    }
-
-    const motivo = window.prompt("Ingrese el motivo de eliminación (Mín. 10 caracteres):");
-    if (!motivo || motivo.trim().length < 10) {
-      alert("Acción bloqueada: Debe ingresar un motivo válido de al menos 10 caracteres.");
-      return;
-    }
-    try {
-      await api.delete(`/vouchers/${selectedId}`, {
-        data: { motivo: motivo.trim() }
+  const abrirModalEliminar = (voucher) => {
+    if (!voucher) return;
+    const tieneAmortizaciones = parseFloat(voucher.monto_total) !== parseFloat(voucher.saldo_disponible);
+    if (tieneAmortizaciones) {
+      setMensaje({
+        texto: `❌ Operación denegada: El voucher N° ${voucher.numero_operacion} ya tiene pagos amortizados. Para poder eliminarlo, primero debe anular los pagos asociados en el módulo de Pagos.`,
+        tipo: 'error'
       });
-      alert("Registro eliminado exitosamente.");
+      return;
+    }
+    setVoucherAEliminar(voucher);
+    setMotivoEliminacion('');
+  };
+
+  const cerrarModalEliminar = () => {
+    if (isEliminando) return;
+    setVoucherAEliminar(null);
+    setMotivoEliminacion('');
+  };
+
+  const confirmarEliminacion = async () => {
+    if (!voucherAEliminar) return;
+    if (motivoEliminacion.trim().length < 10) {
+      setMensaje({ texto: '❌ El motivo debe tener al menos 10 caracteres.', tipo: 'error' });
+      return;
+    }
+
+    setIsEliminando(true);
+    try {
+      await api.delete(`/vouchers/${voucherAEliminar.id_voucher}`, {
+        data: { motivo: motivoEliminacion.trim() }
+      });
+      setMensaje({ texto: `✅ Voucher N° ${voucherAEliminar.numero_operacion} eliminado exitosamente.`, tipo: 'exito' });
+      setVoucherAEliminar(null);
+      setMotivoEliminacion('');
       setSelectedId(null);
       setFormData(estadoInicial);
+      if (viewMode !== 'LISTA') setViewMode('LISTA');
       cargarVouchers();
+      setTimeout(() => setMensaje({ texto: '', tipo: '' }), 4000);
     } catch (error) {
       console.error(error);
-      const detail = error.response?.data?.detail || 'Error de conexión al eliminar';
-      alert(`Error: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
+      const rawDetail = error.response?.data?.detail;
+      let errorMsg = 'Error al eliminar';
+      if (typeof rawDetail === 'string') errorMsg = rawDetail;
+      else if (Array.isArray(rawDetail)) errorMsg = rawDetail.map(d => `${d.loc ? d.loc.slice(1).join('.') : 'campo'}: ${d.msg}`).join(', ');
+      else if (rawDetail && typeof rawDetail === 'object') errorMsg = JSON.stringify(rawDetail);
+      setMensaje({ texto: `❌ ${errorMsg}`, tipo: 'error' });
+    } finally {
+      setIsEliminando(false);
     }
   };
 
@@ -213,8 +263,13 @@ const Vouchers = () => {
         </button>
         <button 
           className="btn btn-danger" 
-          disabled={!selectedId} 
-          onClick={handleEliminar}
+          onClick={() => {
+            if (!selectedId) {
+              setMensaje({ texto: '⚠️ Seleccione primero un voucher haciendo clic sobre una fila, o use el botón 🗑️ directo en la columna Acciones.', tipo: 'info' });
+              return;
+            }
+            abrirModalEliminar(selectedVoucher);
+          }}
         >
           🗑️ ELIMINAR
         </button>
@@ -230,8 +285,20 @@ const Vouchers = () => {
           className="toolbar-search"
         />
 
+        {selectedId && viewMode === 'LISTA' && (
+          <button 
+            type="button" 
+            className="btn btn-secondary" 
+            title="Quitar selección (Escape)"
+            onClick={() => { setSelectedId(null); setFormData(estadoInicial); }}
+          >
+            ✕ DESELECCIONAR
+          </button>
+        )}
+
         {viewMode !== 'LISTA' && (
           <button 
+            type="button"
             className="btn btn-secondary ml-auto" 
             onClick={() => { setViewMode('LISTA'); setSelectedId(null); setFormData(estadoInicial); }}
           >
@@ -261,6 +328,7 @@ const Vouchers = () => {
                   <th style={{ width: '130px' }}>Monto Total</th>
                   <th style={{ width: '140px' }}>Saldo Disponible</th>
                   <th style={{ width: '160px' }}>Fecha Transferencia</th>
+                  <th style={{ width: '110px' }} className="text-center">Acciones</th>
                 </tr>
               </thead>
               <tbody>
@@ -293,12 +361,45 @@ const Vouchers = () => {
                         </span>
                       </td>
                       <td>{v.fecha_transferencia || '-'}</td>
+                      <td className="text-center" onClick={(e) => e.stopPropagation()}>
+                        <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                          <button 
+                            type="button" 
+                            className="btn btn-warning" 
+                            style={{ padding: '4px 8px', fontSize: '13px' }} 
+                            title="Modificar Voucher"
+                            onClick={() => {
+                              setSelectedId(v.id_voucher);
+                              setFormData({
+                                banco_id: v.banco_id || null,
+                                id_importador: v.id_importador || null,
+                                numero_operacion: v.numero_operacion || '',
+                                monto_total: v.monto_total || '',
+                                moneda: v.moneda || 'USD',
+                                fecha_transferencia: v.fecha_transferencia || ''
+                              });
+                              setViewMode('MODIFICAR');
+                            }}
+                          >
+                            ✏️
+                          </button>
+                          <button 
+                            type="button" 
+                            className="btn btn-danger" 
+                            style={{ padding: '4px 8px', fontSize: '13px' }} 
+                            title="Eliminar Voucher"
+                            onClick={() => abrirModalEliminar(v)}
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   );
                 })}
                 {vouchers.length === 0 && !isLoading && (
                   <tr>
-                    <td colSpan="8" className="text-center text-muted">No hay registros disponibles.</td>
+                    <td colSpan="9" className="text-center text-muted">No hay registros disponibles.</td>
                   </tr>
                 )}
               </tbody>
@@ -403,6 +504,77 @@ const Vouchers = () => {
             </div>
           )}
         </form>
+      )}
+
+      {/* ======================= MODAL CONFIRMAR ELIMINACIÓN ======================= */}
+      {voucherAEliminar && (
+        <div className="modal-overlay" onClick={cerrarModalEliminar}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px' }}>
+            <div className="modal-header">
+              <h3 className="modal-title" style={{ color: 'var(--danger-dark)' }}>
+                🗑️ Confirmar Eliminación de Voucher
+              </h3>
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                onClick={cerrarModalEliminar} 
+                style={{ padding: '4px 10px' }}
+                disabled={isEliminando}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ marginBottom: '16px' }}>
+              <p style={{ margin: '0 0 10px 0', fontSize: '14px', color: 'var(--text-main)' }}>
+                ¿Está seguro de que desea eliminar el voucher <strong>N° {voucherAEliminar.numero_operacion}</strong>?
+              </p>
+              <div style={{ backgroundColor: 'var(--bg-body)', padding: '12px', borderRadius: '6px', fontSize: '13px', lineHeight: '1.6' }}>
+                <div><strong>ID:</strong> #{voucherAEliminar.id_voucher}</div>
+                <div><strong>Banco:</strong> {opcionesBancos.find(b => b.value === voucherAEliminar.banco_id)?.label || 'Desconocido'}</div>
+                <div><strong>Monto Total:</strong> {voucherAEliminar.moneda} {parseFloat(voucherAEliminar.monto_total).toFixed(2)}</div>
+                <div><strong>Saldo Disponible:</strong> {voucherAEliminar.moneda} {parseFloat(voucherAEliminar.saldo_disponible).toFixed(2)}</div>
+              </div>
+            </div>
+
+            <div>
+              <label className="label-text">
+                Motivo de Eliminación * 
+                <span style={{ fontSize: '12px', marginLeft: '6px', color: motivoEliminacion.trim().length >= 10 ? 'var(--success)' : 'var(--danger)' }}>
+                  ({motivoEliminacion.trim().length}/10 caracteres requeridos)
+                </span>
+              </label>
+              <textarea 
+                className="form-input" 
+                rows="3" 
+                placeholder="Indique el motivo de la eliminación (mínimo 10 caracteres)..."
+                value={motivoEliminacion}
+                onChange={(e) => setMotivoEliminacion(e.target.value)}
+                disabled={isEliminando}
+                autoFocus
+              />
+            </div>
+
+            <div className="modal-footer">
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                onClick={cerrarModalEliminar} 
+                disabled={isEliminando}
+              >
+                CANCELAR
+              </button>
+              <button 
+                type="button" 
+                className="btn btn-danger" 
+                onClick={confirmarEliminacion} 
+                disabled={motivoEliminacion.trim().length < 10 || isEliminando}
+              >
+                {isEliminando ? 'Eliminando...' : '🗑️ CONFIRMAR ELIMINACIÓN'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
