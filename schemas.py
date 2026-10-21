@@ -152,6 +152,7 @@ class VoucherBancarioCreate(VoucherBancarioBase):
 
 class VoucherBancarioUpdate(BaseModel):
     banco_id: int | None = None
+    id_importador: int | None = None
     numero_operacion: str | None = None
     monto_total: Decimal | None = None
     saldo_disponible: Decimal | None = None

@@ -155,11 +155,11 @@ const Dams = () => {
     }
 
     const maestroRelacionado = maestros.find(m => m.id_maestro === formData.id_maestro);
-    const esProvisional = maestroRelacionado?.tipo_valor === 'PROVISIONAL';
+    const esGarantizado = maestroRelacionado?.tipo_valor === 'GARANTIZADO' || maestroRelacionado?.tipo_valor === 'PROVISIONAL';
 
-    if (esProvisional && (!formData.monto_valor_provisional_usd || parseFloat(formData.monto_valor_provisional_usd) <= 0)) {
+    if (esGarantizado && (!formData.monto_valor_provisional_usd || parseFloat(formData.monto_valor_provisional_usd) <= 0)) {
       setMensaje({
-        texto: '❌ REGLA DE NEGOCIO: Si el Embarque es PROVISIONAL, el Monto de Valor Provisional debe ser mayor a 0 USD.',
+        texto: '❌ REGLA DE NEGOCIO: Si el Embarque es GARANTIZADO, el Monto de Valor Garantizado debe ser mayor a 0 USD.',
         tipo: 'error'
       });
       return;
@@ -196,7 +196,7 @@ const Dams = () => {
 
   const isReadOnly = viewMode === 'CONSULTAR';
   const selectedParentMaestro = maestros.find(m => m.id_maestro === formData.id_maestro);
-  const isParentProvisional = selectedParentMaestro?.tipo_valor === 'PROVISIONAL';
+  const isParentGarantizado = selectedParentMaestro?.tipo_valor === 'GARANTIZADO' || selectedParentMaestro?.tipo_valor === 'PROVISIONAL';
 
   return (
     <div className="page-container">
@@ -270,7 +270,7 @@ const Dams = () => {
                   <th style={{ width: '180px' }}>Nº DAM</th>
                   <th style={{ width: '80px' }}>Serie</th>
                   <th style={{ width: '130px' }}>Canal Control</th>
-                  <th style={{ width: '150px' }}>Monto Prov. (USD)</th>
+                  <th style={{ width: '170px' }}>Monto Valor Provisional (USD)</th>
                   <th style={{ width: '130px' }}>Aforo Físico</th>
                   <th>Factura Relacionada</th>
                   <th style={{ width: '150px' }}>Contenedor</th>
@@ -374,9 +374,9 @@ const Dams = () => {
               </div>
             )}
 
-            {isParentProvisional && (
+            {isParentGarantizado && (
               <div className="alert alert-warning mt-3">
-                ⚠️ El Maestro asociado es de Tipo Valor "PROVISIONAL". 
+                ⚠️ El Maestro asociado es de Tipo Valor "GARANTIZADO". 
                 El campo "Monto Valor Provisional" es OBLIGATORIO y debe ser mayor a $0 USD.
               </div>
             )}
@@ -425,7 +425,7 @@ const Dams = () => {
               </select>
             </div>
             <div>
-              <label className="label-text">Monto Valor Provisional (USD) {isParentProvisional && '*'}</label>
+              <label className="label-text">Monto Valor Provisional (USD) {isParentGarantizado && '*'}</label>
               <input 
                 type="number" 
                 step="0.01" 

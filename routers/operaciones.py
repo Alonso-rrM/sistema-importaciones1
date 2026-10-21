@@ -18,17 +18,18 @@ def validar_dam_definitiva(dam: schemas.DetalleDamCreate):
     dam.monto_valor_provisional_usd = None
     return dam
 
-def validar_dam_provisional(dam: schemas.DetalleDamCreate):
+def validar_dam_garantizada(dam: schemas.DetalleDamCreate):
     if not dam.monto_valor_provisional_usd or dam.monto_valor_provisional_usd <= Decimal('0'):
         raise HTTPException(
             status_code=400, 
-            detail="Operación rechazada. Como el Maestro es 'PROVISIONAL', el campo 'monto_valor_provisional_usd' es obligatorio y debe ser mayor a 0."
+            detail="Operación rechazada. Como el Maestro es 'GARANTIZADO', el monto de valor garantizado es obligatorio y debe ser mayor a 0."
         )
     return dam
 
 ESTRATEGIAS_VALIDACION_DAM = {
     "DEFINITIVO": validar_dam_definitiva,
-    "PROVISIONAL": validar_dam_provisional
+    "GARANTIZADO": validar_dam_garantizada,
+    "PROVISIONAL": validar_dam_garantizada  # Retrocompatibilidad
 }
 
 # ==========================================

@@ -290,6 +290,52 @@ def listar_vouchers(
         "data": data
     }
 
+@router.put("/vouchers/{id_voucher}", response_model=schemas.VoucherBancarioResponse)
+def actualizar_voucher(
+    id_voucher: int, 
+    voucher_editado: schemas.VoucherBancarioUpdate, 
+    db: Session = Depends(get_db), 
+    current_user: models.Usuario = Depends(get_current_user)
+):
+    voucher = db.query(models.VoucherBancario).filter(models.VoucherBancario.id_voucher == id_voucher).first()
+    if not voucher:
+        raise HTTPException(status_code=404, detail="Voucher no encontrado")
+
+    update_data = voucher_editado.model_dump(exclude_unset=True)
+
+    # Verificación de integridad contable
+    tiene_pagos = voucher.monto_total != voucher.saldo_disponible
+
+    if tiene_pagos:
+        # Si ya tiene pagos aplicados, bloqueamos cambios que afecten liquidaciones
+        if "monto_total" in update_data and update_data["monto_total"] != voucher.monto_total:
+            raise HTTPException(
+                status_code=400, 
+                detail="❌ Bloqueo contable: No se puede modificar el monto total de un voucher que ya tiene pagos aplicados."
+            )
+        if "moneda" in update_data and update_data["moneda"] != voucher.moneda:
+            raise HTTPException(
+                status_code=400, 
+                detail="❌ Bloqueo contable: No se puede cambiar la moneda de un voucher con pagos aplicados."
+            )
+        if "id_importador" in update_data and update_data["id_importador"] != voucher.id_importador:
+            raise HTTPException(
+                status_code=400, 
+                detail="❌ Bloqueo contable: No se puede reasignar el importador de un voucher con pagos aplicados."
+            )
+    else:
+        # Si aún no tiene pagos y se actualiza el monto_total, actualizamos también el saldo disponible
+        if "monto_total" in update_data and update_data["monto_total"] is not None:
+            voucher.saldo_disponible = update_data["monto_total"]
+
+    for key, value in update_data.items():
+        if key != "saldo_disponible":
+            setattr(voucher, key, value)
+
+    db.commit()
+    db.refresh(voucher)
+    return voucher
+
 @router.delete("/vouchers/{id_voucher}")
 def eliminar_voucher(id_voucher: int, req: schemas.EliminacionRequest, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     voucher = db.query(models.VoucherBancario).filter(models.VoucherBancario.id_voucher == id_voucher).first()
@@ -299,10 +345,12 @@ def eliminar_voucher(id_voucher: int, req: schemas.EliminacionRequest, db: Sessi
     if voucher.monto_total != voucher.saldo_disponible:
         raise HTTPException(status_code=400, detail="❌ Bloqueo: No se puede eliminar el voucher porque ya tiene pagos amarrados (saldo disponible menor al total).")
 
-    datos = {c.name: getattr(voucher, c.name) for c in voucher.__table__.columns}
+    cols_respaldo = {c.name for c in models.VoucherEliminado.__table__.columns}
+    datos = {c.name: getattr(voucher, c.name) for c in voucher.__table__.columns if c.name in cols_respaldo}
     snapshot = {
         "Banco": voucher.banco_rel.nombre if voucher.banco_rel else "N/A",
-        "Numero Operacion": voucher.numero_operacion
+        "Numero Operacion": voucher.numero_operacion,
+        "Importador": voucher.importador_rel.razon_social if voucher.importador_rel else "N/A"
     }
     respaldo = models.VoucherEliminado(
         **datos,

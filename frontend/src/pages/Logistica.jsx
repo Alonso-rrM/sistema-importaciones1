@@ -272,12 +272,13 @@ const Logistica = () => {
               <thead>
                 <tr>
                   <th style={{ width: '80px' }}>ID</th>
-                  <th style={{ width: '180px' }}>Factura</th>
+                  <th style={{ width: '170px' }}>Factura</th>
                   <th>Doc. Transporte</th>
-                  <th style={{ width: '130px' }}>FOB (USD)</th>
-                  <th style={{ width: '130px' }}>Flete (USD)</th>
-                  <th style={{ width: '150px' }}>Llegada</th>
-                  <th style={{ width: '150px' }}>Levante</th>
+                  <th style={{ width: '120px' }}>FOB (USD)</th>
+                  <th style={{ width: '120px' }}>Flete (USD)</th>
+                  <th style={{ width: '130px' }}>Tipo Valor</th>
+                  <th style={{ width: '140px' }}>Llegada</th>
+                  <th style={{ width: '140px' }}>Levante</th>
                 </tr>
               </thead>
               <tbody>
@@ -297,6 +298,11 @@ const Logistica = () => {
                     <td>${m.fob_usd || '0.00'}</td>
                     <td>${m.flete_usd || '0.00'}</td>
                     <td>
+                      <span className={`badge ${m.tipo_valor === 'GARANTIZADO' ? 'badge-warning' : 'badge-info'}`}>
+                        {m.tipo_valor || 'DEFINITIVO'}
+                      </span>
+                    </td>
+                    <td>
                       <span className="badge badge-warning">{m.status_llegada}</span>
                     </td>
                     <td>
@@ -308,7 +314,7 @@ const Logistica = () => {
                 ))}
                 {maestros.length === 0 && !isLoading && (
                   <tr>
-                    <td colSpan="7" className="text-center text-muted">No hay registros disponibles.</td>
+                    <td colSpan="8" className="text-center text-muted">No hay registros disponibles.</td>
                   </tr>
                 )}
               </tbody>
@@ -370,7 +376,7 @@ const Logistica = () => {
               <label className="label-text">Tipo Valor</label>
               <select name="tipo_valor" value={formData.tipo_valor} onChange={handleChangeTexto} disabled={isReadOnly} className="form-input">
                 <option value="DEFINITIVO">DEFINITIVO</option>
-                <option value="PROVISIONAL">PROVISIONAL</option>
+                <option value="GARANTIZADO">GARANTIZADO</option>
               </select>
             </div>
             <div>

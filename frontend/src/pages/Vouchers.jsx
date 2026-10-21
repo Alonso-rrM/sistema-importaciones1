@@ -98,8 +98,17 @@ const Vouchers = () => {
     }
   };
 
+  const selectedVoucher = vouchers.find(v => v.id_voucher === selectedId);
+  const tienePagos = selectedVoucher ? parseFloat(selectedVoucher.monto_total) !== parseFloat(selectedVoucher.saldo_disponible) : false;
+
   const handleEliminar = async () => {
     if (!selectedId) return;
+
+    if (tienePagos) {
+      alert("❌ Operación Denegada: Este voucher ya tiene pagos amortizados. Para poder eliminarlo, primero debe anular los pagos asociados en el módulo de Pagos.");
+      return;
+    }
+
     const motivo = window.prompt("Ingrese el motivo de eliminación (Mín. 10 caracteres):");
     if (!motivo || motivo.trim().length < 10) {
       alert("Acción bloqueada: Debe ingresar un motivo válido de al menos 10 caracteres.");
@@ -150,8 +159,8 @@ const Vouchers = () => {
         await api.post('/vouchers/', payload);
         setMensaje({ texto: '✅ Voucher registrado exitosamente.', tipo: 'exito' });
       } else if (viewMode === 'MODIFICAR') {
-        setMensaje({ texto: '❌ La modificación directa de vouchers no está soportada todavía.', tipo: 'error' });
-        return;
+        await api.put(`/vouchers/${selectedId}`, payload);
+        setMensaje({ texto: '✅ Voucher actualizado exitosamente.', tipo: 'exito' });
       }
       
       cargarVouchers();
@@ -311,6 +320,14 @@ const Vouchers = () => {
             {viewMode === 'NUEVO' ? '✨ Crear Nuevo Voucher Bancario' : viewMode === 'MODIFICAR' ? '✏️ Modificar Voucher' : '👁️ Consultar Voucher'}
           </h3>
 
+          {viewMode === 'MODIFICAR' && tienePagos && (
+            <div className="alert alert-warning mb-3">
+              🔒 <strong>Voucher con Pagos Aplicados:</strong> Este voucher ya fue aplicado a liquidaciones de gastos. 
+              Por integridad contable, el <strong>Monto Total</strong>, la <strong>Moneda</strong> y la <strong>Empresa Importadora</strong> están bloqueados. 
+              Solo puede modificar el Banco, N° de Operación y Fecha.
+            </div>
+          )}
+
           <div className="form-grid">
             <div>
               <label className="label-text">Banco *</label>
@@ -329,7 +346,7 @@ const Vouchers = () => {
                 options={opcionesImportadores} 
                 value={opcionesImportadores.find(o => o.value === formData.id_importador) || null} 
                 onChange={op => setFormData({ ...formData, id_importador: op ? op.value : null })} 
-                isDisabled={isReadOnly}
+                isDisabled={isReadOnly || (viewMode === 'MODIFICAR' && tienePagos)}
                 isClearable 
                 placeholder="Seleccione la empresa importadora..."
               />
@@ -339,12 +356,27 @@ const Vouchers = () => {
               <input type="text" name="numero_operacion" value={formData.numero_operacion} onChange={handleChangeTexto} required disabled={isReadOnly} className="form-input" />
             </div>
             <div>
-              <label className="label-text">Monto Total *</label>
-              <input type="number" step="0.01" name="monto_total" value={formData.monto_total} onChange={handleChangeTexto} required disabled={isReadOnly} className="form-input font-bold" />
+              <label className="label-text">Monto Total * {viewMode === 'MODIFICAR' && tienePagos && '(Bloqueado por pagos)'}</label>
+              <input 
+                type="number" 
+                step="0.01" 
+                name="monto_total" 
+                value={formData.monto_total} 
+                onChange={handleChangeTexto} 
+                required 
+                disabled={isReadOnly || (viewMode === 'MODIFICAR' && tienePagos)} 
+                className="form-input font-bold" 
+              />
             </div>
             <div>
-              <label className="label-text">Moneda *</label>
-              <select name="moneda" value={formData.moneda} onChange={handleChangeTexto} disabled={isReadOnly} className="form-input font-bold">
+              <label className="label-text">Moneda * {viewMode === 'MODIFICAR' && tienePagos && '(Bloqueado por pagos)'}</label>
+              <select 
+                name="moneda" 
+                value={formData.moneda} 
+                onChange={handleChangeTexto} 
+                disabled={isReadOnly || (viewMode === 'MODIFICAR' && tienePagos)} 
+                className="form-input font-bold"
+              >
                 <option value="USD">USD</option>
                 <option value="PEN">PEN</option>
               </select>

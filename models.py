@@ -346,6 +346,7 @@ class VoucherEliminado(Base, AuditoriaMixin):
 
     id_voucher = Column(Integer)
     banco_id = Column(Integer)
+    id_importador = Column(Integer)
     numero_operacion = Column(String(100))
     monto_total = Column(Numeric(15, 2))
     saldo_disponible = Column(Numeric(15, 2))
