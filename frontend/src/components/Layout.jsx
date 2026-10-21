@@ -1,106 +1,100 @@
-import { Outlet, Link, useNavigate } from 'react-router-dom'
+import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 
 function Layout() {
     const navigate = useNavigate()
 
     const cerrarSesion = () => {
         localStorage.removeItem('token')
-        navigate('/login') // Lo botamos de vuelta al Login
+        navigate('/login')
     }
 
-    return (
-        <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'sans-serif', backgroundColor: '#f4f6f7' }}>
+    const getNavClass = ({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')
 
+    return (
+        <div className="app-layout">
             {/* BARRA LATERAL (Sidebar) */}
-            <div style={{ width: '250px', backgroundColor: '#2c3e50', color: 'white', display: 'flex', flexDirection: 'column' }}>
-                <div style={{ padding: '20px', fontSize: '20px', fontWeight: 'bold', borderBottom: '1px solid #34495e', textAlign: 'center' }}>
+            <aside className="sidebar">
+                <div className="sidebar-brand">
                     🏢 ERP Admin
                 </div>
 
-                {/* Menú de Navegación Operativa */}
-                <nav style={{ display: 'flex', flexDirection: 'column', padding: '20px 0' }}>
-
-                    <div style={{ color: '#7f8c8d', fontSize: '12px', padding: '10px 20px', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                {/* Menú de Navegación */}
+                <nav className="sidebar-nav">
+                    <div className="nav-section-title">
                         Operaciones
                     </div>
-                    <Link to="/app/logistica" style={{ color: 'white', textDecoration: 'none', padding: '12px 20px', borderBottom: '1px solid #34495e', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <NavLink to="/app/logistica" className={getNavClass}>
                         📦 Logística y Maestros
-                    </Link>
-                    <Link to="/app/dams" style={{ color: 'white', textDecoration: 'none', padding: '12px 20px', borderBottom: '1px solid #34495e', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    </NavLink>
+                    <NavLink to="/app/dams" className={getNavClass}>
                         📑 Declaraciones (DAMs)
-                    </Link>
+                    </NavLink>
 
-                    <div style={{ color: '#7f8c8d', fontSize: '12px', padding: '20px 20px 10px 20px', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                    <div className="nav-section-title">
                         Catálogos Maestros
                     </div>
-                    <Link to="/app/importadores" style={{ color: 'white', textDecoration: 'none', padding: '12px 20px', borderBottom: '1px solid #34495e', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <NavLink to="/app/importadores" className={getNavClass}>
                         🏢 Importadores
-                    </Link>
-                    <Link to="/app/proveedores" style={{ color: 'white', textDecoration: 'none', padding: '12px 20px', borderBottom: '1px solid #34495e', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    </NavLink>
+                    <NavLink to="/app/proveedores" className={getNavClass}>
                         🤝 Proveedores
-                    </Link>
-                    <Link to="/app/agentes" style={{ color: 'white', textDecoration: 'none', padding: '12px 20px', borderBottom: '1px solid #34495e', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    </NavLink>
+                    <NavLink to="/app/agentes" className={getNavClass}>
                         🛃 Agentes de Aduanas
-                    </Link>
-                    <Link to="/app/almacenes" style={{ color: 'white', textDecoration: 'none', padding: '12px 20px', borderBottom: '1px solid #34495e', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    </NavLink>
+                    <NavLink to="/app/almacenes" className={getNavClass}>
                         🏭 Almacenes
-                    </Link>
-
-                    <Link to="/app/conceptos" style={{ color: 'white', textDecoration: 'none', padding: '12px 20px', borderBottom: '1px solid #34495e', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    </NavLink>
+                    <NavLink to="/app/conceptos" className={getNavClass}>
                         🏷️ Conceptos de Gasto
-                    </Link>
-                    <Link to="/app/comprobantes" style={{ color: 'white', textDecoration: 'none', padding: '12px 20px', borderBottom: '1px solid #34495e', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    </NavLink>
+                    <NavLink to="/app/comprobantes" className={getNavClass}>
                         📄 Tipos de Comprobante
-                    </Link>
-                    <Link to="/app/bancos" style={{ color: 'white', textDecoration: 'none', padding: '12px 20px', borderBottom: '1px solid #34495e', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    </NavLink>
+                    <NavLink to="/app/bancos" className={getNavClass}>
                         🏦 Bancos y Cuentas
-                    </Link>
+                    </NavLink>
 
-                    <div style={{ color: '#7f8c8d', fontSize: '12px', padding: '20px 20px 10px 20px', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                    <div className="nav-section-title">
                         Finanzas
                     </div>
-                    <Link to="/app/vouchers" style={{ color: 'white', textDecoration: 'none', padding: '12px 20px', borderBottom: '1px solid #34495e', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <NavLink to="/app/vouchers" className={getNavClass}>
                         🎟️ Vouchers Bancarios
-                    </Link>
-                    <Link to="/app/gastos" style={{ color: 'white', textDecoration: 'none', padding: '12px 20px', borderBottom: '1px solid #34495e', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    </NavLink>
+                    <NavLink to="/app/gastos" className={getNavClass}>
                         💸 Registro de Gastos
-                    </Link>
-                    <Link to="/app/pagos" style={{ color: 'white', textDecoration: 'none', padding: '12px 20px', borderBottom: '1px solid #34495e', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    </NavLink>
+                    <NavLink to="/app/pagos" className={getNavClass}>
                         🏦 Liquidación de Pagos
-                    </Link>
+                    </NavLink>
 
-
-                    <div style={{ color: '#7f8c8d', fontSize: '12px', padding: '20px 20px 10px 20px', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                    <div className="nav-section-title">
                         Seguridad y Control
                     </div>
-                    <Link to="/app/auditoria" style={{ color: 'white', textDecoration: 'none', padding: '12px 20px', borderBottom: '1px solid #34495e', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <NavLink to="/app/auditoria" className={getNavClass}>
                         🛡️ Auditoría (Eliminados)
-                    </Link>
-
+                    </NavLink>
                 </nav>
 
-                {/* Botón de salida empujado al fondo */}
-                <div style={{ marginTop: 'auto', padding: '20px' }}>
-                    <button onClick={cerrarSesion} style={{ width: '100%', padding: '10px', backgroundColor: '#e74c3c', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}>
+                {/* Botón de salida */}
+                <div className="sidebar-footer">
+                    <button onClick={cerrarSesion} className="btn btn-danger btn-block">
                         Cerrar Sesión
                     </button>
                 </div>
-            </div>
+            </aside>
 
             {/* ÁREA CENTRAL DE TRABAJO */}
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-
+            <div className="main-wrapper">
                 {/* Cabecera Superior (Topbar) */}
-                <header style={{ backgroundColor: 'white', height: '60px', borderBottom: '1px solid #e0e0e0', display: 'flex', alignItems: 'center', padding: '0 20px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-                    <h3 style={{ margin: 0, color: '#34495e' }}>Panel de Operaciones</h3>
+                <header className="topbar">
+                    <h3 className="topbar-title">Panel de Operaciones</h3>
                 </header>
 
-                {/* CONTENIDO DINÁMICO (Aquí ocurre la magia) */}
-                <main style={{ padding: '20px', flex: 1, overflowY: 'auto' }}>
-                    {/* Este <Outlet /> es el "agujero" donde React insertará las pantallas de Logística, Proveedores o Bancos según donde haga clic el usuario */}
+                {/* CONTENIDO DINÁMICO */}
+                <main className="main-content">
                     <Outlet />
                 </main>
-
             </div>
         </div>
     )

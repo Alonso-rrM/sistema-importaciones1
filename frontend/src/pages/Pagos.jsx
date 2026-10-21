@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import api from '../services/api';
 import Select from 'react-select';
 import Paginador from '../components/Paginador';
@@ -213,17 +213,19 @@ const Pagos = () => {
   const gastoFinancieroCálculo = form.pago_moneda_cruzada ? Math.max(0, montoOrigenNum - importeConvertido) : 0;
 
   return (
-    <div style={{ padding: '20px', fontFamily: 'Arial, sans-serif' }}>
-      <h2 style={{ color: '#2c3e50', borderBottom: '2px solid #8e44ad', paddingBottom: '10px' }}>Liquidación de Pagos (Gastos Pendientes)</h2>
+    <div className="page-container">
+      <h2 className="page-title" style={{ borderBottomColor: 'var(--purple)' }}>
+        Liquidación de Pagos (Gastos Pendientes)
+      </h2>
 
       {mensaje.texto && (
-        <div style={{ padding: '15px', marginBottom: '20px', borderRadius: '5px', backgroundColor: mensaje.tipo === 'error' ? '#f8d7da' : '#d4edda', color: mensaje.tipo === 'error' ? '#721c24' : '#155724', fontWeight: 'bold' }}>
+        <div className={`alert ${mensaje.tipo === 'error' ? 'alert-error' : 'alert-success'}`}>
           {mensaje.texto}
         </div>
       )}
 
       {/* SEARCH BAR CON RESET A PÁGINA 1 */}
-      <div style={{ marginBottom: '20px', display: 'flex', gap: '10px', alignItems: 'center' }}>
+      <div className="toolbar">
         <input 
           type="search" 
           placeholder="Buscar por DAM, Factura, Importador, Documento..." 
@@ -232,89 +234,96 @@ const Pagos = () => {
             setSearchTerm(e.target.value);
             setPage(1);
           }}
-          style={{ padding: '10px', width: '100%', maxWidth: '500px', borderRadius: '5px', border: '1px solid #ccc' }}
+          className="form-input"
+          style={{ maxWidth: '500px' }}
         />
-        {isLoading && <span style={{ color: '#7f8c8d', fontSize: '13px' }}>Buscando...</span>}
+        {isLoading && <span className="text-muted" style={{ fontSize: '13px' }}>Buscando...</span>}
       </div>
 
       {/* TABLA DE GASTOS */}
-      <div style={{ overflowX: 'auto', backgroundColor: '#fff', border: '1px solid #ddd', borderRadius: '8px' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr style={{ backgroundColor: '#ecf0f1', textAlign: 'left' }}>
-              <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>ID Gasto</th>
-              <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>DAM</th>
-              <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>Importador</th>
-              <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>Estado</th>
-              <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>Deuda Orig.</th>
-              <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>Saldo Rest.</th>
-              <th style={{ padding: '12px', borderBottom: '2px solid #ddd', textAlign: 'center' }}>Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {gastos.map(g => {
-              const saldoMostrar = g.saldo_pendiente !== undefined && g.saldo_pendiente !== null
-                ? parseFloat(g.saldo_pendiente)
-                : parseFloat(g.monto_original);
+      <div className="card">
+        <div className="table-container">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th style={{ width: '80px' }}>ID Gasto</th>
+                <th style={{ width: '160px' }}>DAM</th>
+                <th>Importador</th>
+                <th style={{ width: '130px' }}>Estado</th>
+                <th style={{ width: '130px' }}>Deuda Orig.</th>
+                <th style={{ width: '130px' }}>Saldo Rest.</th>
+                <th style={{ width: '140px', textAlign: 'center' }}>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {gastos.map(g => {
+                const saldoMostrar = g.saldo_pendiente !== undefined && g.saldo_pendiente !== null
+                  ? parseFloat(g.saldo_pendiente)
+                  : parseFloat(g.monto_original);
 
-              return (
-                <tr key={g.id_gasto} style={{ borderBottom: '1px solid #eee' }}>
-                  <td style={{ padding: '12px' }}>{g.id_gasto}</td>
-                  <td style={{ padding: '12px' }}>{g.dam_numero || 'N/A'}</td>
-                  <td style={{ padding: '12px', fontWeight: 'bold' }}>{g.importador_nombre || 'Desconocido'}</td>
-                  <td style={{ padding: '12px' }}>
-                    <span style={{ 
-                      backgroundColor: g.estado_pago === 'PENDIENTE' ? '#e67e22' : '#f39c12', 
-                      color: 'white', 
-                      padding: '4px 8px', 
-                      borderRadius: '4px', 
-                      fontSize: '12px', 
-                      fontWeight: 'bold' 
-                    }}>
-                      {g.estado_pago}
-                    </span>
-                  </td>
-                  <td style={{ padding: '12px' }}>{g.moneda === 'PEN' ? 'S/' : '$'} {parseFloat(g.monto_original).toFixed(2)}</td>
-                  <td style={{ padding: '12px', color: '#c0392b', fontWeight: 'bold' }}>
-                    {g.moneda === 'PEN' ? 'S/' : '$'} {saldoMostrar.toFixed(2)}
-                  </td>
-                  <td style={{ padding: '12px', textAlign: 'center' }}>
-                    <button 
-                      onClick={() => openModal(g)}
-                      style={{ backgroundColor: '#2ecc71', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
-                    >
-                      💸 Aplicar Pago
-                    </button>
-                  </td>
+                return (
+                  <tr key={g.id_gasto}>
+                    <td>{g.id_gasto}</td>
+                    <td>{g.dam_numero || 'N/A'}</td>
+                    <td className="font-bold">
+                      <span className="truncate-text" title={g.importador_nombre || 'Desconocido'}>
+                        {g.importador_nombre || 'Desconocido'}
+                      </span>
+                    </td>
+                    <td>
+                      <span className="badge badge-warning">
+                        {g.estado_pago}
+                      </span>
+                    </td>
+                    <td>{g.moneda === 'PEN' ? 'S/' : '$'} {parseFloat(g.monto_original).toFixed(2)}</td>
+                    <td className="font-bold" style={{ color: 'var(--danger-dark)' }}>
+                      {g.moneda === 'PEN' ? 'S/' : '$'} {saldoMostrar.toFixed(2)}
+                    </td>
+                    <td style={{ textAlign: 'center' }}>
+                      <button 
+                        onClick={() => openModal(g)}
+                        className="btn btn-success"
+                        style={{ padding: '6px 12px', fontSize: '12px' }}
+                      >
+                        💸 Aplicar Pago
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+              {gastos.length === 0 && !isLoading && (
+                <tr>
+                  <td colSpan="7" className="text-center text-muted">No hay gastos pendientes encontrados.</td>
                 </tr>
-              );
-            })}
-            {gastos.length === 0 && !isLoading && (
-              <tr><td colSpan="7" style={{ padding: '20px', textAlign: 'center', color: '#7f8c8d' }}>No hay gastos pendientes encontrados.</td></tr>
-            )}
-          </tbody>
-        </table>
+              )}
+            </tbody>
+          </table>
 
-        {/* COMPONENTE PAGINADOR */}
-        <Paginador 
-          page={page} 
-          totalPages={totalPages} 
-          setPage={setPage} 
-          limit={limit} 
-          setLimit={setLimit} 
-          totalRegistros={totalRegistros} 
-        />
+          <Paginador 
+            page={page} 
+            totalPages={totalPages} 
+            setPage={setPage} 
+            limit={limit} 
+            setLimit={setLimit} 
+            totalRegistros={totalRegistros} 
+          />
+        </div>
       </div>
 
       {/* MODAL DE PAGO */}
       {isModalOpen && selectedGasto && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
-          <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '8px', width: '100%', maxWidth: '600px', maxHeight: '90vh', overflowY: 'auto' }}>
-            <h3 style={{ color: '#8e44ad', marginTop: 0, borderBottom: '1px solid #eee', paddingBottom: '10px' }}>
-              Aplicar Pago a Gasto #{selectedGasto.id_gasto}
-            </h3>
+        <div className="modal-overlay" onClick={closeModal}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3 className="modal-title" style={{ color: 'var(--purple)' }}>
+                Aplicar Pago a Gasto #{selectedGasto.id_gasto}
+              </h3>
+              <button className="btn btn-secondary" onClick={closeModal} style={{ padding: '4px 10px' }}>
+                ✕
+              </button>
+            </div>
             
-            <div style={{ backgroundColor: '#f9f0fd', padding: '10px', borderRadius: '5px', marginBottom: '15px', color: '#68258c' }}>
+            <div className="alert alert-info">
               <strong>Importador:</strong> {selectedGasto.importador_nombre} <br/>
               <strong>Deuda Restante:</strong> {selectedGasto.moneda === 'PEN' ? 'S/' : '$'} {
                 (selectedGasto.saldo_pendiente !== undefined && selectedGasto.saldo_pendiente !== null
@@ -324,8 +333,8 @@ const Pagos = () => {
             </div>
 
             <form onSubmit={registrarPago}>
-              <div style={{ marginBottom: '15px' }}>
-                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Voucher Bancario (Saldo Disponible)</label>
+              <div className="mb-3">
+                <label className="label-text">Voucher Bancario (Saldo Disponible) *</label>
                 <Select
                   options={opcionesVouchers}
                   placeholder="Seleccione un voucher con saldo..."
@@ -336,32 +345,32 @@ const Pagos = () => {
                 />
               </div>
 
-              <div style={{ marginBottom: '15px' }}>
-                <label style={{ display: 'block', marginBottom: '5px' }}>Fecha de Pago:</label>
+              <div className="mb-3">
+                <label className="label-text">Fecha de Pago</label>
                 <input 
                   type="date" 
                   name="fecha_pago"
                   value={form.fecha_pago}
                   onChange={handleChangeTexto}
-                  style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
+                  className="form-input"
                 />
               </div>
 
-              <div style={{ display: 'flex', gap: '15px', marginBottom: '15px' }}>
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', marginBottom: '5px' }}>Moneda:</label>
+              <div className="form-grid mb-3">
+                <div>
+                  <label className="label-text">Moneda *</label>
                   <select 
                     name="moneda" 
                     value={form.moneda} 
                     onChange={handleChangeMoneda}
-                    style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
+                    className="form-input"
                   >
                     <option value="USD">Dólares (USD)</option>
                     <option value="PEN">Soles (PEN)</option>
                   </select>
                 </div>
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', marginBottom: '5px' }}>Tipo de Cambio:</label>
+                <div>
+                  <label className="label-text">Tipo de Cambio</label>
                   <input 
                     type="number" 
                     step="0.0001"
@@ -369,26 +378,27 @@ const Pagos = () => {
                     value={form.tipo_cambio}
                     onChange={handleChangeTexto}
                     disabled={form.moneda === 'USD'}
-                    style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ccc', backgroundColor: form.moneda === 'USD' ? '#f5f5f5' : 'white' }}
+                    className="form-input"
                   />
                 </div>
               </div>
 
-              <div style={{ marginBottom: '15px' }}>
-                <label style={{ display: 'block', marginBottom: '5px' }}>Importe Pagado (En Moneda del Gasto):</label>
+              <div className="mb-3">
+                <label className="label-text">Importe Pagado (En Moneda del Gasto) *</label>
                 <input 
                   type="number" 
                   step="0.01"
                   name="importe"
                   value={form.importe}
                   onChange={handleChangeTexto}
-                  style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ccc', fontWeight: 'bold' }}
+                  className="form-input font-bold"
+                  required
                 />
               </div>
 
               {/* SPRINT 1: Checkbox Moneda Cruzada */}
-              <div style={{ marginBottom: '15px', padding: '10px', backgroundColor: '#e8f8f5', borderRadius: '5px', border: '1px solid #a3e4d7' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 'bold', color: '#16a085', cursor: 'pointer' }}>
+              <div className="card mb-3" style={{ backgroundColor: 'var(--bg-hover)', borderLeft: '4px solid var(--success)' }}>
+                <label className="flex-row font-bold" style={{ cursor: 'pointer', color: 'var(--success-dark)' }}>
                   <input 
                     type="checkbox" 
                     name="pago_moneda_cruzada"
@@ -400,8 +410,8 @@ const Pagos = () => {
                 </label>
 
                 {form.pago_moneda_cruzada && (
-                  <div style={{ marginTop: '10px' }}>
-                    <label style={{ display: 'block', marginBottom: '5px', fontSize: '13px' }}>
+                  <div className="mt-2">
+                    <label className="label-text">
                       Débito Real en Voucher (Monto descontado por el Banco en su Moneda Origen):
                     </label>
                     <input 
@@ -411,27 +421,27 @@ const Pagos = () => {
                       value={form.monto_moneda_origen}
                       onChange={handleChangeTexto}
                       placeholder="Ej. 102.50"
-                      style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
+                      className="form-input"
                     />
-                    <small style={{ color: '#7f8c8d', display: 'block', marginTop: '5px' }}>
+                    <small className="text-muted mt-2" style={{ display: 'block' }}>
                       Gasto Financiero por TC Calculado: <strong>USD {gastoFinancieroCálculo.toFixed(2)}</strong>
                     </small>
                   </div>
                 )}
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
+              <div className="form-actions">
                 <button 
                   type="button" 
                   onClick={closeModal}
-                  style={{ padding: '10px 15px', border: 'none', borderRadius: '4px', backgroundColor: '#bdc3c7', cursor: 'pointer' }}
+                  className="btn btn-secondary"
                 >
                   Cancelar
                 </button>
                 <button 
                   type="submit" 
                   disabled={isSubmitting}
-                  style={{ padding: '10px 15px', border: 'none', borderRadius: '4px', backgroundColor: '#8e44ad', color: 'white', fontWeight: 'bold', cursor: isSubmitting ? 'not-allowed' : 'pointer' }}
+                  className="btn btn-purple"
                 >
                   {isSubmitting ? 'Procesando...' : 'Confirmar Pago'}
                 </button>
@@ -440,7 +450,6 @@ const Pagos = () => {
           </div>
         </div>
       )}
-
     </div>
   );
 };

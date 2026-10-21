@@ -6,7 +6,7 @@ function Login() {
     const [username, setUsername] = useState('')
     const [password, setPassword] = useState('')
     const [mensaje, setMensaje] = useState('')
-    const navigate = useNavigate() // El motor de teletransportación
+    const navigate = useNavigate()
 
     const iniciarSesion = async (e) => {
         e.preventDefault()
@@ -20,10 +20,7 @@ function Login() {
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
             })
 
-            // Guardamos la llave
             localStorage.setItem('token', respuesta.data.access_token)
-
-            // ¡Apertura exitosa! Teletransportamos al usuario al área corporativa
             navigate('/app/logistica')
 
         } catch (error) {
@@ -32,19 +29,37 @@ function Login() {
     }
 
     return (
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', backgroundColor: '#ecf0f1', fontFamily: 'sans-serif' }}>
-            <div style={{ background: 'white', padding: '40px', borderRadius: '8px', boxShadow: '0 4px 10px rgba(0,0,0,0.1)', width: '100%', maxWidth: '350px', textAlign: 'center' }}>
-                <h2 style={{ color: '#2c3e50', margin: '0 0 10px 0' }}>ERP Importaciones</h2>
-                <p style={{ color: '#7f8c8d', fontSize: '14px', marginBottom: '20px' }}>Acceso Restringido</p>
+        <div className="login-container">
+            <div className="login-card">
+                <h2>ERP Importaciones</h2>
+                <p className="text-muted mb-3">Acceso Restringido</p>
 
-                <form onSubmit={iniciarSesion} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                    <input type="text" placeholder="Usuario" value={username} onChange={(e) => setUsername(e.target.value)} required style={{ padding: '12px', borderRadius: '5px', border: '1px solid #bdc3c7' }} />
-                    <input type="password" placeholder="Contraseña" value={password} onChange={(e) => setPassword(e.target.value)} required style={{ padding: '12px', borderRadius: '5px', border: '1px solid #bdc3c7' }} />
-                    <button type="submit" style={{ padding: '12px', background: '#2980b9', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}>
+                <form onSubmit={iniciarSesion} className="form-stack">
+                    <input 
+                        type="text" 
+                        placeholder="Usuario" 
+                        value={username} 
+                        onChange={(e) => setUsername(e.target.value)} 
+                        required 
+                        className="form-input" 
+                    />
+                    <input 
+                        type="password" 
+                        placeholder="Contraseña" 
+                        value={password} 
+                        onChange={(e) => setPassword(e.target.value)} 
+                        required 
+                        className="form-input" 
+                    />
+                    <button type="submit" className="btn btn-primary btn-block">
                         INGRESAR
                     </button>
                 </form>
-                <p style={{ color: mensaje.includes('Denegado') ? '#e74c3c' : '#2980b9', marginTop: '15px', fontSize: '14px' }}>{mensaje}</p>
+                {mensaje && (
+                    <div className={`alert ${mensaje.includes('Denegado') ? 'alert-error' : 'alert-info'} mt-3`}>
+                        {mensaje}
+                    </div>
+                )}
             </div>
         </div>
     )

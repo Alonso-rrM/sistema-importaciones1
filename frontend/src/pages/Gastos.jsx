@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import Select from 'react-select';
@@ -220,76 +220,47 @@ const Gastos = () => {
   const selectedGastoObj = gastos.find(g => g.id_gasto === selectedId);
   const isGastoPagado = selectedGastoObj?.estado_pago === 'PAGADO';
 
-  // --- ESTILOS ---
-  const containerStyle = { padding: '20px', fontFamily: 'Arial, sans-serif' };
-  const commandBarStyle = { display: 'flex', gap: '10px', backgroundColor: '#f8f9fa', padding: '15px', borderRadius: '8px', border: '1px solid #ddd', marginBottom: '20px', alignItems: 'center' };
-  const getBtnStyle = (disabled, baseColor = '#27ae60') => ({
-    padding: '10px 20px',
-    backgroundColor: disabled ? '#bdc3c7' : baseColor,
-    color: 'white',
-    border: 'none',
-    borderRadius: '4px',
-    cursor: disabled ? 'not-allowed' : 'pointer',
-    fontWeight: 'bold',
-    transition: 'background-color 0.2s'
-  });
-  const inputStyle = { width: '100%', padding: '10px', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box', backgroundColor: isReadOnly ? '#f9f9f9' : '#fff', color: '#2c3e50' };
-  const labelStyle = { display: 'block', fontSize: '13px', fontWeight: 'bold', marginBottom: '5px', color: '#34495e' };
-  const gridStyle = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', marginBottom: '20px' };
-
-  // Estilos react-select
-  const selectStyles = {
-    control: (base, state) => ({
-      ...base,
-      backgroundColor: isReadOnly ? '#f9f9f9' : '#fff',
-      borderColor: state.isFocused ? '#3498db' : '#ccc',
-      boxShadow: state.isFocused ? '0 0 0 1px #3498db' : null,
-      '&:hover': {
-        borderColor: '#3498db'
-      }
-    }),
-    singleValue: (base) => ({
-      ...base,
-      color: '#2c3e50'
-    }),
-    input: (base) => ({
-      ...base,
-      color: '#2c3e50'
-    }),
-    placeholder: (base) => ({
-      ...base,
-      color: '#95a5a6'
-    }),
-    option: (base, state) => ({
-      ...base,
-      backgroundColor: state.isSelected 
-        ? '#3498db' 
-        : state.isFocused 
-          ? '#e8f4fd' 
-          : '#fff',
-      color: state.isSelected ? '#fff' : '#2c3e50',
-      '&:active': {
-        backgroundColor: '#3498db'
-      }
-    }),
-    menu: (base) => ({
-      ...base,
-      backgroundColor: '#fff',
-      zIndex: 9999
-    })
-  };
-
   return (
-    <div style={containerStyle}>
-      <h2 style={{ color: '#2c3e50', borderBottom: '2px solid #27ae60', paddingBottom: '10px' }}>Gastos Logísticos de Importación</h2>
+    <div className="page-container">
+      <h2 className="page-title">Gastos Logísticos de Importación</h2>
 
       {/* TOP COMMAND BAR */}
-      <div style={commandBarStyle}>
-        <button style={getBtnStyle(false, '#2ecc71')} onClick={() => { setViewMode('NUEVO'); setForm(estadoInicialForm); setSelectedId(null); }}>➕ NUEVO</button>
-        <button style={getBtnStyle(!selectedId || isGastoPagado, '#f39c12')} disabled={!selectedId || isGastoPagado} title={isGastoPagado ? "No se permite modificar gastos PAGADOS" : ""} onClick={() => setViewMode('MODIFICAR')}>✏️ MODIFICAR</button>
-        <button style={getBtnStyle(!selectedId, '#3498db')} disabled={!selectedId} onClick={() => setViewMode('CONSULTAR')}>👁️ CONSULTAR</button>
-        <button style={getBtnStyle(!selectedId, '#e74c3c')} disabled={!selectedId} onClick={handleEliminar}>🗑️ ELIMINAR</button>
-        <button style={getBtnStyle(!selectedId, '#8e44ad')} disabled={!selectedId} onClick={handleRegistrarPago}>🏦 REGISTRAR PAGO</button>
+      <div className="toolbar">
+        <button 
+          className="btn btn-success" 
+          onClick={() => { setViewMode('NUEVO'); setForm(estadoInicialForm); setSelectedId(null); }}
+        >
+          ➕ NUEVO
+        </button>
+        <button 
+          className="btn btn-warning" 
+          disabled={!selectedId || isGastoPagado} 
+          title={isGastoPagado ? "No se permite modificar gastos PAGADOS" : ""} 
+          onClick={() => setViewMode('MODIFICAR')}
+        >
+          ✏️ MODIFICAR
+        </button>
+        <button 
+          className="btn btn-primary" 
+          disabled={!selectedId} 
+          onClick={() => setViewMode('CONSULTAR')}
+        >
+          👁️ CONSULTAR
+        </button>
+        <button 
+          className="btn btn-danger" 
+          disabled={!selectedId} 
+          onClick={handleEliminar}
+        >
+          🗑️ ELIMINAR
+        </button>
+        <button 
+          className="btn btn-purple" 
+          disabled={!selectedId} 
+          onClick={handleRegistrarPago}
+        >
+          🏦 REGISTRAR PAGO
+        </button>
         
         <input 
           type="search" 
@@ -299,95 +270,112 @@ const Gastos = () => {
             setSearchTerm(e.target.value);
             setPage(1);
           }}
-          style={{ padding: '10px', marginLeft: 'auto', width: '320px', borderRadius: '5px', border: '1px solid #ccc' }}
+          className="toolbar-search"
         />
         
         {viewMode !== 'LISTA' && (
-          <button style={{ ...getBtnStyle(false, '#95a5a6'), marginLeft: '10px' }} onClick={() => { setViewMode('LISTA'); setSelectedId(null); setForm(estadoInicialForm); }}>⬅️ VOLVER A LISTA</button>
+          <button 
+            className="btn btn-secondary ml-auto" 
+            onClick={() => { setViewMode('LISTA'); setSelectedId(null); setForm(estadoInicialForm); }}
+          >
+            ⬅️ VOLVER A LISTA
+          </button>
         )}
       </div>
 
       {mensaje.texto && (
-        <div style={{ padding: '15px', marginBottom: '20px', borderRadius: '5px', backgroundColor: mensaje.tipo === 'error' ? '#f8d7da' : mensaje.tipo === 'exito' ? '#d4edda' : '#d1ecf1', color: mensaje.tipo === 'error' ? '#721c24' : mensaje.tipo === 'exito' ? '#155724' : '#0c5460', fontWeight: 'bold' }}>
+        <div className={`alert ${mensaje.tipo === 'error' ? 'alert-error' : mensaje.tipo === 'exito' ? 'alert-success' : 'alert-info'}`}>
           {mensaje.texto}
         </div>
       )}
 
       {viewMode === 'LISTA' ? (
         // ======================= VISTA: LISTA =======================
-        <div style={{ overflowX: 'auto', backgroundColor: '#fff', border: '1px solid #ddd', borderRadius: '8px' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ backgroundColor: '#ecf0f1', textAlign: 'left' }}>
-                <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>ID Gasto</th>
-                <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>Proveedor</th>
-                <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>Concepto</th>
-                <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>Documento</th>
-                <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>Monto</th>
-                <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>Moneda</th>
-                <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>Estado Pago</th>
-                <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>ID DAM</th>
-              </tr>
-            </thead>
-            <tbody>
-              {gastos.map((g) => {
-                const prov = opcionesProveedores.find(op => op.value === g.id_proveedor);
-                const conc = opcionesConceptos.find(c => c.value === g.id_concepto);
-                return (
-                  <tr 
-                    key={g.id_gasto} 
-                    onClick={() => handleRowClick(g)}
-                    style={{ backgroundColor: selectedId === g.id_gasto ? '#e8f8f5' : 'white', cursor: 'pointer', borderBottom: '1px solid #eee', transition: 'background-color 0.2s' }}
-                  >
-                    <td style={{ padding: '12px' }}>{g.id_gasto}</td>
-                    <td style={{ padding: '12px', fontWeight: 'bold' }}>{prov ? prov.label : `ID: ${g.id_proveedor}`}</td>
-                    <td style={{ padding: '12px' }}>{conc ? conc.label : `ID: ${g.id_concepto}`}</td>
-                    <td style={{ padding: '12px' }}>{g.numero_documento || 'Sin documento'}</td>
-                    <td style={{ padding: '12px', fontWeight: '500' }}>{parseFloat(g.monto_original).toFixed(2)}</td>
-                    <td style={{ padding: '12px', fontWeight: 'bold' }}>{g.moneda || 'USD'}</td>
-                    <td style={{ padding: '12px' }}>
-                      <span style={{ 
-                        padding: '4px 8px', 
-                        borderRadius: '4px', 
-                        backgroundColor: g.estado_pago === 'PAGADO' ? '#d4edda' : g.estado_pago === 'PENDIENTE' ? '#f8d7da' : '#fff3cd', 
-                        color: g.estado_pago === 'PAGADO' ? '#155724' : g.estado_pago === 'PENDIENTE' ? '#721c24' : '#856404', 
-                        fontWeight: 'bold', 
-                        fontSize: '12px' 
-                      }}>
-                        {g.estado_pago}
-                      </span>
-                    </td>
-                    <td style={{ padding: '12px' }}>{g.dam_numero || g.id_dam}</td>
+        <div className="card">
+          <div className="table-container">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th style={{ width: '80px' }}>ID Gasto</th>
+                  <th>Proveedor</th>
+                  <th>Concepto</th>
+                  <th style={{ width: '150px' }}>Documento</th>
+                  <th style={{ width: '120px' }}>Monto</th>
+                  <th style={{ width: '80px' }}>Moneda</th>
+                  <th style={{ width: '130px' }}>Estado Pago</th>
+                  <th style={{ width: '150px' }}>ID DAM</th>
+                </tr>
+              </thead>
+              <tbody>
+                {gastos.map((g) => {
+                  const prov = opcionesProveedores.find(op => op.value === g.id_proveedor);
+                  const conc = opcionesConceptos.find(c => c.value === g.id_concepto);
+                  return (
+                    <tr 
+                      key={g.id_gasto} 
+                      onClick={() => handleRowClick(g)}
+                      className={selectedId === g.id_gasto ? 'selected' : ''}
+                    >
+                      <td>{g.id_gasto}</td>
+                      <td className="font-bold">
+                        <span className="truncate-text" title={prov ? prov.label : `ID: ${g.id_proveedor}`}>
+                          {prov ? prov.label : `ID: ${g.id_proveedor}`}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="truncate-text" title={conc ? conc.label : `ID: ${g.id_concepto}`}>
+                          {conc ? conc.label : `ID: ${g.id_concepto}`}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="truncate-text" title={g.numero_documento || 'Sin documento'}>
+                          {g.numero_documento || 'Sin documento'}
+                        </span>
+                      </td>
+                      <td className="font-bold">{parseFloat(g.monto_original).toFixed(2)}</td>
+                      <td className="font-bold">{g.moneda || 'USD'}</td>
+                      <td>
+                        <span className={`badge ${
+                          g.estado_pago === 'PAGADO' ? 'badge-success' : 
+                          g.estado_pago === 'PENDIENTE' ? 'badge-danger' : 'badge-warning'
+                        }`}>
+                          {g.estado_pago}
+                        </span>
+                      </td>
+                      <td>{g.dam_numero || g.id_dam}</td>
+                    </tr>
+                  );
+                })}
+                {gastos.length === 0 && !isLoading && (
+                  <tr>
+                    <td colSpan="8" className="text-center text-muted">No hay registros disponibles.</td>
                   </tr>
-                );
-              })}
-              {gastos.length === 0 && !isLoading && (
-                <tr><td colSpan="8" style={{ padding: '20px', textAlign: 'center', color: '#7f8c8d' }}>No hay registros disponibles.</td></tr>
-              )}
-            </tbody>
-          </table>
-          <Paginador 
-            page={page} 
-            totalPages={totalPages} 
-            setPage={setPage} 
-            limit={limit} 
-            setLimit={setLimit} 
-            totalRegistros={totalRegistros} 
-          />
+                )}
+              </tbody>
+            </table>
+            <Paginador 
+              page={page} 
+              totalPages={totalPages} 
+              setPage={setPage} 
+              limit={limit} 
+              setLimit={setLimit} 
+              totalRegistros={totalRegistros} 
+            />
+          </div>
         </div>
       ) : (
         // ======================= VISTA: NUEVO / MODIFICAR / CONSULTAR =======================
-        <form onSubmit={handleGuardar} style={{ backgroundColor: '#fff', padding: '30px', borderRadius: '8px', border: '1px solid #ddd', boxShadow: '0 2px 10px rgba(0,0,0,0.05)' }}>
-          <h3 style={{ marginTop: 0, color: '#34495e', borderBottom: '1px solid #ecf0f1', paddingBottom: '10px', marginBottom: '20px' }}>
+        <form onSubmit={handleGuardar} className="card">
+          <h3 className="section-title">
             {viewMode === 'NUEVO' ? '✨ Registrar Nuevo Gasto Logístico' : viewMode === 'MODIFICAR' ? '✏️ Modificar Gasto Logístico' : '👁️ Consultar Detalles de Gasto'}
           </h3>
 
           {/* FASE A Y B: ENLACE ADUANERO */}
-          <div style={{ backgroundColor: '#f0f3f4', padding: '20px', borderRadius: '6px', marginBottom: '25px', borderLeft: '5px solid #3498db' }}>
-            <h4 style={{ marginTop: 0, color: '#2980b9', marginBottom: '15px' }}>1. Vincular a Operación Aduanera</h4>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-              <div style={{ zIndex: 11 }}>
-                <label style={labelStyle}>Factura Maestra (Embarque) *</label>
+          <div className="card mb-3" style={{ backgroundColor: 'var(--bg-hover)', borderLeft: '4px solid var(--primary)' }}>
+            <h4 style={{ color: 'var(--primary-dark)', marginBottom: '15px' }}>1. Vincular a Operación Aduanera</h4>
+            <div className="form-grid">
+              <div>
+                <label className="label-text">Factura Maestra (Embarque) *</label>
                 <Select 
                   options={opcionesMaestros} 
                   value={opcionesMaestros.find(op => op.value === form.id_maestro_temp) || null}
@@ -395,11 +383,10 @@ const Gastos = () => {
                   placeholder="Busca la factura principal..." 
                   isClearable 
                   isDisabled={isReadOnly}
-                  styles={selectStyles}
                 />
               </div>
-              <div style={{ zIndex: 10 }}>
-                <label style={labelStyle}>Declaración (DAM) Afectada *</label>
+              <div>
+                <label className="label-text">Declaración (DAM) Afectada *</label>
                 <Select 
                   options={opcionesDamsFiltradas} 
                   value={opcionesDamsFiltradas.find(op => op.value === form.id_dam) || null}
@@ -407,17 +394,16 @@ const Gastos = () => {
                   placeholder={form.id_maestro_temp ? "Selecciona la DAM..." : "Primero selecciona un Maestro"} 
                   isDisabled={!form.id_maestro_temp || isReadOnly}
                   isClearable 
-                  styles={selectStyles}
                 />
               </div>
             </div>
           </div>
 
           {/* FASE C: DETALLES DEL GASTO */}
-          <h4 style={{ color: '#27ae60', marginBottom: '15px' }}>2. Detalle del Comprobante</h4>
-          <div style={gridStyle}>
-            <div style={{ zIndex: 5 }}>
-              <label style={labelStyle}>Proveedor (Emisor) *</label>
+          <h4 style={{ color: 'var(--success-dark)', marginBottom: '15px' }}>2. Detalle del Comprobante</h4>
+          <div className="form-grid">
+            <div>
+              <label className="label-text">Proveedor (Emisor) *</label>
               <Select 
                 options={opcionesProveedores} 
                 value={opcionesProveedores.find(op => op.value === form.id_proveedor) || null} 
@@ -425,11 +411,10 @@ const Gastos = () => {
                 placeholder="Buscar proveedor..." 
                 isClearable 
                 isDisabled={isReadOnly}
-                styles={selectStyles} 
               />
             </div>
-            <div style={{ zIndex: 4 }}>
-              <label style={labelStyle}>Tipo de Comprobante *</label>
+            <div>
+              <label className="label-text">Tipo de Comprobante *</label>
               <Select 
                 options={opcionesTiposDoc} 
                 value={opcionesTiposDoc.find(op => op.value === form.id_tipo_doc) || null} 
@@ -437,23 +422,22 @@ const Gastos = () => {
                 placeholder="Factura, Recibo..." 
                 isClearable 
                 isDisabled={isReadOnly}
-                styles={selectStyles} 
               />
             </div>
             <div>
-              <label style={labelStyle}>N° Documento</label>
+              <label className="label-text">N° Documento</label>
               <input 
                 type="text" 
                 name="numero_documento" 
                 value={form.numero_documento} 
                 onChange={handleChangeTexto} 
-                style={inputStyle} 
+                className="form-input" 
                 placeholder="Ej: F001-123" 
                 disabled={isReadOnly}
               />
             </div>
-            <div style={{ zIndex: 3 }}>
-              <label style={labelStyle}>Concepto del Gasto *</label>
+            <div>
+              <label className="label-text">Concepto del Gasto *</label>
               <Select 
                 options={opcionesConceptos} 
                 value={opcionesConceptos.find(op => op.value === form.id_concepto) || null} 
@@ -461,91 +445,81 @@ const Gastos = () => {
                 placeholder="Flete, Almacenaje, Ajuste..." 
                 isClearable 
                 isDisabled={isReadOnly}
-                styles={selectStyles} 
               />
             </div>
             <div>
-              <label style={labelStyle}>Fecha Vencimiento</label>
+              <label className="label-text">Fecha Vencimiento</label>
               <input 
                 type="date" 
                 name="fecha_vencimiento" 
                 value={form.fecha_vencimiento} 
                 onChange={handleChangeTexto} 
-                style={inputStyle} 
+                className="form-input" 
                 disabled={isReadOnly}
               />
             </div>
             <div>
-              <label style={labelStyle}>Moneda *</label>
+              <label className="label-text">Moneda *</label>
               <select 
                 name="moneda" 
                 value={form.moneda} 
                 onChange={handleChangeTexto} 
                 required 
-                style={inputStyle} 
+                className="form-input" 
                 disabled={isReadOnly}
               >
                 <option value="USD">Dólares (USD)</option>
                 <option value="PEN">Soles (PEN)</option>
               </select>
             </div>
-            <div style={{ position: 'relative' }}>
-              <label style={labelStyle}>Monto Total *</label>
-              <span style={{ position: 'absolute', left: '12px', top: '38px', color: '#7f8c8d', fontWeight: 'bold' }}>{form.moneda === 'PEN' ? 'S/' : '$'}</span>
-              <input 
-                type="number" 
-                step="0.01" 
-                name="monto_original" 
-                value={form.monto_original} 
-                onChange={handleChangeTexto} 
-                required 
-                style={{ ...inputStyle, paddingLeft: '25px' }} 
-                placeholder="0.00" 
-                disabled={isReadOnly}
-              />
+            <div>
+              <label className="label-text">Monto Total *</label>
+              <div className="input-group">
+                <span className="input-prefix">{form.moneda === 'PEN' ? 'S/' : '$'}</span>
+                <input 
+                  type="number" 
+                  step="0.01" 
+                  name="monto_original" 
+                  value={form.monto_original} 
+                  onChange={handleChangeTexto} 
+                  required 
+                  className="form-input" 
+                  placeholder="0.00" 
+                  disabled={isReadOnly}
+                />
+              </div>
             </div>
           </div>
 
           {/* ACCIONES DEL FORMULARIO */}
-          <div style={{ marginTop: '35px', textAlign: 'right', borderTop: '1px solid #eee', paddingTop: '20px', display: 'flex', justifyContent: 'flex-end', gap: '15px' }}>
+          <div className="form-actions">
             {isReadOnly && (
               <button 
                 type="button" 
                 onClick={handleRegistrarPago}
-                style={{ 
-                  padding: '12px 30px', 
-                  backgroundColor: '#8e44ad', 
-                  color: 'white', 
-                  border: 'none', 
-                  borderRadius: '5px', 
-                  fontSize: '16px', 
-                  fontWeight: 'bold', 
-                  cursor: 'pointer', 
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)' 
-                }}
+                className="btn btn-purple"
               >
                 📑 REGISTRAR PAGO
               </button>
             )}
             
             {!isReadOnly && (
-              <button 
-                type="submit" 
-                disabled={isGuardando} 
-                style={{ 
-                  padding: '12px 30px', 
-                  backgroundColor: '#27ae60', 
-                  color: 'white', 
-                  border: 'none', 
-                  borderRadius: '5px', 
-                  fontSize: '16px', 
-                  fontWeight: 'bold', 
-                  cursor: isGuardando ? 'not-allowed' : 'pointer', 
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)' 
-                }}
-              >
-                {isGuardando ? '⏳ GUARDANDO...' : '💾 GUARDAR GASTO'}
-              </button>
+              <>
+                <button 
+                  type="button" 
+                  className="btn btn-secondary" 
+                  onClick={() => { setViewMode('LISTA'); setSelectedId(null); setForm(estadoInicialForm); }}
+                >
+                  CANCELAR
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={isGuardando} 
+                  className="btn btn-success"
+                >
+                  {isGuardando ? '⏳ GUARDANDO...' : '💾 GUARDAR GASTO'}
+                </button>
+              </>
             )}
           </div>
         </form>

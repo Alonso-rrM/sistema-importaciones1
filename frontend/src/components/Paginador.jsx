@@ -13,29 +13,17 @@ export const Paginador = ({
   const isLastPage = page >= safeTotalPages;
 
   return (
-    <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      padding: '12px 16px',
-      backgroundColor: '#f8f9fa',
-      borderTop: '1px solid #e2e8f0',
-      borderRadius: '0 0 8px 8px',
-      fontSize: '14px',
-      color: '#4a5568',
-      flexWrap: 'wrap',
-      gap: '12px'
-    }}>
+    <div className="paginador-container">
       {/* Información de registros y selector de límite */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+      <div className="flex-row">
         {totalRegistros !== null && (
-          <span style={{ fontWeight: '500' }}>
-            Total: <strong>{totalRegistros}</strong> {totalRegistros === 1 ? 'registro' : 'registros'}
+          <span className="font-bold text-muted">
+            Total: <strong style={{ color: 'var(--text-main)' }}>{totalRegistros}</strong> {totalRegistros === 1 ? 'registro' : 'registros'}
           </span>
         )}
 
         {setLimit && (
-          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}>
+          <label className="flex-row text-muted" style={{ fontSize: '13px', cursor: 'pointer' }}>
             <span>Mostrar:</span>
             <select
               value={limit}
@@ -43,14 +31,7 @@ export const Paginador = ({
                 setLimit(Number(e.target.value));
                 setPage(1);
               }}
-              style={{
-                padding: '4px 8px',
-                borderRadius: '4px',
-                border: '1px solid #cbd5e0',
-                backgroundColor: '#fff',
-                fontSize: '13px',
-                cursor: 'pointer'
-              }}
+              className="paginador-select"
             >
               <option value={20}>20 por pág.</option>
               <option value={50}>50 por pág.</option>
@@ -61,27 +42,17 @@ export const Paginador = ({
       </div>
 
       {/* Controles de Navegación */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+      <div className="flex-row">
         <button
           type="button"
           onClick={() => setPage(prev => Math.max(1, prev - 1))}
           disabled={isFirstPage}
-          style={{
-            padding: '6px 14px',
-            borderRadius: '6px',
-            border: '1px solid #cbd5e0',
-            backgroundColor: isFirstPage ? '#edf2f7' : '#fff',
-            color: isFirstPage ? '#a0aec0' : '#2d3748',
-            cursor: isFirstPage ? 'not-allowed' : 'pointer',
-            fontWeight: '600',
-            fontSize: '13px',
-            transition: 'all 0.2s ease'
-          }}
+          className="paginador-btn"
         >
           &larr; Anterior
         </button>
 
-        <span style={{ fontWeight: '600', color: '#2d3748', minWidth: '90px', textAlign: 'center' }}>
+        <span className="paginador-text">
           Página {page} de {safeTotalPages}
         </span>
 
@@ -89,17 +60,7 @@ export const Paginador = ({
           type="button"
           onClick={() => setPage(prev => Math.min(safeTotalPages, prev + 1))}
           disabled={isLastPage}
-          style={{
-            padding: '6px 14px',
-            borderRadius: '6px',
-            border: '1px solid #cbd5e0',
-            backgroundColor: isLastPage ? '#edf2f7' : '#fff',
-            color: isLastPage ? '#a0aec0' : '#2d3748',
-            cursor: isLastPage ? 'not-allowed' : 'pointer',
-            fontWeight: '600',
-            fontSize: '13px',
-            transition: 'all 0.2s ease'
-          }}
+          className="paginador-btn"
         >
           Siguiente &rarr;
         </button>

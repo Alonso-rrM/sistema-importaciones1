@@ -57,28 +57,6 @@ const Logistica = () => {
     cargarMaestros();
   }, [debouncedSearch, page, limit]);
 
-  const cargarCatalogos = async () => {
-    try {
-      const [resImp, resAg, resProv, resAlm] = await Promise.all([
-        api.get('/importadores/'),
-        api.get('/agentes/'),
-        api.get('/proveedores/'),
-        api.get('/almacenes/')
-      ]);
-      const impList = resImp.data?.data ?? (Array.isArray(resImp.data) ? resImp.data : []);
-      const agList = resAg.data?.data ?? (Array.isArray(resAg.data) ? resAg.data : []);
-      const provList = resProv.data?.data ?? (Array.isArray(resProv.data) ? resProv.data : []);
-      const almList = resAlm.data?.data ?? (Array.isArray(resAlm.data) ? resAlm.data : []);
-
-      setOpcionesImportadores(impList.map(i => ({ value: i.id_importador, label: `${i.ruc} - ${i.nombre}` })));
-      setOpcionesAgentes(agList.map(a => ({ value: a.id_agente, label: a.nombre })));
-      setOpcionesProveedores(provList.map(p => ({ value: p.id_proveedor, label: `${p.ruc} - ${p.nombre}` })));
-      setOpcionesAlmacenes(almList.map(a => ({ value: a.id_almacen, label: a.nombre })));
-    } catch (error) {
-      console.error('Error al cargar catálogos:', error);
-    }
-  };
-
   const cargarMaestros = async () => {
     setIsLoading(true);
     try {
@@ -94,36 +72,58 @@ const Logistica = () => {
       setTotalPages(response.data?.total_paginas ?? 1);
       setTotalRegistros(response.data?.total_registros ?? dataList.length);
     } catch (error) {
-      console.error('Error al obtener maestros:', error);
-      setMensaje({ texto: 'Error al obtener maestros del servidor.', tipo: 'error' });
+      console.error("Error al cargar maestros:", error);
+      setMensaje({ texto: "Error al cargar maestros de importación.", tipo: "error" });
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleRowClick = (maestro) => {
+  const cargarCatalogos = async () => {
+    try {
+      const [resImp, resAg, resProv, resAlm] = await Promise.all([
+        api.get('/importadores/'),
+        api.get('/agentes/'),
+        api.get('/proveedores/'),
+        api.get('/almacenes/')
+      ]);
+      setOpcionesImportadores(resImp.data.map(i => ({ value: i.id_importador, label: `${i.ruc} - ${i.nombre}` })));
+      setOpcionesAgentes(resAg.data.map(a => ({ value: a.id_agente, label: `${a.ruc} - ${a.nombre}` })));
+      setOpcionesProveedores(resProv.data.map(p => ({ value: p.id_proveedor, label: `${p.ruc} - ${p.nombre}` })));
+      setOpcionesAlmacenes(resAlm.data.map(al => ({ value: al.id_almacen, label: al.nombre })));
+    } catch (error) {
+      console.error(error);
+      setMensaje({ texto: '❌ Error de red al cargar catálogos maestros.', tipo: 'error' });
+    }
+  };
+
+  const handleChangeTexto = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const handleRowClick = (m) => {
     if (viewMode !== 'LISTA') return;
-    if (selectedId === maestro.id_maestro) {
+    if (selectedId === m.id_maestro) {
       setSelectedId(null);
       setFormData(estadoInicial);
     } else {
-      setSelectedId(maestro.id_maestro);
+      setSelectedId(m.id_maestro);
       setFormData({
-        numero_factura: maestro.numero_factura || '',
-        n_cont_fisico: maestro.n_cont_fisico || '',
-        id_agente: maestro.id_agente || null,
-        id_importador: maestro.id_importador || null,
-        id_proveedor: maestro.id_proveedor || null,
-        documento_transporte: maestro.documento_transporte || '',
-        fecha_embarque: maestro.fecha_embarque || '',
-        fecha_arribo: maestro.fecha_arribo || '',
-        status_llegada: maestro.status_llegada || 'EN TRÁNSITO',
-        estado_levante: maestro.estado_levante || 'SIN LEVANTE',
-        id_almacen: maestro.id_almacen || null,
-        fob_usd: maestro.fob_usd || '',
-        flete_usd: maestro.flete_usd || '',
-        venta_sucesiva: maestro.venta_sucesiva || '',
-        tipo_valor: maestro.tipo_valor || 'DEFINITIVO'
+        numero_factura: m.numero_factura || '',
+        n_cont_fisico: m.n_cont_fisico || '',
+        id_agente: m.id_agente,
+        id_importador: m.id_importador,
+        id_proveedor: m.id_proveedor,
+        documento_transporte: m.documento_transporte || '',
+        fecha_embarque: m.fecha_embarque || '',
+        fecha_arribo: m.fecha_arribo || '',
+        status_llegada: m.status_llegada || 'EN TRÁNSITO',
+        estado_levante: m.estado_levante || 'SIN LEVANTE',
+        id_almacen: m.id_almacen,
+        fob_usd: m.fob_usd || '',
+        flete_usd: m.flete_usd || '',
+        venta_sucesiva: m.venta_sucesiva || '',
+        tipo_valor: m.tipo_valor || 'DEFINITIVO'
       });
     }
   };
@@ -139,50 +139,49 @@ const Logistica = () => {
       await api.delete(`/maestros/${selectedId}`, {
         data: { motivo: motivo.trim() }
       });
-      alert("Registro eliminado exitosamente.");
+      alert("Registro eliminado lógicamente.");
       setSelectedId(null);
       setFormData(estadoInicial);
       cargarMaestros();
     } catch (error) {
-      console.error(error);
-      const detail = error.response?.data?.detail || 'Error de conexión al eliminar';
-      alert(`Error: ${detail}`);
+      console.error("Error en la solicitud DELETE:", error);
+      const detail = error.response?.data?.detail || "Error desconocido";
+      alert(`Error al eliminar: ${detail}`);
     }
   };
 
   const handleRegistrarDam = () => {
     const selectedMaestro = maestros.find(m => m.id_maestro === selectedId);
     if (selectedMaestro) {
-      navigate('/app/dams', { state: { fromMaestro: selectedMaestro } });
+      navigate('/app/dams', { state: { prefillMaestro: selectedMaestro } });
     }
-  };
-
-  const handleChangeTexto = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
   const handleGuardar = async (e) => {
     e.preventDefault();
     setMensaje({ texto: 'Guardando...', tipo: 'info' });
 
-    const payload = { ...formData };
-    payload.fob_usd = payload.fob_usd ? parseFloat(payload.fob_usd) : null;
-    payload.flete_usd = payload.flete_usd ? parseFloat(payload.flete_usd) : null;
-    payload.fecha_embarque = payload.fecha_embarque || null;
-    payload.fecha_arribo = payload.fecha_arribo || null;
-    payload.n_cont_fisico = payload.n_cont_fisico || null;
-    payload.documento_transporte = payload.documento_transporte || null;
-    payload.venta_sucesiva = payload.venta_sucesiva || null;
-
     try {
+      const payload = {
+        ...formData,
+        fob_usd: formData.fob_usd ? parseFloat(formData.fob_usd) : 0,
+        flete_usd: formData.flete_usd ? parseFloat(formData.flete_usd) : 0,
+        id_almacen: formData.id_almacen || null,
+        fecha_embarque: formData.fecha_embarque || null,
+        fecha_arribo: formData.fecha_arribo || null,
+        documento_transporte: formData.documento_transporte || null,
+        n_cont_fisico: formData.n_cont_fisico || null,
+        venta_sucesiva: formData.venta_sucesiva || null
+      };
+
       if (viewMode === 'NUEVO') {
         await api.post('/maestros/', payload);
-        setMensaje({ texto: '✅ Maestro registrado exitosamente.', tipo: 'exito' });
+        setMensaje({ texto: '✅ Embarque registrado exitosamente.', tipo: 'exito' });
       } else if (viewMode === 'MODIFICAR') {
         await api.put(`/maestros/${selectedId}`, payload);
-        setMensaje({ texto: '✅ Maestro actualizado exitosamente.', tipo: 'exito' });
+        setMensaje({ texto: '✅ Embarque actualizado exitosamente.', tipo: 'exito' });
       }
-      
+
       cargarMaestros();
       setViewMode('LISTA');
       setSelectedId(null);
@@ -197,76 +196,46 @@ const Logistica = () => {
   const cfrCalculado = (parseFloat(formData.fob_usd || 0) + parseFloat(formData.flete_usd || 0)).toFixed(2);
   const isReadOnly = viewMode === 'CONSULTAR';
 
-  // --- ESTILOS ---
-  const containerStyle = { padding: '20px', fontFamily: 'Arial, sans-serif' };
-  const commandBarStyle = { display: 'flex', gap: '10px', backgroundColor: '#f8f9fa', padding: '15px', borderRadius: '8px', border: '1px solid #ddd', marginBottom: '20px', alignItems: 'center' };
-  const getBtnStyle = (disabled, baseColor = '#3498db') => ({
-    padding: '10px 20px',
-    backgroundColor: disabled ? '#bdc3c7' : baseColor,
-    color: 'white',
-    border: 'none',
-    borderRadius: '4px',
-    cursor: disabled ? 'not-allowed' : 'pointer',
-    fontWeight: 'bold',
-    transition: 'background-color 0.2s'
-  });
-  const inputStyle = { width: '100%', padding: '10px', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box', backgroundColor: isReadOnly ? '#f9f9f9' : '#fff', color: '#2c3e50' };
-  const labelStyle = { display: 'block', fontSize: '13px', fontWeight: 'bold', marginBottom: '5px', color: '#34495e' };
-  const gridStyle = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', marginBottom: '20px' };
-
-  // Estilos personalizados para react-select para asegurar legibilidad (texto oscuro sobre fondo blanco)
-  const selectStyles = {
-    control: (base, state) => ({
-      ...base,
-      backgroundColor: isReadOnly ? '#f9f9f9' : '#fff',
-      borderColor: state.isFocused ? '#3498db' : '#ccc',
-      boxShadow: state.isFocused ? '0 0 0 1px #3498db' : null,
-      '&:hover': {
-        borderColor: '#3498db'
-      }
-    }),
-    singleValue: (base) => ({
-      ...base,
-      color: '#2c3e50'
-    }),
-    input: (base) => ({
-      ...base,
-      color: '#2c3e50'
-    }),
-    placeholder: (base) => ({
-      ...base,
-      color: '#95a5a6'
-    }),
-    option: (base, state) => ({
-      ...base,
-      backgroundColor: state.isSelected 
-        ? '#3498db' 
-        : state.isFocused 
-          ? '#e8f4fd' 
-          : '#fff',
-      color: state.isSelected ? '#fff' : '#2c3e50',
-      '&:active': {
-        backgroundColor: '#3498db'
-      }
-    }),
-    menu: (base) => ({
-      ...base,
-      backgroundColor: '#fff',
-      zIndex: 9999
-    })
-  };
-
   return (
-    <div style={containerStyle}>
-      <h2 style={{ color: '#2c3e50', borderBottom: '2px solid #3498db', paddingBottom: '10px' }}>Logística y Maestros de Importación</h2>
+    <div className="page-container">
+      <h2 className="page-title">Logística y Maestros de Importación</h2>
 
       {/* TOP COMMAND BAR */}
-      <div style={commandBarStyle}>
-        <button style={getBtnStyle(false, '#2ecc71')} onClick={() => { setViewMode('NUEVO'); setFormData(estadoInicial); setSelectedId(null); }}>➕ NUEVO</button>
-        <button style={getBtnStyle(!selectedId, '#f39c12')} disabled={!selectedId} onClick={() => setViewMode('MODIFICAR')}>✏️ MODIFICAR</button>
-        <button style={getBtnStyle(!selectedId, '#3498db')} disabled={!selectedId} onClick={() => setViewMode('CONSULTAR')}>👁️ CONSULTAR</button>
-        <button style={getBtnStyle(!selectedId, '#e74c3c')} disabled={!selectedId} onClick={handleEliminar}>🗑️ ELIMINAR</button>
-        <button style={getBtnStyle(!selectedId, '#9b59b6')} disabled={!selectedId} onClick={handleRegistrarDam}>📑 REGISTRAR DAM</button>
+      <div className="toolbar">
+        <button 
+          className="btn btn-success" 
+          onClick={() => { setViewMode('NUEVO'); setFormData(estadoInicial); setSelectedId(null); }}
+        >
+          ➕ NUEVO
+        </button>
+        <button 
+          className="btn btn-warning" 
+          disabled={!selectedId} 
+          onClick={() => setViewMode('MODIFICAR')}
+        >
+          ✏️ MODIFICAR
+        </button>
+        <button 
+          className="btn btn-primary" 
+          disabled={!selectedId} 
+          onClick={() => setViewMode('CONSULTAR')}
+        >
+          👁️ CONSULTAR
+        </button>
+        <button 
+          className="btn btn-danger" 
+          disabled={!selectedId} 
+          onClick={handleEliminar}
+        >
+          🗑️ ELIMINAR
+        </button>
+        <button 
+          className="btn btn-purple" 
+          disabled={!selectedId} 
+          onClick={handleRegistrarDam}
+        >
+          📑 REGISTRAR DAM
+        </button>
         
         <input 
           type="search" 
@@ -276,135 +245,150 @@ const Logistica = () => {
             setSearchTerm(e.target.value);
             setPage(1);
           }}
-          style={{ padding: '10px', marginLeft: 'auto', width: '280px', borderRadius: '5px', border: '1px solid #ccc' }}
+          className="toolbar-search"
         />
 
         {viewMode !== 'LISTA' && (
-          <button style={{ ...getBtnStyle(false, '#95a5a6'), marginLeft: '10px' }} onClick={() => { setViewMode('LISTA'); setSelectedId(null); setFormData(estadoInicial); }}>⬅️ VOLVER A LISTA</button>
+          <button 
+            className="btn btn-secondary ml-auto" 
+            onClick={() => { setViewMode('LISTA'); setSelectedId(null); setFormData(estadoInicial); }}
+          >
+            ⬅️ VOLVER A LISTA
+          </button>
         )}
       </div>
 
       {mensaje.texto && (
-        <div style={{ padding: '15px', marginBottom: '20px', borderRadius: '5px', backgroundColor: mensaje.tipo === 'error' ? '#f8d7da' : mensaje.tipo === 'exito' ? '#d4edda' : '#d1ecf1', color: mensaje.tipo === 'error' ? '#721c24' : mensaje.tipo === 'exito' ? '#155724' : '#0c5460', fontWeight: 'bold' }}>
+        <div className={`alert ${mensaje.tipo === 'error' ? 'alert-error' : mensaje.tipo === 'exito' ? 'alert-success' : 'alert-info'}`}>
           {mensaje.texto}
         </div>
       )}
 
       {viewMode === 'LISTA' ? (
         // ======================= VISTA: LISTA =======================
-        <div style={{ overflowX: 'auto', backgroundColor: '#fff', border: '1px solid #ddd', borderRadius: '8px' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ backgroundColor: '#ecf0f1', textAlign: 'left' }}>
-                <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>ID</th>
-                <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>Factura</th>
-                <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>Doc. Transporte</th>
-                <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>FOB (USD)</th>
-                <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>Flete (USD)</th>
-                <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>Llegada</th>
-                <th style={{ padding: '12px', borderBottom: '2px solid #ddd' }}>Levante</th>
-              </tr>
-            </thead>
-            <tbody>
-              {maestros.map(m => (
-                <tr 
-                  key={m.id_maestro} 
-                  onClick={() => handleRowClick(m)}
-                  style={{ backgroundColor: selectedId === m.id_maestro ? '#d6eaf8' : 'white', cursor: 'pointer', borderBottom: '1px solid #eee', transition: 'background-color 0.2s' }}
-                >
-                  <td style={{ padding: '12px' }}>{m.id_maestro}</td>
-                  <td style={{ padding: '12px', fontWeight: 'bold' }}>{m.numero_factura}</td>
-                  <td style={{ padding: '12px' }}>{m.documento_transporte || '-'}</td>
-                  <td style={{ padding: '12px' }}>${m.fob_usd || '0.00'}</td>
-                  <td style={{ padding: '12px' }}>${m.flete_usd || '0.00'}</td>
-                  <td style={{ padding: '12px' }}>
-                    <span style={{ backgroundColor: '#f1c40f', padding: '3px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold' }}>{m.status_llegada}</span>
-                  </td>
-                  <td style={{ padding: '12px' }}>
-                    <span style={{ backgroundColor: m.estado_levante === 'CON LEVANTE' ? '#2ecc71' : '#e74c3c', color: 'white', padding: '3px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold' }}>{m.estado_levante}</span>
-                  </td>
+        <div className="card">
+          <div className="table-container">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th style={{ width: '80px' }}>ID</th>
+                  <th style={{ width: '180px' }}>Factura</th>
+                  <th>Doc. Transporte</th>
+                  <th style={{ width: '130px' }}>FOB (USD)</th>
+                  <th style={{ width: '130px' }}>Flete (USD)</th>
+                  <th style={{ width: '150px' }}>Llegada</th>
+                  <th style={{ width: '150px' }}>Levante</th>
                 </tr>
-              ))}
-              {maestros.length === 0 && !isLoading && (
-                <tr><td colSpan="7" style={{ padding: '20px', textAlign: 'center', color: '#7f8c8d' }}>No hay registros disponibles.</td></tr>
-              )}
-            </tbody>
-          </table>
-          <Paginador 
-            page={page} 
-            totalPages={totalPages} 
-            setPage={setPage} 
-            limit={limit} 
-            setLimit={setLimit} 
-            totalRegistros={totalRegistros} 
-          />
+              </thead>
+              <tbody>
+                {maestros.map(m => (
+                  <tr 
+                    key={m.id_maestro} 
+                    onClick={() => handleRowClick(m)}
+                    className={selectedId === m.id_maestro ? 'selected' : ''}
+                  >
+                    <td>{m.id_maestro}</td>
+                    <td className="font-bold">
+                      <span className="truncate-text" title={m.numero_factura}>{m.numero_factura}</span>
+                    </td>
+                    <td>
+                      <span className="truncate-text" title={m.documento_transporte || '-'}>{m.documento_transporte || '-'}</span>
+                    </td>
+                    <td>${m.fob_usd || '0.00'}</td>
+                    <td>${m.flete_usd || '0.00'}</td>
+                    <td>
+                      <span className="badge badge-warning">{m.status_llegada}</span>
+                    </td>
+                    <td>
+                      <span className={`badge ${m.estado_levante === 'CON LEVANTE' ? 'badge-success' : 'badge-danger'}`}>
+                        {m.estado_levante}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+                {maestros.length === 0 && !isLoading && (
+                  <tr>
+                    <td colSpan="7" className="text-center text-muted">No hay registros disponibles.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+            <Paginador 
+              page={page} 
+              totalPages={totalPages} 
+              setPage={setPage} 
+              limit={limit} 
+              setLimit={setLimit} 
+              totalRegistros={totalRegistros} 
+            />
+          </div>
         </div>
       ) : (
         // ======================= VISTA: NUEVO / MODIFICAR / CONSULTAR =======================
-        <form onSubmit={handleGuardar} style={{ backgroundColor: '#fff', padding: '30px', borderRadius: '8px', border: '1px solid #ddd', boxShadow: '0 2px 10px rgba(0,0,0,0.05)' }}>
-          <h3 style={{ marginTop: 0, color: '#34495e', borderBottom: '1px solid #ecf0f1', paddingBottom: '10px', marginBottom: '20px' }}>
+        <form onSubmit={handleGuardar} className="card">
+          <h3 className="section-title">
             {viewMode === 'NUEVO' ? '✨ Crear Nueva Cabecera de Importación' : viewMode === 'MODIFICAR' ? '✏️ Modificar Cabecera de Importación' : '👁️ Consultar Detalles de Importación'}
           </h3>
 
           {/* SECCIÓN 1: IDENTIFICACIÓN */}
-          <h4 style={{ color: '#2980b9' }}>1. Identificación y Documentos</h4>
-          <div style={gridStyle}>
+          <h4 style={{ color: 'var(--primary-dark)', marginBottom: '15px' }}>1. Identificación y Documentos</h4>
+          <div className="form-grid">
             <div>
-              <label style={labelStyle}>N° Factura *</label>
-              <input type="text" name="numero_factura" value={formData.numero_factura} onChange={handleChangeTexto} required disabled={isReadOnly} style={inputStyle} />
+              <label className="label-text">N° Factura *</label>
+              <input type="text" name="numero_factura" value={formData.numero_factura} onChange={handleChangeTexto} required disabled={isReadOnly} className="form-input" />
             </div>
             <div>
-              <label style={labelStyle}>Documento Transporte (BL/AWB)</label>
-              <input type="text" name="documento_transporte" value={formData.documento_transporte} onChange={handleChangeTexto} disabled={isReadOnly} style={inputStyle} />
+              <label className="label-text">Documento Transporte (BL/AWB)</label>
+              <input type="text" name="documento_transporte" value={formData.documento_transporte} onChange={handleChangeTexto} disabled={isReadOnly} className="form-input" />
             </div>
             <div>
-              <label style={labelStyle}>N° Contenedor Físico</label>
-              <input type="text" name="n_cont_fisico" value={formData.n_cont_fisico} onChange={handleChangeTexto} disabled={isReadOnly} style={inputStyle} />
+              <label className="label-text">N° Contenedor Físico</label>
+              <input type="text" name="n_cont_fisico" value={formData.n_cont_fisico} onChange={handleChangeTexto} disabled={isReadOnly} className="form-input" />
             </div>
             <div>
-              <label style={labelStyle}>Venta Sucesiva</label>
-              <input type="text" name="venta_sucesiva" value={formData.venta_sucesiva} onChange={handleChangeTexto} disabled={isReadOnly} style={inputStyle} placeholder="Opcional" />
+              <label className="label-text">Venta Sucesiva</label>
+              <input type="text" name="venta_sucesiva" value={formData.venta_sucesiva} onChange={handleChangeTexto} disabled={isReadOnly} className="form-input" placeholder="Opcional" />
             </div>
           </div>
 
           {/* SECCIÓN 2: VALORES Y FECHAS */}
-          <h4 style={{ color: '#2980b9' }}>2. Valores y Tiempos</h4>
-          <div style={gridStyle}>
+          <h4 style={{ color: 'var(--primary-dark)', marginBottom: '15px' }}>2. Valores y Tiempos</h4>
+          <div className="form-grid">
             <div>
-              <label style={labelStyle}>FOB (USD)</label>
-              <input type="number" step="0.01" name="fob_usd" value={formData.fob_usd} onChange={handleChangeTexto} disabled={isReadOnly} style={inputStyle} />
+              <label className="label-text">FOB (USD)</label>
+              <input type="number" step="0.01" name="fob_usd" value={formData.fob_usd} onChange={handleChangeTexto} disabled={isReadOnly} className="form-input" />
             </div>
             <div>
-              <label style={labelStyle}>Flete (USD)</label>
-              <input type="number" step="0.01" name="flete_usd" value={formData.flete_usd} onChange={handleChangeTexto} disabled={isReadOnly} style={inputStyle} />
+              <label className="label-text">Flete (USD)</label>
+              <input type="number" step="0.01" name="flete_usd" value={formData.flete_usd} onChange={handleChangeTexto} disabled={isReadOnly} className="form-input" />
             </div>
             <div>
-              <label style={labelStyle}>CFR Total (Calculado)</label>
-              <input type="text" value={cfrCalculado} disabled style={{ ...inputStyle, backgroundColor: '#e8f8f5', color: '#16a085', fontWeight: 'bold' }} />
+              <label className="label-text">CFR Total (Calculado)</label>
+              <input type="text" value={cfrCalculado} disabled className="form-input font-bold" style={{ backgroundColor: '#e8f8f5', color: '#16a085' }} />
             </div>
             <div>
-              <label style={labelStyle}>Tipo Valor</label>
-              <select name="tipo_valor" value={formData.tipo_valor} onChange={handleChangeTexto} disabled={isReadOnly} style={inputStyle}>
+              <label className="label-text">Tipo Valor</label>
+              <select name="tipo_valor" value={formData.tipo_valor} onChange={handleChangeTexto} disabled={isReadOnly} className="form-input">
                 <option value="DEFINITIVO">DEFINITIVO</option>
                 <option value="PROVISIONAL">PROVISIONAL</option>
               </select>
             </div>
             <div>
-              <label style={labelStyle}>Fecha Embarque</label>
-              <input type="date" name="fecha_embarque" value={formData.fecha_embarque} onChange={handleChangeTexto} disabled={isReadOnly} style={inputStyle} />
+              <label className="label-text">Fecha Embarque</label>
+              <input type="date" name="fecha_embarque" value={formData.fecha_embarque} onChange={handleChangeTexto} disabled={isReadOnly} className="form-input" />
             </div>
             <div>
-              <label style={labelStyle}>Fecha Arribo</label>
-              <input type="date" name="fecha_arribo" value={formData.fecha_arribo} onChange={handleChangeTexto} disabled={isReadOnly} style={inputStyle} />
+              <label className="label-text">Fecha Arribo</label>
+              <input type="date" name="fecha_arribo" value={formData.fecha_arribo} onChange={handleChangeTexto} disabled={isReadOnly} className="form-input" />
             </div>
           </div>
 
           {/* SECCIÓN 3: STATUS OPERATIVO */}
-          <h4 style={{ color: '#2980b9' }}>3. Estatus Operativo</h4>
-          <div style={gridStyle}>
+          <h4 style={{ color: 'var(--primary-dark)', marginBottom: '15px' }}>3. Estatus Operativo</h4>
+          <div className="form-grid">
             <div>
-              <label style={labelStyle}>Status de Llegada</label>
-              <select name="status_llegada" value={formData.status_llegada} onChange={handleChangeTexto} disabled={isReadOnly} style={inputStyle}>
+              <label className="label-text">Status de Llegada</label>
+              <select name="status_llegada" value={formData.status_llegada} onChange={handleChangeTexto} disabled={isReadOnly} className="form-input">
                 <option value="EN TRÁNSITO">EN TRÁNSITO</option>
                 <option value="EN PUERTO">EN PUERTO</option>
                 <option value="EN ALMACÉN">EN ALMACÉN</option>
@@ -412,8 +396,8 @@ const Logistica = () => {
               </select>
             </div>
             <div>
-              <label style={labelStyle}>Estado Levante</label>
-              <select name="estado_levante" value={formData.estado_levante} onChange={handleChangeTexto} disabled={isReadOnly} style={inputStyle}>
+              <label className="label-text">Estado Levante</label>
+              <select name="estado_levante" value={formData.estado_levante} onChange={handleChangeTexto} disabled={isReadOnly} className="form-input">
                 <option value="SIN LEVANTE">SIN LEVANTE</option>
                 <option value="CON LEVANTE">CON LEVANTE</option>
               </select>
@@ -421,10 +405,10 @@ const Logistica = () => {
           </div>
 
           {/* SECCIÓN 4: ACTORES (SELECTS) */}
-          <h4 style={{ color: '#2980b9' }}>4. Actores Involucrados</h4>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-            <div style={{ zIndex: 4 }}>
-              <label style={labelStyle}>Proveedor (Shipper)</label>
+          <h4 style={{ color: 'var(--primary-dark)', marginBottom: '15px' }}>4. Actores Involucrados</h4>
+          <div className="form-grid">
+            <div>
+              <label className="label-text">Proveedor (Shipper)</label>
               <Select 
                 options={opcionesProveedores} 
                 value={opcionesProveedores.find(o => o.value === formData.id_proveedor) || null} 
@@ -432,11 +416,10 @@ const Logistica = () => {
                 isDisabled={isReadOnly}
                 isClearable 
                 placeholder="Seleccione..."
-                styles={selectStyles}
               />
             </div>
-            <div style={{ zIndex: 3 }}>
-              <label style={labelStyle}>Importador (Facturado a)</label>
+            <div>
+              <label className="label-text">Importador (Facturado a)</label>
               <Select 
                 options={opcionesImportadores} 
                 value={opcionesImportadores.find(o => o.value === formData.id_importador) || null} 
@@ -444,11 +427,10 @@ const Logistica = () => {
                 isDisabled={isReadOnly}
                 isClearable 
                 placeholder="Seleccione..."
-                styles={selectStyles}
               />
             </div>
-            <div style={{ zIndex: 2 }}>
-              <label style={labelStyle}>Agente de Aduanas</label>
+            <div>
+              <label className="label-text">Agente de Aduanas</label>
               <Select 
                 options={opcionesAgentes} 
                 value={opcionesAgentes.find(o => o.value === formData.id_agente) || null} 
@@ -456,11 +438,10 @@ const Logistica = () => {
                 isDisabled={isReadOnly}
                 isClearable 
                 placeholder="Seleccione..."
-                styles={selectStyles}
               />
             </div>
-            <div style={{ zIndex: 1 }}>
-              <label style={labelStyle}>Almacén Destino</label>
+            <div>
+              <label className="label-text">Almacén Destino</label>
               <Select 
                 options={opcionesAlmacenes} 
                 value={opcionesAlmacenes.find(o => o.value === formData.id_almacen) || null} 
@@ -468,15 +449,21 @@ const Logistica = () => {
                 isDisabled={isReadOnly}
                 isClearable 
                 placeholder="Seleccione (Opcional)..."
-                styles={selectStyles}
               />
             </div>
           </div>
 
           {/* BOTON GUARDAR */}
           {!isReadOnly && (
-            <div style={{ marginTop: '30px', textAlign: 'right', borderTop: '1px solid #eee', paddingTop: '20px' }}>
-              <button type="submit" style={{ padding: '12px 30px', backgroundColor: '#27ae60', color: 'white', border: 'none', borderRadius: '5px', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+            <div className="form-actions">
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                onClick={() => { setViewMode('LISTA'); setSelectedId(null); setFormData(estadoInicial); }}
+              >
+                CANCELAR
+              </button>
+              <button type="submit" className="btn btn-success">
                 💾 GUARDAR / ACTUALIZAR
               </button>
             </div>
