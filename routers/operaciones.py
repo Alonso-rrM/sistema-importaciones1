@@ -66,6 +66,10 @@ def actualizar_maestro(id_maestro: int, maestro_editado: schemas.MaestroImportac
     
     update_data = maestro_editado.model_dump(exclude_unset=True)
     
+    # Prevención de Bypass: estado_levante es calculado reactivamente por la máquina de estados
+    if "estado_levante" in update_data and current_user.id_rol != 1:
+        del update_data["estado_levante"]
+    
     for key, value in update_data.items():
         setattr(db_maestro, key, value)
         
@@ -356,6 +360,28 @@ def listar_dams(
         "data": data
     }
 
+def evaluar_levante_reactivo(db: Session, id_maestro: int):
+    """Disparador Reactivo: Evalúa si el Maestro puede obtener o mantener el estado CON LEVANTE."""
+    maestro_padre = db.query(models.MaestroImportacion).filter(models.MaestroImportacion.id_maestro == id_maestro).first()
+    if not maestro_padre:
+        return
+    
+    todas_listas = True
+    for dam in maestro_padre.dams:
+        if dam.canal_control == 'ROJO' and maestro_padre.tipo_valor == 'DEFINITIVO':
+            if not dam.aforo_realizado:
+                todas_listas = False
+                break
+    
+    if todas_listas and len(maestro_padre.dams) > 0:
+        if maestro_padre.estado_levante != "CON LEVANTE":
+            maestro_padre.estado_levante = "CON LEVANTE"
+            db.commit()
+    else:
+        if maestro_padre.estado_levante == "CON LEVANTE":
+            maestro_padre.estado_levante = "SIN LEVANTE"
+            db.commit()
+
 @router.post("/dams/", response_model=schemas.DetalleDam)
 def crear_dam(dam: schemas.DetalleDamCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     maestro = db.query(models.MaestroImportacion).filter(models.MaestroImportacion.id_maestro == dam.id_maestro).first()
@@ -371,6 +397,10 @@ def crear_dam(dam: schemas.DetalleDamCreate, db: Session = Depends(get_db), curr
     db.add(nueva_dam)
     db.commit()
     db.refresh(nueva_dam)
+
+    # Disparador Reactivo: Evaluar levante tras registrar nueva DAM
+    evaluar_levante_reactivo(db, nueva_dam.id_maestro)
+
     return nueva_dam
 
 @router.put("/dams/{id_dam}", response_model=schemas.DetalleDam)
@@ -387,6 +417,10 @@ def actualizar_dam(id_dam: int, dam_editada: schemas.DetalleDamUpdate, db: Sessi
         
     db.commit()
     db.refresh(db_dam)
+
+    # Disparador Reactivo: Evaluar si el Maestro puede obtener Levante Automático
+    evaluar_levante_reactivo(db, db_dam.id_maestro)
+
     return db_dam
 
 @router.delete("/dams/{id_dam}")
@@ -415,7 +449,12 @@ def eliminar_dam(id_dam: int, req: schemas.EliminacionRequest, db: Session = Dep
         detalles_legibles=snapshot
     )
     
+    id_maestro_padre = dam.id_maestro
     db.add(respaldo)
     db.delete(dam)
     db.commit()
+
+    # Disparador Reactivo: Reevaluar levante tras eliminar DAM
+    evaluar_levante_reactivo(db, id_maestro_padre)
+
     return {"mensaje": f"DAM {dam.numero_de_dam} eliminada físicamente con respaldo de auditoría."}

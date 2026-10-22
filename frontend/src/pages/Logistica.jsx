@@ -403,10 +403,20 @@ const Logistica = () => {
             </div>
             <div>
               <label className="label-text">Estado Levante</label>
-              <select name="estado_levante" value={formData.estado_levante} onChange={handleChangeTexto} disabled={isReadOnly} className="form-input">
+              <select 
+                name="estado_levante" 
+                value={formData.estado_levante} 
+                onChange={handleChangeTexto} 
+                disabled={true} 
+                className="form-input bg-slate-100 cursor-not-allowed font-semibold text-slate-700"
+                title="Calculado automáticamente al autorizar el aforo en las DAMs"
+              >
                 <option value="SIN LEVANTE">SIN LEVANTE</option>
                 <option value="CON LEVANTE">CON LEVANTE</option>
               </select>
+              <small className="text-slate-500 text-xs block mt-1">
+                🔒 (Calculado automáticamente al autorizar el aforo en las DAMs)
+              </small>
             </div>
           </div>
 
