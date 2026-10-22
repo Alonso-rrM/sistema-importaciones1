@@ -268,6 +268,9 @@ class RegistroGasto(RegistroGastoCreate):
     importador_nombre: Optional[str] = None
     id_importador: Optional[int] = None
     maestro_factura: Optional[str] = None
+    proveedor_nombre: Optional[str] = None
+    concepto_nombre: Optional[str] = None
+    tipo_doc_nombre: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

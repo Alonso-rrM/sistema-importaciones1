@@ -143,9 +143,12 @@ def listar_gastos(
             joinedload(models.RegistroGasto.dam)
             .joinedload(models.DetalleDam.maestro)
             .joinedload(models.MaestroImportacion.importador_rel),
-            joinedload(models.RegistroGasto.pagos)
+            joinedload(models.RegistroGasto.pagos),
+            joinedload(models.RegistroGasto.proveedor_rel),
+            joinedload(models.RegistroGasto.concepto_rel),
+            joinedload(models.RegistroGasto.tipo_doc_rel)
         )
-        .order_by(models.RegistroGasto.id_gasto.desc())
+        .order_by(models.RegistroGasto.id_gasto.asc())
         .offset((page - 1) * limit)
         .limit(limit)
         .all()
@@ -169,6 +172,10 @@ def listar_gastos(
         maestro_obj = dam_obj.maestro if dam_obj else None
         imp_obj = maestro_obj.importador_rel if maestro_obj else None
 
+        prov_nombre = None
+        if g.proveedor_rel:
+            prov_nombre = f"{g.proveedor_rel.ruc} - {g.proveedor_rel.nombre}" if g.proveedor_rel.ruc else g.proveedor_rel.nombre
+
         g_dict = schemas.RegistroGasto(
             id_gasto=g.id_gasto,
             id_dam=g.id_dam,
@@ -186,7 +193,10 @@ def listar_gastos(
             dam_numero=dam_obj.numero_de_dam if dam_obj else "N/A",
             maestro_factura=maestro_obj.numero_factura if maestro_obj else "N/A",
             id_importador=imp_obj.id_importador if imp_obj else None,
-            importador_nombre=imp_obj.nombre if imp_obj else "Desconocido"
+            importador_nombre=imp_obj.nombre if imp_obj else "Desconocido",
+            proveedor_nombre=prov_nombre,
+            concepto_nombre=g.concepto_rel.nombre if g.concepto_rel else None,
+            tipo_doc_nombre=g.tipo_doc_rel.nombre_documento if g.tipo_doc_rel else None
         )
         resultado.append(g_dict)
 
@@ -276,7 +286,7 @@ def listar_vouchers(
     data = (
         db.query(models.VoucherBancario)
         .filter(*filtros)
-        .order_by(models.VoucherBancario.id_voucher.desc())
+        .order_by(models.VoucherBancario.id_voucher.asc())
         .offset((page - 1) * limit)
         .limit(limit)
         .all()
@@ -589,7 +599,7 @@ def listar_pagos(
     data = (
         db.query(models.RegistroPago)
         .filter(*filtros)
-        .order_by(models.RegistroPago.id_pago.desc())
+        .order_by(models.RegistroPago.id_pago.asc())
         .offset((page - 1) * limit)
         .limit(limit)
         .all()

@@ -36,7 +36,7 @@ def listar_bancos(mostrar_inactivos: bool = False, db: Session = Depends(get_db)
     query = db.query(models.CatBanco)
     if not mostrar_inactivos:
         query = query.filter(models.CatBanco.estado_registro == "ACTIVO")
-    return query.all()
+    return query.order_by(models.CatBanco.id_banco.asc()).all()
 
 @router.put("/bancos/{id_banco}", response_model=schemas.CatBanco)
 def actualizar_banco(id_banco: int, banco_editado: schemas.CatBancoUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
@@ -100,7 +100,7 @@ def listar_agentes(mostrar_inactivos: bool = False, db: Session = Depends(get_db
     query = db.query(models.CatAgente)
     if not mostrar_inactivos:
         query = query.filter(models.CatAgente.estado_registro == "ACTIVO")
-    return query.all()
+    return query.order_by(models.CatAgente.id_agente.asc()).all()
 
 @router.put("/agentes/{id_agente}", response_model=schemas.CatAgente)
 def actualizar_agente(id_agente: int, agente_editado: schemas.CatAgenteUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
@@ -168,7 +168,7 @@ def listar_proveedores(mostrar_inactivos: bool = False, db: Session = Depends(ge
     query = db.query(models.CatProveedor)
     if not mostrar_inactivos:
         query = query.filter(models.CatProveedor.estado_registro == "ACTIVO")
-    return query.all()
+    return query.order_by(models.CatProveedor.id_proveedor.asc()).all()
 
 @router.put("/proveedores/{id_proveedor}", response_model=schemas.CatProveedor)
 def actualizar_proveedor(id_proveedor: int, proveedor_editado: schemas.CatProveedorUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
@@ -236,7 +236,7 @@ def listar_almacenes(mostrar_inactivos: bool = False, db: Session = Depends(get_
     query = db.query(models.CatAlmacen)
     if not mostrar_inactivos:
         query = query.filter(models.CatAlmacen.estado_registro == "ACTIVO")
-    return query.all()
+    return query.order_by(models.CatAlmacen.id_almacen.asc()).all()
 
 @router.put("/almacenes/{id_almacen}", response_model=schemas.CatAlmacen)
 def actualizar_almacen(id_almacen: int, almacen_editado: schemas.CatAlmacenUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
@@ -300,7 +300,7 @@ def listar_importadores(mostrar_inactivos: bool = False, db: Session = Depends(g
     query = db.query(models.CatImportador)
     if not mostrar_inactivos:
         query = query.filter(models.CatImportador.estado_registro == "ACTIVO")
-    return query.all()
+    return query.order_by(models.CatImportador.id_importador.asc()).all()
 
 @router.put("/importadores/{id_importador}", response_model=schemas.CatImportador)
 def actualizar_importador(id_importador: int, importador_editado: schemas.CatImportadorUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
@@ -372,7 +372,7 @@ def listar_conceptos(mostrar_inactivos: bool = False, db: Session = Depends(get_
     query = db.query(models.CatConceptoPago)
     if not mostrar_inactivos:
         query = query.filter(models.CatConceptoPago.estado_registro == "ACTIVO")
-    return query.all()
+    return query.order_by(models.CatConceptoPago.id_concepto.asc()).all()
 
 @router.put("/conceptos/{id_concepto}", response_model=schemas.CatConceptoPago)
 def actualizar_concepto(id_concepto: int, concepto_editado: schemas.CatConceptoPagoUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
@@ -433,7 +433,7 @@ def listar_tipos_documento(mostrar_inactivos: bool = False, db: Session = Depend
     query = db.query(models.CatalogoDocumentoPago)
     if not mostrar_inactivos:
         query = query.filter(models.CatalogoDocumentoPago.estado_registro == "ACTIVO")
-    return query.all()
+    return query.order_by(models.CatalogoDocumentoPago.id_tipo_doc.asc()).all()
 
 @router.post("/tipos-documento/", response_model=schemas.CatalogoDocumentoPago)
 def crear_tipo_documento(tipo_doc: schemas.CatalogoDocumentoPagoCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):

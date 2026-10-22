@@ -174,7 +174,7 @@ async def autorizar_levante(
 @router.get("/maestros/", response_model=schemas.PaginatedResponse[schemas.MaestroImportacion])
 def listar_facturas(
     page: int = Query(1, ge=1),
-    limit: int = Query(20, ge=1, le=100),
+    limit: int = Query(20, ge=1, le=1000),
     search: Optional[str] = None,
     db: Session = Depends(get_db), 
     current_user: models.Usuario = Depends(get_current_user)
@@ -193,7 +193,7 @@ def listar_facturas(
     data = (
         db.query(models.MaestroImportacion)
         .filter(*filtros)
-        .order_by(models.MaestroImportacion.id_maestro.desc())
+        .order_by(models.MaestroImportacion.id_maestro.asc())
         .offset((page - 1) * limit)
         .limit(limit)
         .all()
@@ -324,7 +324,7 @@ def eliminar_maestro(id_maestro: int, req: schemas.EliminacionRequest, db: Sessi
 @router.get("/dams/", response_model=schemas.PaginatedResponse[schemas.DetalleDam])
 def listar_dams(
     page: int = Query(1, ge=1),
-    limit: int = Query(20, ge=1, le=100),
+    limit: int = Query(20, ge=1, le=1000),
     search: Optional[str] = None,
     db: Session = Depends(get_db), 
     current_user: models.Usuario = Depends(get_current_user)
@@ -342,7 +342,7 @@ def listar_dams(
     data = (
         db.query(models.DetalleDam)
         .filter(*filtros)
-        .order_by(models.DetalleDam.id_dam.desc())
+        .order_by(models.DetalleDam.id_dam.asc())
         .offset((page - 1) * limit)
         .limit(limit)
         .all()
