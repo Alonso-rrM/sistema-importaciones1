@@ -4,10 +4,15 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 import jwt
 from jwt.exceptions import InvalidTokenError, ExpiredSignatureError
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 import models
 from database import SessionLocal
 from security import SECRET_KEY, ALGORITHM
+
+# Limitador de peticiones por IP
+limiter = Limiter(key_func=get_remote_address)
 
 # Configuración del esquema OAuth2 (Apunta al endpoint de login)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")

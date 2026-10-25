@@ -5,6 +5,7 @@ import json
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm.exc import StaleDataError
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy import func, case
 
@@ -31,6 +32,11 @@ async def crear_gasto(
     proveedor = db.query(models.CatProveedor).filter(models.CatProveedor.id_proveedor == gasto.id_proveedor).first()
     if not proveedor:
         raise HTTPException(status_code=404, detail="El proveedor especificado no existe.")
+
+    # Candado Asimétrico Post-Levante: No se pueden agregar gastos a un contenedor cerrado
+    dam_padre = db.query(models.DetalleDam).filter(models.DetalleDam.id_dam == gasto.id_dam).first()
+    if dam_padre and dam_padre.maestro and dam_padre.maestro.estado_levante == "CON LEVANTE" and current_user.id_rol != 1:
+        raise HTTPException(status_code=403, detail="Operación Denegada: El contenedor padre ya cuenta con LEVANTE autorizado. No se pueden agregar nuevos gastos a una operación cerrada.")
 
     # 2. Normalización Estricta del Número de Documento
     if proveedor.categoria != "ESTADO_O_TRIBUTO" and gasto.numero_documento and "-" in gasto.numero_documento:
@@ -342,9 +348,16 @@ def actualizar_voucher(
         if key != "saldo_disponible":
             setattr(voucher, key, value)
 
-    db.commit()
-    db.refresh(voucher)
-    return voucher
+    try:
+        db.commit()
+        db.refresh(voucher)
+        return voucher
+    except StaleDataError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Conflicto de concurrencia: Otro usuario modificó este voucher mientras intentabas actualizarlo."
+        )
 
 @router.delete("/vouchers/{id_voucher}")
 def eliminar_voucher(id_voucher: int, req: schemas.EliminacionRequest, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
@@ -526,16 +539,6 @@ async def registrar_pago(
         # db.flush() asigna los IDs autoincrementales sin cerrar la transacción física
         db.flush()
 
-        # Guardar registro de idempotencia si se envió la cabecera
-        if clave_idempotencia:
-            pago_serializado = json.dumps(jsonable_encoder(schemas.RegistroPago.model_validate(nuevo_pago)))
-            nuevo_idemp = models.RegistroIdempotencia(
-                clave_idempotencia=clave_idempotencia,
-                endpoint=request.url.path,
-                respuesta_json=pago_serializado
-            )
-            db.add(nuevo_idemp)
-
         # --- AUDITORÍA: Registro de Creación ---
         await registrar_auditoria(
             db=db,
@@ -546,11 +549,34 @@ async def registrar_pago(
             ip_address=request.client.host if request.client else "IP Desconocida"
         )
 
-        # db.commit() al final absoluto para sellar pago + ajuste + idempotencia + auditoría simultáneamente
-        db.commit()
+        # Guardar registro de idempotencia si se envió la cabecera
+        if clave_idempotencia:
+            try:
+                pago_serializado = json.dumps(jsonable_encoder(schemas.RegistroPago.model_validate(nuevo_pago)))
+                nuevo_idemp = models.RegistroIdempotencia(
+                    clave_idempotencia=clave_idempotencia,
+                    endpoint=request.url.path,
+                    respuesta_json=pago_serializado
+                )
+                db.add(nuevo_idemp)
+                db.commit() # Intentar commit atómico de la llave
+            except IntegrityError:
+                db.rollback()
+                # Si choca aquí, es porque otro hilo paralelo ya la guardó. Retornamos el previo.
+                registro_previo = db.query(models.RegistroIdempotencia).filter(
+                    models.RegistroIdempotencia.clave_idempotencia == clave_idempotencia
+                ).first()
+                if registro_previo:
+                    return json.loads(registro_previo.respuesta_json)
+                raise HTTPException(status_code=409, detail="Conflicto de idempotencia procesando la transacción paralela.")
+        else:
+            db.commit()
+
         db.refresh(nuevo_pago)
         return nuevo_pago
         
+    except HTTPException:
+        raise
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=f"Error en transacción: {str(e)}")

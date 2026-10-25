@@ -98,15 +98,15 @@ const Gastos = () => {
   const cargarCatalogos = async () => {
     try {
       const [resMaestros, resDams, resConceptos, resProveedores, resTiposDoc] = await Promise.all([
-        api.get('/maestros/?limit=500'),
-        api.get('/dams/?limit=500'),
+        api.get('/maestros/lookup'),
+        api.get('/dams/lookup'),
         api.get('/conceptos/'),
         api.get('/proveedores/'),
         api.get('/tipos-documento/')
       ]);
 
-      const maestrosList = extractList(resMaestros);
-      const damsList = extractList(resDams);
+      const maestrosList = Array.isArray(resMaestros.data) ? resMaestros.data : (resMaestros.data?.data || []);
+      const damsList = Array.isArray(resDams.data) ? resDams.data : (resDams.data?.data || []);
       const conceptosList = extractList(resConceptos);
       const proveedoresList = extractList(resProveedores);
       const tiposDocList = extractList(resTiposDoc);

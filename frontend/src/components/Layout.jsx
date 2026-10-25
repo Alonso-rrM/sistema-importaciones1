@@ -1,103 +1,63 @@
-import { Outlet, NavLink, useNavigate } from 'react-router-dom'
+import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 
 function Layout() {
-    const navigate = useNavigate()
+  const navigate = useNavigate();
+  const cerrarSesion = () => { localStorage.removeItem('token'); navigate('/login'); };
 
-    const cerrarSesion = () => {
-        localStorage.removeItem('token')
-        navigate('/login')
-    }
+  const navClass = ({ isActive }) => 
+    isActive 
+      ? "relative group flex items-center justify-center h-10 w-10 mx-auto rounded-md bg-teal-500/15 text-teal-300 font-medium border border-teal-500/30 transition-all"
+      : "group flex items-center justify-center h-10 w-10 mx-auto rounded-md text-slate-400 hover:text-slate-100 hover:bg-slate-700/60 transition-colors";
 
-    const getNavClass = ({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')
-
-    return (
-        <div className="app-layout">
-            {/* BARRA LATERAL (Sidebar) */}
-            <aside className="sidebar">
-                <div className="sidebar-brand">
-                    🏢 ERP Admin
-                </div>
-
-                {/* Menú de Navegación */}
-                <nav className="sidebar-nav">
-                    <div className="nav-section-title">
-                        Operaciones
-                    </div>
-                    <NavLink to="/app/logistica" className={getNavClass}>
-                        📦 Logística y Maestros
-                    </NavLink>
-                    <NavLink to="/app/dams" className={getNavClass}>
-                        📑 Declaraciones (DAMs)
-                    </NavLink>
-
-                    <div className="nav-section-title">
-                        Catálogos Maestros
-                    </div>
-                    <NavLink to="/app/importadores" className={getNavClass}>
-                        🏢 Importadores
-                    </NavLink>
-                    <NavLink to="/app/proveedores" className={getNavClass}>
-                        🤝 Proveedores
-                    </NavLink>
-                    <NavLink to="/app/agentes" className={getNavClass}>
-                        🛃 Agentes de Aduanas
-                    </NavLink>
-                    <NavLink to="/app/almacenes" className={getNavClass}>
-                        🏭 Almacenes
-                    </NavLink>
-                    <NavLink to="/app/conceptos" className={getNavClass}>
-                        🏷️ Conceptos de Gasto
-                    </NavLink>
-                    <NavLink to="/app/comprobantes" className={getNavClass}>
-                        📄 Tipos de Comprobante
-                    </NavLink>
-                    <NavLink to="/app/bancos" className={getNavClass}>
-                        🏦 Bancos y Cuentas
-                    </NavLink>
-
-                    <div className="nav-section-title">
-                        Finanzas
-                    </div>
-                    <NavLink to="/app/vouchers" className={getNavClass}>
-                        🎟️ Vouchers Bancarios
-                    </NavLink>
-                    <NavLink to="/app/gastos" className={getNavClass}>
-                        💸 Registro de Gastos
-                    </NavLink>
-                    <NavLink to="/app/pagos" className={getNavClass}>
-                        🏦 Liquidación de Pagos
-                    </NavLink>
-
-                    <div className="nav-section-title">
-                        Seguridad y Control
-                    </div>
-                    <NavLink to="/app/auditoria" className={getNavClass}>
-                        🛡️ Auditoría (Eliminados)
-                    </NavLink>
-                </nav>
-
-                {/* Botón de salida */}
-                <div className="sidebar-footer">
-                    <button onClick={cerrarSesion} className="btn btn-danger btn-block">
-                        Cerrar Sesión
-                    </button>
-                </div>
-            </aside>
-
-            {/* ÁREA CENTRAL DE TRABAJO */}
-            <div className="main-wrapper">
-                {/* Cabecera Superior (Topbar) */}
-                <header className="topbar">
-                    <h3 className="topbar-title">Panel de Operaciones</h3>
-                </header>
-
-                {/* CONTENIDO DINÁMICO */}
-                <main className="main-content">
-                    <Outlet />
-                </main>
-            </div>
+  return (
+    <div className="h-screen w-full flex overflow-hidden font-sans text-slate-200 bg-slate-900 antialiased selection:bg-teal-500 selection:text-white">
+      {/* ICON-RAIL SIDEBAR */}
+      <aside className="w-14 bg-slate-800 border-r border-slate-700 flex flex-col items-center py-3 justify-between z-30 shrink-0">
+        <div className="flex flex-col items-center gap-4 w-full">
+          <div className="h-9 w-9 bg-teal-500/10 border border-teal-500/30 rounded-lg flex items-center justify-center text-teal-400 font-bold text-xs" title="ERP Admin">ER</div>
+          <div className="w-6 h-px bg-slate-700 my-0.5"></div>
+          <nav className="flex flex-col gap-2 w-full px-2">
+            <NavLink to="/app/logistica" className={navClass} title="Logística y Maestros">📦<span className="active-indicator absolute left-[-8px] top-2 bottom-2 w-0.5 bg-teal-400 rounded-r hidden"></span></NavLink>
+            <NavLink to="/app/dams" className={navClass} title="Declaraciones (DAMs)">📄</NavLink>
+            <div className="w-6 h-px bg-slate-700 my-1 mx-auto"></div>
+            <NavLink to="/app/importadores" className={navClass} title="Importadores">🏢</NavLink>
+            <NavLink to="/app/proveedores" className={navClass} title="Proveedores">🤝</NavLink>
+            <NavLink to="/app/agentes" className={navClass} title="Agentes Aduanas">🛂</NavLink>
+            <NavLink to="/app/almacenes" className={navClass} title="Almacenes">🏭</NavLink>
+            <NavLink to="/app/conceptos" className={navClass} title="Conceptos">🏷️</NavLink>
+            <NavLink to="/app/comprobantes" className={navClass} title="Tipos Comprobante">📑</NavLink>
+            <NavLink to="/app/bancos" className={navClass} title="Bancos">🏦</NavLink>
+            <div className="w-6 h-px bg-slate-700 my-1 mx-auto"></div>
+            <NavLink to="/app/vouchers" className={navClass} title="Vouchers">🎟️</NavLink>
+            <NavLink to="/app/gastos" className={navClass} title="Registro Gastos">💸</NavLink>
+            <NavLink to="/app/pagos" className={navClass} title="Liquidación Pagos">⚖️</NavLink>
+            <div className="w-6 h-px bg-slate-700 my-1 mx-auto"></div>
+            <NavLink to="/app/auditoria" className={navClass} title="Auditoría">🛡️</NavLink>
+          </nav>
         </div>
-    )
-}
+        <div className="flex flex-col items-center gap-3">
+          <button onClick={cerrarSesion} className="relative h-8 w-8 rounded-full bg-slate-700 border border-slate-600 flex items-center justify-center font-semibold text-slate-300 hover:ring-2 hover:ring-rose-500 transition-all" title="Cerrar Sesión">
+            <span className="text-[10px] font-mono">X</span>
+          </button>
+        </div>
+      </aside>
 
-export default Layout
+      {/* MAIN WRAPPER */}
+      <div className="flex-1 flex flex-col h-full overflow-hidden bg-slate-900">
+        <header className="h-10 bg-slate-800/90 backdrop-blur border-b border-slate-700 flex items-center justify-between px-4 shrink-0">
+          <div className="flex items-center gap-2 text-xs">
+            <span className="font-medium text-slate-400">ERP Admin</span><span className="text-slate-600">/</span>
+            <span className="font-semibold text-slate-100">Panel Central</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 text-[11px] text-slate-400"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span><span>BD Conectada</span></div>
+          </div>
+        </header>
+        <div className="flex-1 overflow-y-auto">
+          <Outlet />
+        </div>
+      </div>
+    </div>
+  );
+}
+export default Layout;

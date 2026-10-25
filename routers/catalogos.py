@@ -5,7 +5,7 @@ from sqlalchemy.exc import IntegrityError
 
 import models
 import schemas
-from dependencies import get_db, get_current_user
+from dependencies import get_db, get_current_user, RoleChecker
 
 router = APIRouter(tags=["Catalogos"])
 
@@ -13,7 +13,11 @@ router = APIRouter(tags=["Catalogos"])
 # 1. ROLES
 # ==========================================
 @router.post("/roles/", response_model=schemas.CatRol)
-def crear_rol(rol: schemas.CatRolCreate, db: Session = Depends(get_db)):
+def crear_rol(
+    rol: schemas.CatRolCreate, 
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(RoleChecker([1]))
+):
     nuevo_rol = models.CatRol(**rol.model_dump())
     db.add(nuevo_rol)
     db.commit()

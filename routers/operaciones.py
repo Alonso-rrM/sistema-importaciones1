@@ -173,7 +173,14 @@ async def autorizar_levante(
         return maestro
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=400, detail=f"Error al autorizar levante: {str(e)}")
+@router.get("/maestros/lookup", response_model=List[schemas.MaestroLookup])
+def lookup_maestros(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    # Retorna solo las columnas necesarias (hasta 2000 activos) sin join pesado
+    query = db.query(models.MaestroImportacion.id_maestro, models.MaestroImportacion.numero_factura, models.MaestroImportacion.n_cont_fisico, models.MaestroImportacion.tipo_valor)\
+              .filter(models.MaestroImportacion.estado_registro == "ACTIVO")\
+              .order_by(models.MaestroImportacion.id_maestro.desc())\
+              .limit(2000).all()
+    return query
 
 @router.get("/maestros/", response_model=schemas.PaginatedResponse[schemas.MaestroImportacion])
 def listar_facturas(
@@ -325,6 +332,13 @@ def eliminar_maestro(id_maestro: int, req: schemas.EliminacionRequest, db: Sessi
 # 2. DETALLE DAMS
 # ==========================================
 
+@router.get("/dams/lookup", response_model=List[schemas.DamLookup])
+def lookup_dams(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    query = db.query(models.DetalleDam.id_dam, models.DetalleDam.numero_de_dam, models.DetalleDam.id_maestro)\
+              .order_by(models.DetalleDam.id_dam.desc())\
+              .limit(3000).all()
+    return query
+
 @router.get("/dams/", response_model=schemas.PaginatedResponse[schemas.DetalleDam])
 def listar_dams(
     page: int = Query(1, ge=1),
@@ -385,9 +399,10 @@ def evaluar_levante_reactivo(db: Session, id_maestro: int):
 @router.post("/dams/", response_model=schemas.DetalleDam)
 def crear_dam(dam: schemas.DetalleDamCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     maestro = db.query(models.MaestroImportacion).filter(models.MaestroImportacion.id_maestro == dam.id_maestro).first()
-    
     if not maestro:
         raise HTTPException(status_code=404, detail="El Maestro de Importación asociado no existe en la base de datos.")
+    if maestro.estado_levante == "CON LEVANTE" and current_user.id_rol != 1:
+        raise HTTPException(status_code=403, detail="Operación Denegada: No se pueden agregar DAMs a un contenedor que ya cuenta con LEVANTE autorizado.")
 
     estrategia = ESTRATEGIAS_VALIDACION_DAM.get(maestro.tipo_valor)
     if estrategia:

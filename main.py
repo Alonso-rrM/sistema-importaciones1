@@ -4,15 +4,21 @@ import requests
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
+from slowapi.errors import RateLimitExceeded
+from slowapi import _rate_limit_exceeded_handler
 
 import models
 import schemas
 from database import SessionLocal
 from security import get_password_hash
-from dependencies import get_db, get_current_user, RoleChecker
+from dependencies import get_db, get_current_user, RoleChecker, limiter
 from routers import auth, catalogos, operaciones, finanzas
 
 app = FastAPI(title="API de Importaciones y Pagos")
+
+# Configuración Global de Rate Limiting (SlowAPI)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 cors_env = os.getenv("CORS_ORIGINS")
 origins = [o.strip() for o in cors_env.split(",") if o.strip()] if cors_env else ["http://localhost:5173", "http://127.0.0.1:5173"]
@@ -35,9 +41,13 @@ app.include_router(finanzas.router)
 def ruta_principal():
     return {"mensaje": "¡Servidor de Importaciones funcionando al 100%!"}
 
-# --- USUARIOS ---
+# --- USUARIOS (Blindado: Solo SuperAdmin Rol 1) ---
 @app.post("/usuarios/", response_model=schemas.Usuario)
-def crear_usuario(usuario: schemas.UsuarioCreate, db: Session = Depends(get_db)):
+def crear_usuario(
+    usuario: schemas.UsuarioCreate, 
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(RoleChecker([1]))
+):
     if db.query(models.Usuario).filter(models.Usuario.username == usuario.username).first():
         raise HTTPException(status_code=400, detail="El username ya está registrado")
     hashed_password = get_password_hash(usuario.password)

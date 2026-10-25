@@ -216,6 +216,13 @@ class MaestroImportacionUpdate(BaseModel):
     tipo_valor: str | None = None
     version: int | None = None
 
+class MaestroLookup(BaseModel):
+    id_maestro: int
+    numero_factura: str
+    n_cont_fisico: Optional[str] = None
+    tipo_valor: str
+    model_config = ConfigDict(from_attributes=True)
+
 
 # --- 3. ESQUEMAS PARA DETALLE_DAMS ---
 
@@ -226,6 +233,12 @@ class DetalleDamBase(BaseModel):
     canal_control: Optional[str] = None
     monto_valor_provisional_usd: Optional[Decimal] = None
     aforo_realizado: bool = False  # <--- NUEVO
+
+class DamLookup(BaseModel):
+    id_dam: int
+    numero_de_dam: str
+    id_maestro: int
+    model_config = ConfigDict(from_attributes=True)
 
 class DetalleDamCreate(DetalleDamBase):
     pass
