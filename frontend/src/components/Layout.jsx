@@ -43,8 +43,8 @@ function Layout() {
       </aside>
 
       {/* MAIN WRAPPER */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden bg-slate-900">
-        <header className="h-10 bg-slate-800/90 backdrop-blur border-b border-slate-700 flex items-center justify-between px-4 shrink-0">
+      <div className="flex-1 flex flex-col h-full overflow-hidden bg-slate-950">
+        <header className="h-10 bg-slate-900/90 backdrop-blur border-b border-slate-800 flex items-center justify-between px-4 shrink-0">
           <div className="flex items-center gap-2 text-xs">
             <span className="font-medium text-slate-400">ERP Admin</span><span className="text-slate-600">/</span>
             <span className="font-semibold text-slate-100">Panel Central</span>
@@ -53,7 +53,7 @@ function Layout() {
             <div className="flex items-center gap-1.5 text-[11px] text-slate-400"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span><span>BD Conectada</span></div>
           </div>
         </header>
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto bg-slate-950">
           <Outlet />
         </div>
       </div>

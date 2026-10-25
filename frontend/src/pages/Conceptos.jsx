@@ -1,16 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import api from '../services/api';
+import useDebounce from '../hooks/useDebounce';
 
 const Conceptos = () => {
-  // --- ESTADOS DE VISTA Y SELECCIÓN ---
-  const [viewMode, setViewMode] = useState('LISTA'); // LISTA, NUEVO, MODIFICAR, CONSULTAR
-  const [selectedId, setSelectedId] = useState(null);
-  const [mensaje, setMensaje] = useState({ texto: '', tipo: '' });
-  const [busqueda, setBusqueda] = useState('');
-  const [mostrarInactivos, setMostrarInactivos] = useState(false);
-
-  // --- DATOS ---
   const [conceptos, setConceptos] = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
+  const [viewMode, setViewMode] = useState('DETALLE'); // 'DETALLE', 'NUEVO', 'MODIFICAR'
+  
+  const [busqueda, setBusqueda] = useState('');
+  const debouncedSearch = useDebounce(busqueda, 300);
+  const [filtroEstado, setFiltroEstado] = useState('ACTIVO'); // 'ACTIVO', 'INACTIVO', 'TODOS'
+
+  const [isGuardando, setIsGuardando] = useState(false);
+  const [mensaje, setMensaje] = useState({ texto: '', tipo: '' });
 
   const estadoInicial = {
     nombre: '',
@@ -18,333 +20,513 @@ const Conceptos = () => {
   };
   const [formData, setFormData] = useState(estadoInicial);
 
-  // --- CARGA INICIAL ---
   useEffect(() => {
     cargarConceptos();
-  }, [mostrarInactivos]);
+  }, [filtroEstado]);
 
   const cargarConceptos = async () => {
     try {
+      const mostrarInactivos = filtroEstado !== 'ACTIVO';
       const respuesta = await api.get(`/conceptos/?mostrar_inactivos=${mostrarInactivos}`);
-      setConceptos(respuesta.data);
+      const data = respuesta.data || [];
+      setConceptos(data);
+
+      if (selectedId) {
+        const found = data.find(c => c.id_concepto === selectedId);
+        if (found) {
+          setFormData({ nombre: found.nombre || '', descripcion: found.descripcion || '' });
+        }
+      } else if (data.length > 0 && viewMode === 'DETALLE') {
+        setSelectedId(data[0].id_concepto);
+        setFormData({ nombre: data[0].nombre || '', descripcion: data[0].descripcion || '' });
+      }
     } catch (error) {
-      console.error('Error al cargar:', error);
-      setMensaje({ texto: 'No se pudo conectar con la base de datos.', tipo: 'error' });
+      console.error('Error al cargar conceptos:', error);
+      mostrarAlerta('No se pudo conectar con la base de datos.', 'error');
     }
   };
 
-  // --- MANEJO DE SELECCIÓN ---
-  const handleRowClick = (concepto) => {
-    if (selectedId === concepto.id_concepto) {
-      setSelectedId(null);
-      setFormData(estadoInicial);
-    } else {
-      setSelectedId(concepto.id_concepto);
+  const mostrarAlerta = (texto, tipo = 'info') => {
+    setMensaje({ texto, tipo });
+    setTimeout(() => setMensaje({ texto: '', tipo: '' }), 4000);
+  };
+
+  const handleSelect = (c) => {
+    setSelectedId(c.id_concepto);
+    setViewMode('DETALLE');
+    setFormData({
+      nombre: c.nombre || '',
+      descripcion: c.descripcion || ''
+    });
+  };
+
+  const handleNuevo = () => {
+    setSelectedId(null);
+    setViewMode('NUEVO');
+    setFormData(estadoInicial);
+  };
+
+  const handleModificar = () => {
+    if (!selectedConcepto) return;
+    setViewMode('MODIFICAR');
+    setFormData({
+      nombre: selectedConcepto.nombre || '',
+      descripcion: selectedConcepto.descripcion || ''
+    });
+  };
+
+  const handleCancelarEdicion = () => {
+    if (selectedConcepto) {
+      setViewMode('DETALLE');
       setFormData({
-        nombre: concepto.nombre || '',
-        descripcion: concepto.descripcion || ''
+        nombre: selectedConcepto.nombre || '',
+        descripcion: selectedConcepto.descripcion || ''
       });
+    } else {
+      setViewMode('DETALLE');
+      if (conceptosFiltrados.length > 0) {
+        handleSelect(conceptosFiltrados[0]);
+      }
     }
   };
 
-  // --- GUARDAR ---
   const handleGuardar = async (e) => {
     e.preventDefault();
-    setMensaje({ texto: 'Guardando...', tipo: 'info' });
+    if (!formData.nombre.trim()) {
+      mostrarAlerta('El nombre del concepto de pago es obligatorio.', 'error');
+      return;
+    }
 
+    setIsGuardando(true);
     try {
       const payload = {
-        nombre: formData.nombre,
-        descripcion: formData.descripcion || null
+        nombre: formData.nombre.trim(),
+        descripcion: formData.descripcion.trim() || null
       };
 
       if (viewMode === 'NUEVO') {
-        await api.post('/conceptos/', payload);
-        setMensaje({ texto: '✅ Concepto de gasto registrado exitosamente.', tipo: 'exito' });
+        const res = await api.post('/conceptos/', payload);
+        mostrarAlerta('✅ Concepto registrado exitosamente.', 'exito');
+        await cargarConceptos();
+        setSelectedId(res.data?.id_concepto || null);
+        setViewMode('DETALLE');
       } else if (viewMode === 'MODIFICAR') {
         await api.put(`/conceptos/${selectedId}`, payload);
-        setMensaje({ texto: '✅ Concepto actualizado exitosamente.', tipo: 'exito' });
+        mostrarAlerta('✅ Concepto actualizado exitosamente.', 'exito');
+        await cargarConceptos();
+        setViewMode('DETALLE');
       }
-
-      cargarConceptos();
-      setViewMode('LISTA');
-      setSelectedId(null);
-      setFormData(estadoInicial);
-      setTimeout(() => setMensaje({ texto: '', tipo: '' }), 4000);
     } catch (error) {
-      console.error('Error al guardar:', error);
-      const errorMsg = error.response?.data?.detail || 'Revisa que no esté duplicado.';
-      setMensaje({ texto: `❌ Error al guardar: ${errorMsg}`, tipo: 'error' });
+      const errorMsg = error.response?.data?.detail || 'Error al guardar el registro.';
+      mostrarAlerta(`❌ ${errorMsg}`, 'error');
+    } finally {
+      setIsGuardando(false);
     }
   };
 
-  // --- ELIMINAR (LÓGICO) ---
   const handleEliminar = async () => {
-    const conceptoSeleccionado = conceptos.find(c => c.id_concepto === selectedId);
-    if (!conceptoSeleccionado) return;
-
-    const confirmar = window.confirm(`¿Estás seguro de desactivar el concepto "${conceptoSeleccionado.nombre}"?\nEsta acción lo marcará como INACTIVO.`);
+    if (!selectedConcepto) return;
+    const confirmar = window.confirm(`¿Estás seguro de desactivar el concepto "${selectedConcepto.nombre}"?\nEsta acción lo marcará como INACTIVO.`);
     if (!confirmar) return;
 
     try {
       await api.delete(`/conceptos/${selectedId}`);
-      setMensaje({ texto: `✅ Concepto "${conceptoSeleccionado.nombre}" desactivado correctamente.`, tipo: 'exito' });
-      cargarConceptos();
-      setSelectedId(null);
-      setFormData(estadoInicial);
-      setTimeout(() => setMensaje({ texto: '', tipo: '' }), 4000);
+      mostrarAlerta(`✅ Concepto "${selectedConcepto.nombre}" desactivado correctamente.`, 'exito');
+      await cargarConceptos();
     } catch (error) {
-      console.error('Error al eliminar:', error);
       const detalle = error.response?.data?.detail || 'No se pudo desactivar.';
-      setMensaje({ texto: `❌ ${detalle}`, tipo: 'error' });
+      mostrarAlerta(`❌ ${detalle}`, 'error');
     }
   };
 
-  // --- RESTAURAR ---
   const handleRestaurar = async () => {
-    const conceptoSeleccionado = conceptos.find(i => i.id_concepto === selectedId);
-    if (!conceptoSeleccionado) return;
-
+    if (!selectedConcepto) return;
     try {
       await api.put(`/conceptos/${selectedId}/restaurar`);
-      setMensaje({ texto: `✅ Concepto "${conceptoSeleccionado.nombre}" restaurado correctamente.`, tipo: 'exito' });
-      cargarConceptos();
-      setSelectedId(null);
-      setFormData(estadoInicial);
-      setTimeout(() => setMensaje({ texto: '', tipo: '' }), 4000);
+      mostrarAlerta(`✅ Concepto "${selectedConcepto.nombre}" restaurado a ACTIVO.`, 'exito');
+      await cargarConceptos();
     } catch (error) {
-      console.error('Error al restaurar:', error);
-      setMensaje({ texto: `❌ Error al restaurar el registro.`, tipo: 'error' });
+      const detalle = error.response?.data?.detail || 'No se pudo restaurar.';
+      mostrarAlerta(`❌ ${detalle}`, 'error');
     }
   };
 
-  // --- ELIMINAR FÍSICO ---
   const handleEliminarFisico = async () => {
-    const conceptoSeleccionado = conceptos.find(i => i.id_concepto === selectedId);
-    if (!conceptoSeleccionado) return;
-
-    const confirmar = window.confirm(`⚠️ ¡ATENCIÓN! ⚠️\n¿Estás seguro de ELIMINAR DEFINITIVAMENTE el concepto "${conceptoSeleccionado.nombre}"?\nEsta acción NO se puede deshacer y fallará si el registro ya está en uso.`);
-    if (!confirmar) return;
+    if (!selectedConcepto) return;
+    const confirmacion = window.confirm(
+      `⚠️ ATENCIÓN: ¿Deseas eliminar DEFINITIVAMENTE el concepto "${selectedConcepto.nombre}"?\n\nEsta acción NO se puede deshacer y fallará si tiene gastos asociados.`
+    );
+    if (!confirmacion) return;
 
     try {
       await api.delete(`/conceptos/${selectedId}/fisico`);
-      setMensaje({ texto: `✅ Concepto "${conceptoSeleccionado.nombre}" eliminado definitivamente.`, tipo: 'exito' });
-      cargarConceptos();
+      mostrarAlerta(`✅ Concepto "${selectedConcepto.nombre}" eliminado definitivamente.`, 'exito');
       setSelectedId(null);
-      setFormData(estadoInicial);
-      setTimeout(() => setMensaje({ texto: '', tipo: '' }), 4000);
+      await cargarConceptos();
     } catch (error) {
-      console.error('Error al eliminar físicamente:', error);
-      const detalle = error.response?.data?.detail || 'No se pudo eliminar.';
-      setMensaje({ texto: `❌ ${detalle}`, tipo: 'error' });
+      const detalle = error.response?.data?.detail || 'No se pudo eliminar definitivamente.';
+      mostrarAlerta(`❌ ${detalle}`, 'error');
     }
   };
 
-  const conceptosFiltrados = conceptos.filter((c) =>
-    (c.nombre || '').toLowerCase().includes(busqueda.toLowerCase()) ||
-    (c.descripcion || '').toLowerCase().includes(busqueda.toLowerCase())
-  );
+  const conceptosFiltrados = useMemo(() => {
+    return conceptos.filter((c) => {
+      const coincideBusqueda = 
+        (c.nombre || '').toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+        (c.descripcion || '').toLowerCase().includes(debouncedSearch.toLowerCase());
 
-  const isReadOnly = viewMode === 'CONSULTAR';
-  const conceptoActualmenteSeleccionado = conceptos.find(c => c.id_concepto === selectedId);
-  const esInactivoSeleccionado = conceptoActualmenteSeleccionado?.estado_registro === 'INACTIVO';
+      if (filtroEstado === 'ACTIVO') return coincideBusqueda && c.estado_registro === 'ACTIVO';
+      if (filtroEstado === 'INACTIVO') return coincideBusqueda && c.estado_registro === 'INACTIVO';
+      return coincideBusqueda;
+    });
+  }, [conceptos, debouncedSearch, filtroEstado]);
+
+  const selectedConcepto = useMemo(() => {
+    return conceptos.find(c => c.id_concepto === selectedId) || null;
+  }, [conceptos, selectedId]);
+
+  const esInactivoSeleccionado = selectedConcepto?.estado_registro === 'INACTIVO';
 
   return (
-    <div className="page-container">
-      <h2 className="page-title">Catálogo de Conceptos de Gasto</h2>
-
-      {/* TOP COMMAND BAR */}
-      <div className="toolbar">
-        <button 
-          className="btn btn-success" 
-          onClick={() => { setViewMode('NUEVO'); setFormData(estadoInicial); setSelectedId(null); }}
-        >
-          ➕ NUEVO
-        </button>
-        
-        {!esInactivoSeleccionado && (
-          <>
-            <button 
-              className="btn btn-warning" 
-              disabled={!selectedId} 
-              onClick={() => setViewMode('MODIFICAR')}
-            >
-              ✏️ MODIFICAR
-            </button>
-            <button 
-              className="btn btn-primary" 
-              disabled={!selectedId} 
-              onClick={() => setViewMode('CONSULTAR')}
-            >
-              👁️ CONSULTAR
-            </button>
-            <button 
-              className="btn btn-danger" 
-              disabled={!selectedId} 
-              onClick={handleEliminar}
-            >
-              🗑️ ELIMINAR
-            </button>
-          </>
-        )}
-
-        {esInactivoSeleccionado && (
-          <>
-            <button className="btn btn-primary" onClick={() => setViewMode('CONSULTAR')}>
-              👁️ CONSULTAR
-            </button>
-            <button className="btn btn-purple" onClick={handleRestaurar}>
-              ♻️ RESTAURAR
-            </button>
-            <button className="btn btn-danger" onClick={handleEliminarFisico}>
-              🚫 ELIMINAR DEFINITIVAMENTE
-            </button>
-          </>
-        )}
-        
-        {viewMode !== 'LISTA' && (
-          <button 
-            className="btn btn-secondary ml-auto" 
-            onClick={() => { setViewMode('LISTA'); setSelectedId(null); setFormData(estadoInicial); }}
-          >
-            ⬅️ VOLVER A LISTA
-          </button>
-        )}
-      </div>
-
-      {mensaje.texto && (
-        <div className={`alert ${mensaje.tipo === 'error' ? 'alert-error' : mensaje.tipo === 'exito' ? 'alert-success' : 'alert-info'}`}>
-          {mensaje.texto}
+    <div className="flex-1 flex flex-col h-full bg-slate-950 text-slate-100 overflow-hidden font-sans">
+      
+      {/* HEADER DE MÓDULO */}
+      <header className="px-6 py-4 bg-slate-900/90 border-b border-slate-800 flex flex-wrap items-center justify-between gap-4 shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-center text-xl shadow-inner">
+            🏷️
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-lg font-bold text-white tracking-tight">Catálogo de Conceptos de Pago</h1>
+              <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                Módulo Catálogos
+              </span>
+            </div>
+            <p className="text-xs text-slate-400">
+              Clasificación contable para gastos de importación (Flete, Almacenaje, Agenciamiento, Cuadrilla, etc.)
+            </p>
+          </div>
         </div>
-      )}
 
-      {viewMode === 'LISTA' ? (
-        // ======================= VISTA: LISTA =======================
-        <div className="card">
-          <div className="flex-between mb-3" style={{ flexWrap: 'wrap', gap: '10px' }}>
-            <h4 className="text-muted" style={{ margin: 0 }}>Conceptos Registrados ({conceptosFiltrados.length})</h4>
-            
-            <div className="flex-row">
-              <label className="flex-row font-bold text-muted" style={{ cursor: 'pointer' }}>
-                <input 
-                  type="checkbox" 
-                  checked={mostrarInactivos} 
-                  onChange={(e) => { setMostrarInactivos(e.target.checked); setSelectedId(null); }}
-                />
-                Mostrar eliminados (Inactivos)
-              </label>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleNuevo}
+            className="px-3.5 py-1.5 bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold rounded-lg transition-colors shadow-lg shadow-teal-600/20 flex items-center gap-1.5 cursor-pointer"
+          >
+            <span>+</span>
+            <span>Nuevo Concepto</span>
+          </button>
+        </div>
+      </header>
 
+      {/* MASTER-DETAIL GRID */}
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-5 p-5 min-h-0 overflow-hidden">
+        
+        {/* BANDEJA IZQUIERDA (38%) */}
+        <section className="lg:col-span-5 flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl min-h-0">
+          
+          <div className="p-3.5 border-b border-slate-800 bg-slate-900/60 space-y-2.5 shrink-0">
+            <div className="relative">
               <input
                 type="text"
-                placeholder="🔍 Buscar por nombre o descripción..."
                 value={busqueda}
                 onChange={(e) => setBusqueda(e.target.value)}
-                className="toolbar-search"
+                placeholder="Buscar por Nombre o Descripción..."
+                className="w-full pl-9 pr-4 py-2 text-xs bg-slate-950 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500 transition-all"
               />
+              <span className="absolute inset-y-0 left-3 flex items-center text-slate-400 text-xs">🔍</span>
+              {busqueda && (
+                <button onClick={() => setBusqueda('')} className="absolute inset-y-0 right-3 flex items-center text-slate-400 hover:text-white text-xs">✕</button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1.5 text-[11px]">
+              <button
+                type="button"
+                onClick={() => setFiltroEstado('ACTIVO')}
+                className={`px-3 py-1 rounded-md font-semibold transition-colors ${
+                  filtroEstado === 'ACTIVO'
+                    ? 'bg-teal-600 text-white shadow'
+                    : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Activos ({conceptos.filter(c => c.estado_registro === 'ACTIVO').length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setFiltroEstado('INACTIVO')}
+                className={`px-3 py-1 rounded-md font-semibold transition-colors ${
+                  filtroEstado === 'INACTIVO'
+                    ? 'bg-teal-600 text-white shadow'
+                    : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Inactivos ({conceptos.filter(c => c.estado_registro === 'INACTIVO').length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setFiltroEstado('TODOS')}
+                className={`px-3 py-1 rounded-md font-semibold transition-colors ${
+                  filtroEstado === 'TODOS'
+                    ? 'bg-teal-600 text-white shadow'
+                    : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Todos ({conceptos.length})
+              </button>
             </div>
           </div>
 
-          <div className="table-container">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th style={{ width: '80px' }}>ID</th>
-                  <th style={{ width: '250px' }}>Nombre</th>
-                  <th>Descripción</th>
-                  <th style={{ width: '120px' }}>Estado</th>
-                </tr>
-              </thead>
-              <tbody>
-                {conceptosFiltrados.length === 0 ? (
-                  <tr>
-                    <td colSpan="4" className="text-center text-muted">No hay Conceptos de gasto registrados aún.</td>
-                  </tr>
-                ) : (
-                  conceptosFiltrados.map((concepto) => {
-                    const esInactivo = concepto.estado_registro === 'INACTIVO';
-                    const isSelected = selectedId === concepto.id_concepto;
-                    let trClasses = [];
-                    if (isSelected) trClasses.push('selected');
-                    if (esInactivo) trClasses.push('inactive');
-
-                    return (
-                      <tr 
-                        key={concepto.id_concepto} 
-                        onClick={() => handleRowClick(concepto)}
-                        className={trClasses.join(' ')}
-                      >
-                        <td>{concepto.id_concepto}</td>
-                        <td className="font-bold">
-                          <span className="truncate-text" title={concepto.nombre}>{concepto.nombre}</span>
-                        </td>
-                        <td className="text-muted">
-                          <span className="truncate-text" title={concepto.descripcion || '—'}>{concepto.descripcion || '—'}</span>
-                        </td>
-                        <td className="no-strike">
-                          <span className={`badge ${esInactivo ? 'badge-danger' : 'badge-success'}`}>
-                            {esInactivo ? 'INACTIVO' : 'ACTIVO'}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      ) : (
-        // ======================= VISTA: FORMULARIO =======================
-        <div className="card">
-          <h3 className="section-title">
-            {viewMode === 'NUEVO' ? 'Registro de Nuevo Concepto' : viewMode === 'MODIFICAR' ? 'Modificar Concepto' : 'Detalle del Concepto'}
-          </h3>
-          
-          <form onSubmit={handleGuardar}>
-            <div className="form-grid">
-              <div>
-                <label className="label-text">Nombre del Concepto *</label>
-                <input
-                  type="text"
-                  value={formData.nombre}
-                  onChange={(e) => setFormData(prev => ({ ...prev, nombre: e.target.value }))}
-                  disabled={isReadOnly}
-                  required
-                  placeholder="Ej: Flete Marítimo, Seguro..."
-                  className="form-input"
-                />
+          <div className="flex-1 overflow-y-auto divide-y divide-slate-800/80 p-2 space-y-1 min-h-0">
+            {conceptosFiltrados.length === 0 ? (
+              <div className="p-8 text-center text-slate-500 text-xs">
+                No se encontraron conceptos de pago con los criterios indicados.
               </div>
+            ) : (
+              conceptosFiltrados.map((c) => {
+                const isSelected = selectedId === c.id_concepto;
+                const isInactivo = c.estado_registro === 'INACTIVO';
 
-              <div>
-                <label className="label-text">Descripción (Opcional)</label>
-                <input
-                  type="text"
-                  value={formData.descripcion}
-                  onChange={(e) => setFormData(prev => ({ ...prev, descripcion: e.target.value }))}
-                  disabled={isReadOnly}
-                  placeholder="Breve descripción del concepto..."
-                  className="form-input"
-                />
-              </div>
-            </div>
+                return (
+                  <div
+                    key={c.id_concepto}
+                    onClick={() => handleSelect(c)}
+                    className={`p-3 rounded-lg cursor-pointer transition-all border ${
+                      isSelected
+                        ? 'bg-teal-950/30 border-teal-500/80 shadow-md ring-1 ring-teal-500/20'
+                        : 'bg-slate-900/60 hover:bg-slate-800/70 border-slate-800/80'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-xs text-teal-400">#{c.id_concepto}</span>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                          isInactivo
+                            ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                            : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                        }`}>
+                          {c.estado_registro || 'ACTIVO'}
+                        </span>
+                      </div>
+                    </div>
 
-            {!isReadOnly && (
-              <div className="form-actions">
-                <button 
-                  type="button" 
-                  className="btn btn-secondary" 
-                  onClick={() => { setViewMode('LISTA'); setSelectedId(null); setFormData(estadoInicial); }}
-                >
-                  CANCELAR
-                </button>
-                <button type="submit" className="btn btn-success">
-                  💾 GUARDAR
-                </button>
-              </div>
+                    <div className="mt-1.5 text-xs font-semibold text-slate-200 truncate">
+                      {c.nombre}
+                    </div>
+                    {c.descripcion && (
+                      <div className="text-[11px] text-slate-400 truncate mt-0.5">
+                        {c.descripcion}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
             )}
-          </form>
-        </div>
-      )}
+          </div>
+        </section>
+
+        {/* PANEL DERECHO WORKSTATION (62%) */}
+        <section className="lg:col-span-7 flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl min-h-0">
+          
+          {mensaje.texto && (
+            <div className={`p-3 border-b text-xs flex items-center justify-between animate-fadeIn ${
+              mensaje.tipo === 'exito'
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                : mensaje.tipo === 'error'
+                ? 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+                : 'bg-teal-500/10 border-teal-500/30 text-teal-300'
+            }`}>
+              <span>{mensaje.texto}</span>
+              <button onClick={() => setMensaje({ texto: '', tipo: '' })} className="hover:text-white">✕</button>
+            </div>
+          )}
+
+          {!selectedConcepto && viewMode !== 'NUEVO' ? (
+            <div className="flex-1 flex flex-col items-center justify-center p-12 text-center text-slate-500">
+              <div className="w-16 h-16 rounded-2xl bg-teal-500/10 border border-teal-500/20 flex items-center justify-center text-3xl mb-4 shadow-inner">
+                🏷️
+              </div>
+              <h3 className="text-base font-bold text-slate-300">Ficha de Concepto de Gasto</h3>
+              <p className="text-xs text-slate-500 max-w-sm mt-1.5">
+                Seleccione un concepto de la bandeja izquierda para ver o actualizar sus parámetros contables.
+              </p>
+              <button
+                onClick={handleNuevo}
+                className="mt-4 px-4 py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-xs font-bold transition-all shadow-md shadow-teal-600/20"
+              >
+                + Registrar Nuevo Concepto
+              </button>
+            </div>
+          ) : (
+            <div className="flex-1 flex flex-col min-h-0 overflow-y-auto p-5 space-y-5">
+              
+              <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-4 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <h2 className="text-base font-bold text-white tracking-tight">
+                      {viewMode === 'NUEVO' ? '✨ Nuevo Concepto de Pago' : selectedConcepto?.nombre}
+                    </h2>
+                    {viewMode !== 'NUEVO' && (
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                        esInactivoSeleccionado
+                          ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                          : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                      }`}>
+                        {selectedConcepto?.estado_registro || 'ACTIVO'}
+                      </span>
+                    )}
+                  </div>
+
+                  {viewMode === 'DETALLE' && (
+                    <div className="flex items-center gap-2">
+                      {!esInactivoSeleccionado ? (
+                        <>
+                          <button
+                            onClick={handleModificar}
+                            className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/30 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 cursor-pointer"
+                          >
+                            <span>✏️</span>
+                            <span>Modificar</span>
+                          </button>
+                          <button
+                            onClick={handleEliminar}
+                            className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-rose-300 border border-rose-500/30 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 cursor-pointer"
+                          >
+                            <span>🗑️</span>
+                            <span>Desactivar</span>
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            onClick={handleRestaurar}
+                            className="px-2.5 py-1.5 bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 cursor-pointer"
+                          >
+                            <span>♻️</span>
+                            <span>Restaurar</span>
+                          </button>
+                          <button
+                            onClick={handleEliminarFisico}
+                            className="px-2.5 py-1.5 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 cursor-pointer"
+                          >
+                            <span>🚫</span>
+                            <span>Eliminar Definitivo</span>
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {viewMode !== 'NUEVO' && (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs pt-1 border-t border-slate-800/80">
+                    <div>
+                      <span className="text-slate-500 text-[10px] uppercase font-bold block">ID</span>
+                      <span className="font-mono text-slate-200">#{selectedConcepto?.id_concepto}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 text-[10px] uppercase font-bold block">Concepto</span>
+                      <span className="text-teal-400 font-semibold truncate block">{selectedConcepto?.nombre}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 text-[10px] uppercase font-bold block">Estado</span>
+                      <span className="text-slate-200 font-semibold">{selectedConcepto?.estado_registro}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {viewMode === 'DETALLE' ? (
+                <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-5 space-y-4">
+                  <div className="flex items-center gap-2 pb-3 border-b border-slate-800">
+                    <span className="text-teal-400 text-sm">📋</span>
+                    <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                      Datos del Concepto
+                    </h3>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                    <div className="bg-slate-900/80 border border-slate-800 p-3.5 rounded-lg space-y-1">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Denominación</span>
+                      <span className="font-bold text-slate-100 text-sm">{selectedConcepto?.nombre}</span>
+                    </div>
+
+                    <div className="bg-slate-900/80 border border-slate-800 p-3.5 rounded-lg space-y-1">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Descripción / Justificación</span>
+                      <span className="text-slate-200 text-sm">{selectedConcepto?.descripcion || 'Sin descripción detallada'}</span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <form onSubmit={handleGuardar} className="bg-slate-950/80 border border-slate-800 rounded-xl p-5 space-y-4">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                    <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                      <span className="text-teal-400">✏️</span>
+                      <span>{viewMode === 'NUEVO' ? 'Registro de Concepto' : 'Edición de Concepto'}</span>
+                    </h3>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-300 uppercase tracking-wide mb-1.5">
+                        Nombre del Concepto *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={formData.nombre}
+                        onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
+                        placeholder="Ej. Flete Internacional, Almacenaje Callao, Gastos de Despacho..."
+                        className="w-full text-xs bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white focus:outline-none focus:border-teal-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-300 uppercase tracking-wide mb-1.5">
+                        Descripción (Opcional)
+                      </label>
+                      <textarea
+                        rows={3}
+                        value={formData.descripcion}
+                        onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
+                        placeholder="Detalles sobre este concepto o su aplicación contable..."
+                        className="w-full text-xs bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white focus:outline-none focus:border-teal-500 resize-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="pt-4 border-t border-slate-800 flex items-center justify-end gap-3">
+                    <button
+                      type="button"
+                      onClick={handleCancelarEdicion}
+                      className="px-4 py-2 border border-slate-700 text-slate-300 hover:bg-slate-800 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isGuardando}
+                      className="px-6 py-2 bg-teal-600 hover:bg-teal-500 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-all shadow-lg shadow-teal-600/20 flex items-center gap-2 cursor-pointer"
+                    >
+                      {isGuardando ? (
+                        <>
+                          <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          <span>Guardando...</span>
+                        </>
+                      ) : (
+                        <span>Guardar Concepto</span>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+            </div>
+          )}
+        </section>
+
+      </div>
     </div>
   );
 };
