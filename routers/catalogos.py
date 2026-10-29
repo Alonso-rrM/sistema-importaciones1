@@ -76,7 +76,7 @@ def restaurar_bancos(id_banco: int, db: Session = Depends(get_db), current_user:
     return db_item
 
 @router.delete("/bancos/{id_banco}/fisico")
-def eliminar_bancos_fisico(id_banco: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def eliminar_bancos_fisico(id_banco: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1]))):
     db_item = db.query(models.CatBanco).filter(models.CatBanco.id_banco == id_banco).first()
     if not db_item:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
@@ -144,7 +144,7 @@ def restaurar_agentes(id_agente: int, db: Session = Depends(get_db), current_use
     return db_item
 
 @router.delete("/agentes/{id_agente}/fisico")
-def eliminar_agentes_fisico(id_agente: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def eliminar_agentes_fisico(id_agente: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1]))):
     db_item = db.query(models.CatAgente).filter(models.CatAgente.id_agente == id_agente).first()
     if not db_item:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
@@ -212,7 +212,7 @@ def restaurar_proveedores(id_proveedor: int, db: Session = Depends(get_db), curr
     return db_item
 
 @router.delete("/proveedores/{id_proveedor}/fisico")
-def eliminar_proveedores_fisico(id_proveedor: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def eliminar_proveedores_fisico(id_proveedor: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1]))):
     db_item = db.query(models.CatProveedor).filter(models.CatProveedor.id_proveedor == id_proveedor).first()
     if not db_item:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
@@ -276,7 +276,7 @@ def restaurar_almacenes(id_almacen: int, db: Session = Depends(get_db), current_
     return db_item
 
 @router.delete("/almacenes/{id_almacen}/fisico")
-def eliminar_almacenes_fisico(id_almacen: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def eliminar_almacenes_fisico(id_almacen: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1]))):
     db_item = db.query(models.CatAlmacen).filter(models.CatAlmacen.id_almacen == id_almacen).first()
     if not db_item:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
@@ -344,7 +344,7 @@ def restaurar_importadores(id_importador: int, db: Session = Depends(get_db), cu
     return db_item
 
 @router.delete("/importadores/{id_importador}/fisico")
-def eliminar_importadores_fisico(id_importador: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def eliminar_importadores_fisico(id_importador: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1]))):
     db_item = db.query(models.CatImportador).filter(models.CatImportador.id_importador == id_importador).first()
     if not db_item:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
@@ -417,7 +417,7 @@ def restaurar_conceptos(id_concepto: int, db: Session = Depends(get_db), current
     return db_item
 
 @router.delete("/conceptos/{id_concepto}/fisico")
-def eliminar_conceptos_fisico(id_concepto: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def eliminar_conceptos_fisico(id_concepto: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1]))):
     db_item = db.query(models.CatConceptoPago).filter(models.CatConceptoPago.id_concepto == id_concepto).first()
     if not db_item:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
@@ -490,7 +490,7 @@ def restaurar_tipo_documento(id: int, db: Session = Depends(get_db), current_use
     return {"mensaje": "Documento restaurado exitosamente"}
 
 @router.delete("/tipos-documento/{id}/fisico")
-def eliminar_tipo_documento_fisico(id: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def eliminar_tipo_documento_fisico(id: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1]))):
     doc_bd = db.query(models.CatalogoDocumentoPago).filter(models.CatalogoDocumentoPago.id_tipo_doc == id).first()
     if not doc_bd:
         raise HTTPException(status_code=404, detail="Documento no encontrado")

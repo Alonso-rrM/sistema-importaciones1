@@ -16,7 +16,7 @@ if not SECRET_KEY:
     raise ValueError("La variable de entorno SECRET_KEY no está configurada. Verifica tu archivo .env")
 
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 horas
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verifica que la contraseña en texto plano coincida con el hash de la BD."""

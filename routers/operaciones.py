@@ -122,6 +122,8 @@ async def desbloquear_maestro_con_levante(
         db.commit()
         db.refresh(maestro)
         return maestro
+    except HTTPException:
+        raise
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=f"Error al desbloquear levante: {str(e)}")
@@ -171,8 +173,12 @@ async def autorizar_levante(
         db.commit()
         db.refresh(maestro)
         return maestro
+    except HTTPException:
+        raise
     except Exception as e:
         db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al autorizar levante: {str(e)}")
+
 @router.get("/maestros/lookup", response_model=List[schemas.MaestroLookup])
 def lookup_maestros(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     # Retorna solo las columnas necesarias (hasta 2000 activos) sin join pesado
@@ -307,7 +313,8 @@ def eliminar_maestro(id_maestro: int, req: schemas.EliminacionRequest, db: Sessi
             detail="❌ Bloqueo: No se puede eliminar el Maestro porque tiene DAMs asociadas. Elimine primero las DAMs."
         )
         
-    datos = {c.name: getattr(maestro, c.name) for c in maestro.__table__.columns}
+    cols_respaldo = {c.name for c in models.MaestroEliminado.__table__.columns}
+    datos = {c.name: getattr(maestro, c.name) for c in maestro.__table__.columns if c.name in cols_respaldo}
     snapshot = {
         "Agente": maestro.agente_rel.nombre if maestro.agente_rel else "N/A",
         "Importador": maestro.importador_rel.nombre if maestro.importador_rel else "N/A",
@@ -450,8 +457,16 @@ def eliminar_dam(id_dam: int, req: schemas.EliminacionRequest, db: Session = Dep
             status_code=400, 
             detail="❌ Bloqueo: No se puede eliminar la DAM porque tiene Gastos asociados. Elimine primero los Gastos."
         )
+
+    tiene_pagos = db.query(models.RegistroPago).filter(models.RegistroPago.id_dam == id_dam).first()
+    if tiene_pagos:
+        raise HTTPException(
+            status_code=400, 
+            detail="❌ Bloqueo: No se puede eliminar la DAM porque tiene Pagos asociados. Elimine primero los Pagos."
+        )
         
-    datos = {c.name: getattr(dam, c.name) for c in dam.__table__.columns}
+    cols_respaldo = {c.name for c in models.DamEliminada.__table__.columns}
+    datos = {c.name: getattr(dam, c.name) for c in dam.__table__.columns if c.name in cols_respaldo}
     snapshot = {
         "Contenedor/Factura": dam.maestro.numero_factura if dam.maestro else "N/A"
     }

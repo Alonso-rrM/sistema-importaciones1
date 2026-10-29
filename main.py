@@ -94,14 +94,17 @@ def consultar_ruc_sunat(ruc: str):
 def listar_auditoria(db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1, 4]))):
     return db.query(models.AuditLog).order_by(models.AuditLog.created_at.desc()).limit(100).all()
 @app.get("/auditoria/maestros/", response_model=List[schemas.MaestroEliminadoResponse], tags=["Auditoria"])
-def listar_auditoria_maestros(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def listar_auditoria_maestros(db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1, 4]))):
     return db.query(models.MaestroEliminado).order_by(models.MaestroEliminado.fecha_eliminacion.desc()).all()
 @app.get("/auditoria/dams/", response_model=List[schemas.DamEliminadaResponse], tags=["Auditoria"])
-def listar_auditoria_dams(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def listar_auditoria_dams(db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1, 4]))):
     return db.query(models.DamEliminada).order_by(models.DamEliminada.fecha_eliminacion.desc()).all()
 @app.get("/auditoria/gastos/", response_model=List[schemas.GastoEliminadoResponse], tags=["Auditoria"])
-def listar_auditoria_gastos(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def listar_auditoria_gastos(db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1, 4]))):
     return db.query(models.GastoEliminado).order_by(models.GastoEliminado.fecha_eliminacion.desc()).all()
 @app.get("/auditoria/pagos/", response_model=List[schemas.PagoEliminadoResponse], tags=["Auditoria"])
-def listar_auditoria_pagos(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def listar_auditoria_pagos(db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1, 4]))):
     return db.query(models.PagoEliminado).order_by(models.PagoEliminado.fecha_eliminacion.desc()).all()
+@app.get("/auditoria/vouchers/", response_model=List[schemas.VoucherEliminadoResponse], tags=["Auditoria"])
+def listar_auditoria_vouchers(db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1, 4]))):
+    return db.query(models.VoucherEliminado).order_by(models.VoucherEliminado.fecha_eliminacion.desc()).all()

@@ -228,7 +228,8 @@ def eliminar_gasto(id_gasto: int, req: schemas.EliminacionRequest, db: Session =
             detail="❌ Bloqueo: No se puede eliminar el Gasto porque tiene Pagos asociados. Elimine primero los Pagos."
         )
         
-    datos = {c.name: getattr(gasto, c.name) for c in gasto.__table__.columns}
+    cols_respaldo = {c.name for c in models.GastoEliminado.__table__.columns}
+    datos = {c.name: getattr(gasto, c.name) for c in gasto.__table__.columns if c.name in cols_respaldo}
     snapshot = {
         "Proveedor": gasto.proveedor_rel.nombre if gasto.proveedor_rel else "N/A",
         "Concepto": gasto.concepto_rel.nombre if gasto.concepto_rel else "N/A",
@@ -654,7 +655,8 @@ def eliminar_pago(id_pago: int, req: schemas.EliminacionRequest, db: Session = D
             pago.voucher_rel.saldo_disponible += pago.monto_moneda_origen
             
         # 1. Respaldo del pago principal
-        datos = {c.name: getattr(pago, c.name) for c in pago.__table__.columns}
+        cols_respaldo = {c.name for c in models.PagoEliminado.__table__.columns}
+        datos = {c.name: getattr(pago, c.name) for c in pago.__table__.columns if c.name in cols_respaldo}
         snapshot = {
             "Voucher": pago.voucher_rel.numero_operacion if pago.voucher_rel else "N/A",
             "Banco": pago.voucher_rel.banco_rel.nombre if (pago.voucher_rel and pago.voucher_rel.banco_rel) else "N/A",
@@ -693,7 +695,7 @@ def eliminar_pago(id_pago: int, req: schemas.EliminacionRequest, db: Session = D
                         if pago_zd.voucher_rel:
                             pago_zd.voucher_rel.saldo_disponible += pago_zd.monto_moneda_origen
                         
-                        datos_zd = {c.name: getattr(pago_zd, c.name) for c in pago_zd.__table__.columns}
+                        datos_zd = {c.name: getattr(pago_zd, c.name) for c in pago_zd.__table__.columns if c.name in cols_respaldo}
                         snapshot_zd = {
                             "Voucher": pago_zd.voucher_rel.numero_operacion if pago_zd.voucher_rel else "N/A",
                             "Banco": pago_zd.voucher_rel.banco_rel.nombre if (pago_zd.voucher_rel and pago_zd.voucher_rel.banco_rel) else "N/A",
