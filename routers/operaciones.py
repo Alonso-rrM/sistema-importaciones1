@@ -1,7 +1,7 @@
 from typing import List, Optional
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.orm.exc import StaleDataError
 from sqlalchemy import func
 
@@ -488,3 +488,132 @@ def eliminar_dam(id_dam: int, req: schemas.EliminacionRequest, db: Session = Dep
     evaluar_levante_reactivo(db, id_maestro_padre)
 
     return {"mensaje": f"DAM {dam.numero_de_dam} eliminada físicamente con respaldo de auditoría."}
+
+# ==========================================
+# 4. MOTOR DE KPIS LOGÍSTICOS (BFF)
+# ==========================================
+
+@router.get("/maestros/{id_maestro}/kpi-gastos")
+def kpi_gastos_maestro(
+    id_maestro: int, 
+    db: Session = Depends(get_db), 
+    current_user: models.Usuario = Depends(get_current_user)
+):
+    """Calcula el estado de avance de pago de los gastos del contenedor según su etapa operativa."""
+    # 1. Obtener el Maestro y sus DAMs
+    maestro = db.query(models.MaestroImportacion).filter(models.MaestroImportacion.id_maestro == id_maestro).first()
+    if not maestro:
+        raise HTTPException(status_code=404, detail="Maestro no encontrado")
+        
+    dam_ids = [d.id_dam for d in maestro.dams] if maestro.dams else []
+    
+    # 2. Obtener Gastos de esas DAMs con sus conceptos precargados
+    gastos = []
+    if dam_ids:
+        gastos = db.query(models.RegistroGasto).options(
+            joinedload(models.RegistroGasto.concepto_rel)
+        ).filter(
+            models.RegistroGasto.id_dam.in_(dam_ids),
+            models.RegistroGasto.estado_registro == "ACTIVO"
+        ).all()
+
+    # 3. Obtener Catálogo Completo de Conceptos Fijos Activos
+    conceptos_fijos = db.query(models.CatConceptoPago).filter(
+        models.CatConceptoPago.tipo_gasto == "FIJO_DESPACHO",
+        models.CatConceptoPago.estado_registro == "ACTIVO"
+    ).all()
+    
+    # Función auxiliar para resolver colores dinámicos del semáforo
+    def resolver_color(pct: int, total: int) -> str:
+        if total == 0:
+            return "slate"
+        if pct == 100:
+            return "emerald"
+        if pct >= 50:
+            return "amber"
+        return "rose"
+
+    # 4. Procesamiento Matemático
+    # A) FIJO_DESPACHO (Denominador = Todo el catálogo obligatorio de la empresa)
+    fijos_total = len(conceptos_fijos)
+    fijos_checklist = []
+    fijos_pagados = 0
+    fijos_pendientes = 0
+    fijos_no_registrados = 0
+    
+    for concepto in conceptos_fijos:
+        gastos_concepto = [g for g in gastos if g.id_concepto == concepto.id_concepto]
+        if not gastos_concepto:
+            fijos_no_registrados += 1
+            fijos_checklist.append({"concepto": concepto.nombre, "estado": "NO_REGISTRADO"})
+        else:
+            if all(g.estado_pago == "PAGADO" for g in gastos_concepto):
+                fijos_pagados += 1
+                fijos_checklist.append({"concepto": concepto.nombre, "estado": "PAGADO"})
+            else:
+                fijos_pendientes += 1
+                fijos_checklist.append({"concepto": concepto.nombre, "estado": "PENDIENTE"})
+                
+    fijos_pct = int((fijos_pagados / fijos_total) * 100) if fijos_total > 0 else 100
+    
+    # B) Procesar etapas dinámicas (POST_LEVANTE / EXTRAORDINARIO)
+    def procesar_dinamico(tipo_gasto_str: str):
+        gastos_filtrados = [g for g in gastos if g.concepto_rel and g.concepto_rel.tipo_gasto == tipo_gasto_str]
+        total = len(gastos_filtrados)
+        pagados = sum(1 for g in gastos_filtrados if g.estado_pago == "PAGADO")
+        pendientes = total - pagados
+        pct = int((pagados / total) * 100) if total > 0 else 100
+        
+        checklist = []
+        for g in gastos_filtrados:
+            checklist.append({"concepto": g.concepto_rel.nombre, "estado": g.estado_pago})
+            
+        return {
+            "total": total,
+            "pagados": pagados,
+            "pendientes": pendientes,
+            "porcentaje": pct,
+            "color": resolver_color(pct, total),
+            "checklist": checklist
+        }
+        
+    post_levante_data = procesar_dinamico("POST_LEVANTE")
+    extra_data = procesar_dinamico("EXTRAORDINARIO")
+    
+    # C) GLOBAL (Consolidado integral)
+    global_total = fijos_total + post_levante_data["total"] + extra_data["total"]
+    global_pagados = fijos_pagados + post_levante_data["pagados"] + extra_data["pagados"]
+    global_pct = int((global_pagados / global_total) * 100) if global_total > 0 else 100
+    global_checklist = fijos_checklist + post_levante_data["checklist"] + extra_data["checklist"]
+
+    # 5. Estructura JSON BFF limpia y enriquecida
+    return {
+        "etapas": {
+            "FIJO_DESPACHO": {
+                "titulo": "Gastos Fijos (Despacho)",
+                "total": fijos_total,
+                "pagados": fijos_pagados,
+                "pendientes": fijos_pendientes,
+                "no_registrados": fijos_no_registrados,
+                "porcentaje": fijos_pct,
+                "color": resolver_color(fijos_pct, fijos_total),
+                "checklist": fijos_checklist
+            },
+            "POST_LEVANTE": {
+                "titulo": "Gastos Post-Levante",
+                **post_levante_data
+            },
+            "EXTRAORDINARIO": {
+                "titulo": "Gastos Extraordinarios",
+                **extra_data
+            },
+            "GLOBAL": {
+                "titulo": "Consolidado Total",
+                "total": global_total,
+                "pagados": global_pagados,
+                "porcentaje": global_pct,
+                "color": resolver_color(global_pct, global_total),
+                "checklist": global_checklist
+            }
+        }
+    }
