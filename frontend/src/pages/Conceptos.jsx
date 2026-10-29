@@ -16,7 +16,8 @@ const Conceptos = () => {
 
   const estadoInicial = {
     nombre: '',
-    descripcion: ''
+    descripcion: '',
+    tipo_gasto: 'FIJO_DESPACHO'
   };
   const [formData, setFormData] = useState(estadoInicial);
 
@@ -34,11 +35,19 @@ const Conceptos = () => {
       if (selectedId) {
         const found = data.find(c => c.id_concepto === selectedId);
         if (found) {
-          setFormData({ nombre: found.nombre || '', descripcion: found.descripcion || '' });
+          setFormData({
+            nombre: found.nombre || '',
+            descripcion: found.descripcion || '',
+            tipo_gasto: found.tipo_gasto || 'FIJO_DESPACHO'
+          });
         }
       } else if (data.length > 0 && viewMode === 'DETALLE') {
         setSelectedId(data[0].id_concepto);
-        setFormData({ nombre: data[0].nombre || '', descripcion: data[0].descripcion || '' });
+        setFormData({
+          nombre: data[0].nombre || '',
+          descripcion: data[0].descripcion || '',
+          tipo_gasto: data[0].tipo_gasto || 'FIJO_DESPACHO'
+        });
       }
     } catch (error) {
       console.error('Error al cargar conceptos:', error);
@@ -56,7 +65,8 @@ const Conceptos = () => {
     setViewMode('DETALLE');
     setFormData({
       nombre: c.nombre || '',
-      descripcion: c.descripcion || ''
+      descripcion: c.descripcion || '',
+      tipo_gasto: c.tipo_gasto || 'FIJO_DESPACHO'
     });
   };
 
@@ -71,7 +81,8 @@ const Conceptos = () => {
     setViewMode('MODIFICAR');
     setFormData({
       nombre: selectedConcepto.nombre || '',
-      descripcion: selectedConcepto.descripcion || ''
+      descripcion: selectedConcepto.descripcion || '',
+      tipo_gasto: selectedConcepto.tipo_gasto || 'FIJO_DESPACHO'
     });
   };
 
@@ -80,7 +91,8 @@ const Conceptos = () => {
       setViewMode('DETALLE');
       setFormData({
         nombre: selectedConcepto.nombre || '',
-        descripcion: selectedConcepto.descripcion || ''
+        descripcion: selectedConcepto.descripcion || '',
+        tipo_gasto: selectedConcepto.tipo_gasto || 'FIJO_DESPACHO'
       });
     } else {
       setViewMode('DETALLE');
@@ -101,7 +113,8 @@ const Conceptos = () => {
     try {
       const payload = {
         nombre: formData.nombre.trim(),
-        descripcion: formData.descripcion.trim() || null
+        descripcion: formData.descripcion?.trim() || null,
+        tipo_gasto: formData.tipo_gasto || 'FIJO_DESPACHO'
       };
 
       if (viewMode === 'NUEVO') {
@@ -309,6 +322,15 @@ const Conceptos = () => {
                           {c.estado_registro || 'ACTIVO'}
                         </span>
                       </div>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                        c.tipo_gasto === 'FIJO_DESPACHO'
+                          ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                          : c.tipo_gasto === 'POST_LEVANTE'
+                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                          : 'bg-purple-500/10 text-purple-400 border-purple-500/30'
+                      }`}>
+                        {c.tipo_gasto === 'FIJO_DESPACHO' ? 'Fijo Despacho' : c.tipo_gasto === 'POST_LEVANTE' ? 'Post-Levante' : 'Extraordinario'}
+                      </span>
                     </div>
 
                     <div className="mt-1.5 text-xs font-semibold text-slate-200 truncate">
@@ -446,15 +468,32 @@ const Conceptos = () => {
                     </h3>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
                     <div className="bg-slate-900/80 border border-slate-800 p-3.5 rounded-lg space-y-1">
                       <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Denominación</span>
                       <span className="font-bold text-slate-100 text-sm">{selectedConcepto?.nombre}</span>
                     </div>
 
                     <div className="bg-slate-900/80 border border-slate-800 p-3.5 rounded-lg space-y-1">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Etapa Logística (KPI)</span>
+                      <span className={`inline-block px-2 py-0.5 rounded text-xs font-bold border mt-0.5 ${
+                        selectedConcepto?.tipo_gasto === 'FIJO_DESPACHO'
+                          ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                          : selectedConcepto?.tipo_gasto === 'POST_LEVANTE'
+                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                          : 'bg-purple-500/10 text-purple-400 border-purple-500/30'
+                      }`}>
+                        {selectedConcepto?.tipo_gasto === 'FIJO_DESPACHO'
+                          ? '1. Gasto Fijo Operativo (Despacho)'
+                          : selectedConcepto?.tipo_gasto === 'POST_LEVANTE'
+                          ? '2. Gasto Post-Levante (Devolución/Entrega)'
+                          : '3. Gasto Extraordinario (Eventualidades)'}
+                      </span>
+                    </div>
+
+                    <div className="bg-slate-900/80 border border-slate-800 p-3.5 rounded-lg space-y-1">
                       <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Descripción / Justificación</span>
-                      <span className="text-slate-200 text-sm">{selectedConcepto?.descripcion || 'Sin descripción detallada'}</span>
+                      <span className="text-slate-200 text-xs">{selectedConcepto?.descripcion || 'Sin descripción detallada'}</span>
                     </div>
                   </div>
                 </div>
@@ -478,8 +517,26 @@ const Conceptos = () => {
                         value={formData.nombre}
                         onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
                         placeholder="Ej. Flete Internacional, Almacenaje Callao, Gastos de Despacho..."
-                        className="w-full text-xs bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white focus:outline-none focus:border-teal-500"
+                        className="w-full text-xs bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white focus:outline-none focus:border-teal-500 font-semibold"
                       />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-300 uppercase tracking-wide mb-1.5">
+                        Etapa Logística (Clasificación para KPIs) *
+                      </label>
+                      <select
+                        value={formData.tipo_gasto}
+                        onChange={(e) => setFormData({ ...formData, tipo_gasto: e.target.value })}
+                        className="w-full text-xs font-bold bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-teal-300 focus:outline-none focus:border-teal-500"
+                      >
+                        <option value="FIJO_DESPACHO">1. Gasto Fijo Operativo (Ruta Crítica Despacho)</option>
+                        <option value="POST_LEVANTE">2. Gasto Post-Levante (Devolución de Vacío / Entrega)</option>
+                        <option value="EXTRAORDINARIO">3. Gasto Extraordinario (Multas / Eventualidades)</option>
+                      </select>
+                      <p className="text-[10px] text-slate-500 mt-1">
+                        Determina cómo medirá el sistema el avance de pagos de este concepto en la barra de progreso del contenedor.
+                      </p>
                     </div>
 
                     <div>

@@ -93,15 +93,18 @@ class CatImportadorUpdate(BaseModel):
 class CatConceptoPagoCreate(BaseModel):
     nombre: str
     descripcion: Optional[str] = None
+    tipo_gasto: Optional[str] = "FIJO_DESPACHO"
 
 class CatConceptoPago(CatConceptoPagoCreate):
     id_concepto: int
     estado_registro: str
+    tipo_gasto: str = "FIJO_DESPACHO"
     model_config = ConfigDict(from_attributes=True)
 
 class CatConceptoPagoUpdate(BaseModel):
     nombre: Optional[str] = None
     descripcion: Optional[str] = None
+    tipo_gasto: Optional[str] = None
 
 # --- NUEVOS CATÁLOGOS: DOCUMENTOS Y TIPO DE CAMBIO ---
 

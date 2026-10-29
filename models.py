@@ -30,6 +30,7 @@ class CatConceptoPago(Base):
     id_concepto = Column(Integer, primary_key=True, index=True)
     nombre = Column(String(100), unique=True, nullable=False)
     descripcion = Column(Text)
+    tipo_gasto = Column(String(30), default="FIJO_DESPACHO", nullable=False)
     estado_registro = Column(String(20), default="ACTIVO")
     pagos = relationship("RegistroPago", back_populates="concepto_rel")
     gastos = relationship("RegistroGasto", back_populates="concepto_rel")
