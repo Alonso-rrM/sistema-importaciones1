@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import api from '../services/api';
 import useDebounce from '../hooks/useDebounce';
+import { acortarRazonSocial } from '../utils/textUtils';
 
 const Proveedores = () => {
   const [proveedores, setProveedores] = useState([]);
@@ -13,6 +14,7 @@ const Proveedores = () => {
   const [filtroCategoria, setFiltroCategoria] = useState(''); // '', 'NACIONAL', 'INTERNACIONAL'
 
   const [buscandoRuc, setBuscandoRuc] = useState(false);
+  const [sunatData, setSunatData] = useState(null);
   const [isGuardando, setIsGuardando] = useState(false);
   const [mensaje, setMensaje] = useState({ texto: '', tipo: '' });
 
@@ -67,12 +69,14 @@ const Proveedores = () => {
   const handleNuevo = () => {
     setSelectedId(null);
     setViewMode('NUEVO');
+    setSunatData(null);
     setFormData(estadoInicial);
   };
 
   const handleModificar = () => {
     if (!selectedProveedor) return;
     setViewMode('MODIFICAR');
+    setSunatData(null);
     setFormData({
       ruc: selectedProveedor.ruc || '',
       nombre: selectedProveedor.nombre || '',
@@ -81,6 +85,7 @@ const Proveedores = () => {
   };
 
   const handleCancelarEdicion = () => {
+    setSunatData(null);
     if (selectedProveedor) {
       setViewMode('DETALLE');
       setFormData({
@@ -96,7 +101,7 @@ const Proveedores = () => {
     }
   };
 
-  // Búsqueda RUC en SUNAT
+  // Búsqueda RUC en SUNAT con acortamiento inteligente
   const buscarRuc = async () => {
     if (formData.ruc.length !== 11 || isNaN(formData.ruc)) {
       mostrarAlerta('El RUC debe tener 11 dígitos numéricos.', 'error');
@@ -106,11 +111,14 @@ const Proveedores = () => {
     try {
       const respuesta = await api.get(`/sunat/ruc/${formData.ruc}`);
       if (respuesta.data.razon_social) {
+        const original = respuesta.data.razon_social;
+        const sugerido = respuesta.data.nombre_sugerido || acortarRazonSocial(original);
+        setSunatData({ original, sugerido });
         setFormData(prev => ({
           ...prev,
-          nombre: respuesta.data.razon_social
+          nombre: sugerido
         }));
-        mostrarAlerta(`✅ SUNAT: Razón social obtenida exitosamente.`, 'exito');
+        mostrarAlerta(`✅ SUNAT: RUC válido. Razón social acortada sugerida. Puedes editarla libremente.`, 'exito');
       } else {
         mostrarAlerta('RUC no encontrado en SUNAT.', 'info');
       }
@@ -575,17 +583,34 @@ const Proveedores = () => {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-slate-300 uppercase tracking-wide mb-1.5">
-                        Razón Social / Nombre Oficial *
-                      </label>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-xs font-bold text-slate-300 uppercase tracking-wide">
+                          Razón Social / Nombre Oficial *
+                        </label>
+                        {sunatData?.original && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const nuevoNombre = formData.nombre === sunatData.sugerido ? sunatData.original : sunatData.sugerido;
+                              setFormData(prev => ({ ...prev, nombre: nuevoNombre }));
+                            }}
+                            className="text-[10px] text-teal-400 hover:text-teal-300 underline font-semibold cursor-pointer"
+                          >
+                            {formData.nombre === sunatData.sugerido ? '📄 Ver Razón Social Completa' : '✂️ Usar Nombre Acortado'}
+                          </button>
+                        )}
+                      </div>
                       <input
                         type="text"
                         required
                         value={formData.nombre}
                         onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
-                        placeholder="Nombre oficial del proveedor..."
-                        className="w-full text-xs bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white focus:outline-none focus:border-teal-500"
+                        placeholder="Nombre oficial o abreviado del proveedor..."
+                        className="w-full text-xs bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white focus:outline-none focus:border-teal-500 font-medium"
                       />
+                      <p className="text-[10px] text-slate-500 mt-1">
+                        💡 Puedes editar libremente este nombre para ajustarlo a tu estándar operativo.
+                      </p>
                     </div>
                   </div>
 

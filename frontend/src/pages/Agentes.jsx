@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import api from '../services/api';
 import useDebounce from '../hooks/useDebounce';
+import { acortarRazonSocial } from '../utils/textUtils';
 
 const Agentes = () => {
   const [agentes, setAgentes] = useState([]);
@@ -12,6 +13,7 @@ const Agentes = () => {
   const [filtroEstado, setFiltroEstado] = useState('ACTIVO'); // 'ACTIVO', 'INACTIVO', 'TODOS'
 
   const [buscandoRuc, setBuscandoRuc] = useState(false);
+  const [sunatData, setSunatData] = useState(null);
   const [isGuardando, setIsGuardando] = useState(false);
   const [mensaje, setMensaje] = useState({ texto: '', tipo: '' });
 
@@ -64,12 +66,14 @@ const Agentes = () => {
   const handleNuevo = () => {
     setSelectedId(null);
     setViewMode('NUEVO');
+    setSunatData(null);
     setFormData(estadoInicial);
   };
 
   const handleModificar = () => {
     if (!selectedAgente) return;
     setViewMode('MODIFICAR');
+    setSunatData(null);
     setFormData({
       ruc: selectedAgente.ruc || '',
       nombre: selectedAgente.nombre || ''
@@ -77,6 +81,7 @@ const Agentes = () => {
   };
 
   const handleCancelarEdicion = () => {
+    setSunatData(null);
     if (selectedAgente) {
       setViewMode('DETALLE');
       setFormData({
@@ -91,6 +96,7 @@ const Agentes = () => {
     }
   };
 
+  // Búsqueda RUC en SUNAT con acortamiento inteligente
   const buscarRuc = async () => {
     if (formData.ruc.length !== 11 || isNaN(formData.ruc)) {
       mostrarAlerta('El RUC debe tener 11 dígitos numéricos.', 'error');
@@ -100,11 +106,14 @@ const Agentes = () => {
     try {
       const respuesta = await api.get(`/sunat/ruc/${formData.ruc}`);
       if (respuesta.data.razon_social) {
+        const original = respuesta.data.razon_social;
+        const sugerido = respuesta.data.nombre_sugerido || acortarRazonSocial(original);
+        setSunatData({ original, sugerido });
         setFormData(prev => ({
           ...prev,
-          nombre: respuesta.data.razon_social
+          nombre: sugerido
         }));
-        mostrarAlerta(`✅ SUNAT: Razón social obtenida exitosamente.`, 'exito');
+        mostrarAlerta(`✅ SUNAT: RUC válido. Razón social acortada sugerida. Puedes editarla libremente.`, 'exito');
       } else {
         mostrarAlerta('RUC no encontrado en SUNAT.', 'info');
       }
@@ -526,17 +535,34 @@ const Agentes = () => {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-slate-300 uppercase tracking-wide mb-1.5">
-                        Razón Social de la Agencia *
-                      </label>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-xs font-bold text-slate-300 uppercase tracking-wide">
+                          Razón Social de la Agencia *
+                        </label>
+                        {sunatData?.original && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const nuevoNombre = formData.nombre === sunatData.sugerido ? sunatData.original : sunatData.sugerido;
+                              setFormData(prev => ({ ...prev, nombre: nuevoNombre }));
+                            }}
+                            className="text-[10px] text-teal-400 hover:text-teal-300 underline font-semibold cursor-pointer"
+                          >
+                            {formData.nombre === sunatData.sugerido ? '📄 Ver Razón Social Completa' : '✂️ Usar Nombre Acortado'}
+                          </button>
+                        )}
+                      </div>
                       <input
                         type="text"
                         required
                         value={formData.nombre}
                         onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
-                        placeholder="Nombre oficial de la agencia de aduanas..."
-                        className="w-full text-xs bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white focus:outline-none focus:border-teal-500"
+                        placeholder="Nombre oficial o abreviado de la agencia de aduanas..."
+                        className="w-full text-xs bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white focus:outline-none focus:border-teal-500 font-medium"
                       />
+                      <p className="text-[10px] text-slate-500 mt-1">
+                        💡 Puedes editar libremente este nombre para ajustarlo a tu estándar operativo.
+                      </p>
                     </div>
                   </div>
 
