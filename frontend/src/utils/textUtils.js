@@ -51,3 +51,4 @@ export function acortarRazonSocial(texto) {
 
   return nombre;
 }
+
