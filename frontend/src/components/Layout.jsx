@@ -1,8 +1,19 @@
+import { useMemo } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 
 function Layout() {
   const navigate = useNavigate();
   const cerrarSesion = () => { localStorage.removeItem('token'); navigate('/login'); };
+
+  const userRole = useMemo(() => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return null;
+      const base64Url = token.split('.')[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      return JSON.parse(atob(base64)).id_rol;
+    } catch { return null; }
+  }, []);
 
   const navClass = ({ isActive }) => 
     isActive 
@@ -33,6 +44,12 @@ function Layout() {
             <NavLink to="/app/pagos" className={navClass} title="Liquidación Pagos">⚖️</NavLink>
             <div className="w-6 h-px bg-slate-700 my-1 mx-auto"></div>
             <NavLink to="/app/auditoria" className={navClass} title="Auditoría">🛡️</NavLink>
+            {userRole === 1 && (
+              <>
+                <div className="w-6 h-px bg-slate-700 my-1 mx-auto"></div>
+                <NavLink to="/app/admin" className={navClass} title="Administración & Carga Masiva">⚙️</NavLink>
+              </>
+            )}
           </nav>
         </div>
         <div className="flex flex-col items-center gap-3">

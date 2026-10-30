@@ -1,5 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Login from './pages/Login'
+import Setup from './pages/Setup'
+import AdminPanel from './pages/AdminPanel'
 import Layout from './components/Layout'
 import Proveedores from './pages/Proveedores'
 import Importadores from './pages/Importadores'
@@ -21,6 +23,7 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/setup" element={<Setup />} />
 
         {/* Zona Corporativa */}
         <Route path="/app" element={<Layout />}>
@@ -39,11 +42,13 @@ function App() {
           <Route path="bancos" element={<Bancos />} />
 
           {/* Finanzas */}
-
           <Route path="vouchers" element={<Vouchers />} />
           <Route path="gastos" element={<Gastos />} />
           <Route path="pagos" element={<Pagos />} />
           <Route path="auditoria" element={<Auditoria />} />
+
+          {/* Administración / Carga Masiva (SuperAdmin) */}
+          <Route path="admin" element={<AdminPanel />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/login" replace />} />

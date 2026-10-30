@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 
@@ -8,6 +8,20 @@ function Login() {
   const [mensaje, setMensaje] = useState('');
   const [cargando, setCargando] = useState(false);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const verificarSetup = async () => {
+      try {
+        const res = await api.get('/setup/status');
+        if (res.data && res.data.inicializado === false) {
+          navigate('/setup');
+        }
+      } catch (err) {
+        // Si hay error de red o backend iniciando, se mantiene en login
+      }
+    };
+    verificarSetup();
+  }, [navigate]);
 
   const iniciarSesion = async (e) => {
     e.preventDefault();

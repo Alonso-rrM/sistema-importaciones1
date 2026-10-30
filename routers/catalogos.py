@@ -1,7 +1,8 @@
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
+import io
 
 import models
 import schemas
@@ -502,3 +503,132 @@ def eliminar_tipo_documento_fisico(id: int, db: Session = Depends(get_db), curre
     except IntegrityError:
         db.rollback()
         raise HTTPException(status_code=400, detail="No se puede eliminar el documento físicamente porque tiene gastos asociados.")
+
+
+# ==========================================
+# CARGA MASIVA POR EXCEL (Solo SuperAdmin)
+# ==========================================
+
+def _limpiar_valor(v):
+    """Limpia valores de pandas: NaN → None, float entero → int → str para RUC."""
+    import math
+    if v is None:
+        return None
+    try:
+        import pandas as pd
+        if pd.isna(v):
+            return None
+    except Exception:
+        pass
+    return v
+
+
+@router.post("/admin/carga-masiva", tags=["Admin"])
+async def carga_masiva_excel(
+    catalogo: str,
+    archivo: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(RoleChecker([1]))
+):
+    """
+    Carga masiva de catálogos desde Excel. Solo SuperAdmin (Rol 1).
+    
+    Parámetro 'catalogo': uno de
+        roles | bancos | conceptos | proveedores | agentes | importadores | almacenes
+    
+    El archivo debe ser un .xlsx con las columnas correctas para cada catálogo.
+    """
+    try:
+        import pandas as pd
+    except ImportError:
+        raise HTTPException(status_code=500, detail="Librería 'pandas' no instalada en el servidor.")
+
+    if not archivo.filename.endswith(('.xlsx', '.xls')):
+        raise HTTPException(status_code=400, detail="El archivo debe ser un Excel (.xlsx o .xls).")
+
+    contenido = await archivo.read()
+    try:
+        df = pd.read_excel(io.BytesIO(contenido))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"No se pudo leer el Excel: {str(e)}")
+
+    # Limpiar NaN globalmente
+    df = df.where(pd.notnull(df), None)
+
+    # Renombrar columnas comunes a 'nombre'
+    alias_nombre = ["nombre_banco", "razon_social", "nombre_rol", "nombre_concepto",
+                    "nombre_proveedor", "nombre_agente", "nombre_importador", "nombre_almacen"]
+    for alias in alias_nombre:
+        if alias in df.columns:
+            df = df.rename(columns={alias: "nombre"})
+            break
+
+    insertados = 0
+    errores = []
+
+    CATALOGOS_VALIDOS = ["roles", "bancos", "conceptos", "proveedores", "agentes", "importadores", "almacenes"]
+    if catalogo not in CATALOGOS_VALIDOS:
+        raise HTTPException(status_code=400, detail=f"Catálogo inválido. Válidos: {', '.join(CATALOGOS_VALIDOS)}")
+
+    for i, row in df.iterrows():
+        fila_num = i + 2  # Excel es 1-indexado, fila 1 es cabecera
+        try:
+            data = {k: (_limpiar_valor(v)) for k, v in row.to_dict().items()}
+
+            if catalogo == "roles":
+                if not data.get("nombre"):
+                    continue
+                obj = models.CatRol(nombre=str(data["nombre"]), descripcion=data.get("descripcion"))
+            elif catalogo == "bancos":
+                if not data.get("nombre"):
+                    continue
+                obj = models.CatBanco(nombre=str(data["nombre"]))
+            elif catalogo == "conceptos":
+                if not data.get("nombre"):
+                    continue
+                obj = models.CatConceptoPago(
+                    nombre=str(data["nombre"]),
+                    descripcion=data.get("descripcion"),
+                    tipo_gasto=str(data.get("tipo_gasto") or "FIJO_DESPACHO")
+                )
+            elif catalogo == "proveedores":
+                if not data.get("nombre"):
+                    continue
+                ruc = str(int(float(data["ruc"]))) if data.get("ruc") is not None else None
+                obj = models.CatProveedor(nombre=str(data["nombre"]), ruc=ruc)
+            elif catalogo == "agentes":
+                if not data.get("nombre"):
+                    continue
+                ruc = str(int(float(data["ruc"]))) if data.get("ruc") is not None else None
+                obj = models.CatAgente(nombre=str(data["nombre"]), ruc=ruc)
+            elif catalogo == "importadores":
+                if not data.get("nombre"):
+                    continue
+                ruc = str(int(float(data["ruc"]))) if data.get("ruc") is not None else None
+                obj = models.CatImportador(nombre=str(data["nombre"]), ruc=ruc)
+            elif catalogo == "almacenes":
+                if not data.get("nombre"):
+                    continue
+                obj = models.CatAlmacen(nombre=str(data["nombre"]))
+
+            db.add(obj)
+            db.flush()  # detectar errores de integridad fila a fila
+            insertados += 1
+
+        except IntegrityError:
+            db.rollback()
+            nombre_val = row.get("nombre", f"Fila {fila_num}")
+            errores.append(f"Fila {fila_num} '{nombre_val}': ya existe o viola una restricción única.")
+        except Exception as e:
+            db.rollback()
+            errores.append(f"Fila {fila_num}: {str(e)}")
+
+    db.commit()
+
+    return {
+        "catalogo": catalogo,
+        "total_filas": len(df),
+        "insertados": insertados,
+        "errores_count": len(errores),
+        "errores_detalle": errores[:20]  # máximo 20 errores en la respuesta
+    }
