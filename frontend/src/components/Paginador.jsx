@@ -1,12 +1,12 @@
 import React from 'react';
 
-export const Paginador = ({ 
-  page = 1, 
-  totalPages = 1, 
-  setPage, 
-  limit = 20, 
-  setLimit = null, 
-  totalRegistros = null 
+export const Paginador = ({
+  page = 1,
+  totalPages = 1,
+  setPage,
+  limit = 20,
+  setLimit = null,
+  totalRegistros = null
 }) => {
   const safeTotalPages = Math.max(1, totalPages || 1);
   const isFirstPage = page <= 1;
