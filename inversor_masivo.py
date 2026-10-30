@@ -23,7 +23,7 @@ def limpiar_datos(row_dict):
             continue 
             
         # 1. Traductor dinámico de columnas (De Excel a BD)
-        nuevo_k = "nombre" if k in ["nombre_banco", "razon_social", "nombre_rol"] else k
+        nuevo_k = "nombre" if k in ["nombre_banco", "razon_social", "nombre_rol", "nombre_concepto"] else k
         
         # 2. Formateo estricto
         if nuevo_k == "ruc":
