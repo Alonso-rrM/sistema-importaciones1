@@ -545,19 +545,36 @@ def kpi_gastos_maestro(
         gastos_concepto = [g for g in gastos if g.id_concepto == concepto.id_concepto]
         if not gastos_concepto:
             fijos_no_registrados += 1
-            fijos_checklist.append({"concepto": concepto.nombre, "estado": "NO_REGISTRADO"})
+            fijos_checklist.append({
+                "nombre_concepto": concepto.nombre,
+                "concepto": concepto.nombre,
+                "estado": "NO_REGISTRADO",
+                "saldo_pendiente": 0.0
+            })
         else:
             if all(g.estado_pago == "PAGADO" for g in gastos_concepto):
                 fijos_pagados += 1
-                fijos_checklist.append({"concepto": concepto.nombre, "estado": "PAGADO"})
+                fijos_checklist.append({
+                    "nombre_concepto": concepto.nombre,
+                    "concepto": concepto.nombre,
+                    "estado": "PAGADO",
+                    "saldo_pendiente": 0.0
+                })
             else:
                 fijos_pendientes += 1
-                fijos_checklist.append({"concepto": concepto.nombre, "estado": "PENDIENTE"})
+                # Calcular saldo pendiente estimado si existe
+                saldo_est = sum(float(g.monto_original) for g in gastos_concepto if g.estado_pago != "PAGADO")
+                fijos_checklist.append({
+                    "nombre_concepto": concepto.nombre,
+                    "concepto": concepto.nombre,
+                    "estado": "PENDIENTE",
+                    "saldo_pendiente": saldo_est
+                })
                 
     fijos_pct = int((fijos_pagados / fijos_total) * 100) if fijos_total > 0 else 100
     
     # B) Procesar etapas dinámicas (POST_LEVANTE / EXTRAORDINARIO)
-    def procesar_dinamico(tipo_gasto_str: str):
+    def procesar_dinamico(tipo_gasto_str: str, titulo_str: str):
         gastos_filtrados = [g for g in gastos if g.concepto_rel and g.concepto_rel.tipo_gasto == tipo_gasto_str]
         total = len(gastos_filtrados)
         pagados = sum(1 for g in gastos_filtrados if g.estado_pago == "PAGADO")
@@ -566,54 +583,87 @@ def kpi_gastos_maestro(
         
         checklist = []
         for g in gastos_filtrados:
-            checklist.append({"concepto": g.concepto_rel.nombre, "estado": g.estado_pago})
+            saldo_est = float(g.monto_original) if g.estado_pago != "PAGADO" else 0.0
+            checklist.append({
+                "nombre_concepto": g.concepto_rel.nombre,
+                "concepto": g.concepto_rel.nombre,
+                "estado": g.estado_pago,
+                "saldo_pendiente": saldo_est
+            })
             
+        color_resuelto = resolver_color(pct, total)
         return {
+            "nombre_etapa": titulo_str,
+            "titulo": titulo_str,
+            "total_conceptos_universo": total,
             "total": total,
+            "conceptos_pagados": pagados,
             "pagados": pagados,
+            "conceptos_pendientes": pendientes,
             "pendientes": pendientes,
+            "conceptos_no_registrados": 0,
+            "no_registrados": 0,
             "porcentaje": pct,
-            "color": resolver_color(pct, total),
+            "color": color_resuelto,
+            "items": checklist,
             "checklist": checklist
         }
         
-    post_levante_data = procesar_dinamico("POST_LEVANTE")
-    extra_data = procesar_dinamico("EXTRAORDINARIO")
+    post_levante_data = procesar_dinamico("POST_LEVANTE", "Gastos Post-Levante")
+    extra_data = procesar_dinamico("EXTRAORDINARIO", "Gastos Extraordinarios")
     
     # C) GLOBAL (Consolidado integral)
     global_total = fijos_total + post_levante_data["total"] + extra_data["total"]
     global_pagados = fijos_pagados + post_levante_data["pagados"] + extra_data["pagados"]
+    global_pendientes = fijos_pendientes + post_levante_data["pendientes"] + extra_data["pendientes"]
     global_pct = int((global_pagados / global_total) * 100) if global_total > 0 else 100
     global_checklist = fijos_checklist + post_levante_data["checklist"] + extra_data["checklist"]
+    global_color = resolver_color(global_pct, global_total)
 
-    # 5. Estructura JSON BFF limpia y enriquecida
+    fijo_data = {
+        "nombre_etapa": "Gastos Fijos (Despacho)",
+        "titulo": "Gastos Fijos (Despacho)",
+        "total_conceptos_universo": fijos_total,
+        "total": fijos_total,
+        "conceptos_pagados": fijos_pagados,
+        "pagados": fijos_pagados,
+        "conceptos_pendientes": fijos_pendientes,
+        "pendientes": fijos_pendientes,
+        "conceptos_no_registrados": fijos_no_registrados,
+        "no_registrados": fijos_no_registrados,
+        "porcentaje": fijos_pct,
+        "color": resolver_color(fijos_pct, fijos_total),
+        "items": fijos_checklist,
+        "checklist": fijos_checklist
+    }
+
+    global_data = {
+        "nombre_etapa": "Consolidado Total",
+        "titulo": "Consolidado Total",
+        "total_conceptos_universo": global_total,
+        "total": global_total,
+        "conceptos_pagados": global_pagados,
+        "pagados": global_pagados,
+        "conceptos_pendientes": global_pendientes,
+        "pendientes": global_pendientes,
+        "conceptos_no_registrados": fijos_no_registrados,
+        "no_registrados": fijos_no_registrados,
+        "porcentaje": global_pct,
+        "color": global_color,
+        "items": global_checklist,
+        "checklist": global_checklist
+    }
+
+    payload_etapas = {
+        "FIJO_DESPACHO": fijo_data,
+        "POST_LEVANTE": post_levante_data,
+        "EXTRAORDINARIO": extra_data,
+        "GLOBAL": global_data
+    }
+
+    # 5. Estructura JSON BFF limpia y enriquecida (Soporta kpis y etapas)
     return {
-        "etapas": {
-            "FIJO_DESPACHO": {
-                "titulo": "Gastos Fijos (Despacho)",
-                "total": fijos_total,
-                "pagados": fijos_pagados,
-                "pendientes": fijos_pendientes,
-                "no_registrados": fijos_no_registrados,
-                "porcentaje": fijos_pct,
-                "color": resolver_color(fijos_pct, fijos_total),
-                "checklist": fijos_checklist
-            },
-            "POST_LEVANTE": {
-                "titulo": "Gastos Post-Levante",
-                **post_levante_data
-            },
-            "EXTRAORDINARIO": {
-                "titulo": "Gastos Extraordinarios",
-                **extra_data
-            },
-            "GLOBAL": {
-                "titulo": "Consolidado Total",
-                "total": global_total,
-                "pagados": global_pagados,
-                "porcentaje": global_pct,
-                "color": resolver_color(global_pct, global_total),
-                "checklist": global_checklist
-            }
-        }
+        "id_maestro": id_maestro,
+        "kpis": payload_etapas,
+        "etapas": payload_etapas
     }
