@@ -28,6 +28,7 @@ function App() {
 
         {/* Zona Corporativa */}
         <Route path="/app" element={<Layout />}>
+          <Route index element={<Navigate to="logistica" replace />} />
           {/* Inteligencia y Reportes */}
           <Route path="reportes" element={<Reportes />} />
 
