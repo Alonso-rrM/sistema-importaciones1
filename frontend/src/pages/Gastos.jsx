@@ -4,6 +4,7 @@ import api from '../services/api';
 import Select from 'react-select';
 import Paginador from '../components/Paginador';
 import useDebounce from '../hooks/useDebounce';
+import { descargarExcel } from '../utils/exportUtils';
 
 const selectDarkStyles = {
   control: (base, state) => ({
@@ -80,6 +81,7 @@ const Gastos = () => {
 
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isGuardando, setIsGuardando] = useState(false);
+  const [isExportando, setIsExportando] = useState(false);
 
   // Estado para el modal nativo de eliminación
   const [modalEliminar, setModalEliminar] = useState({ open: false, id: null, motivo: '' });
@@ -362,6 +364,26 @@ const Gastos = () => {
     return gastos.find(g => g.id_gasto === selectedId) || null;
   }, [gastos, selectedId]);
 
+  const handleExportarExcel = async () => {
+    setIsExportando(true);
+    try {
+      const params = {};
+      if (debouncedSearch) params.search = debouncedSearch;
+      if (estadoFiltro) params.estado_pago = estadoFiltro;
+      if (monedaFiltro) params.moneda = monedaFiltro;
+      if (tipoGastoFiltro) params.tipo_gasto = tipoGastoFiltro;
+      if (conceptoFiltro) params.id_concepto = conceptoFiltro;
+      if (proveedorFiltro) params.id_proveedor = proveedorFiltro;
+      if (vencimientoFiltro) params.vencimiento = vencimientoFiltro;
+
+      await descargarExcel('/gastos/exportar', params, 'Reporte_Gastos.xlsx');
+    } catch (error) {
+      alert(`Error al exportar reporte: ${error.response?.data?.detail || error.message || 'Error desconocido'}`);
+    } finally {
+      setIsExportando(false);
+    }
+  };
+
   return (
     <div className="flex-1 flex flex-col h-full bg-slate-950 text-slate-100 overflow-hidden font-sans">
       
@@ -386,6 +408,15 @@ const Gastos = () => {
 
         {/* ACCIONES SUPERIORES */}
         <div className="flex items-center gap-2">
+          <button
+            onClick={handleExportarExcel}
+            disabled={isExportando}
+            className="px-3.5 py-1.5 bg-emerald-700/80 hover:bg-emerald-600 text-white text-xs font-semibold rounded-lg border border-emerald-500/40 transition-colors flex items-center gap-1.5 shadow-sm disabled:opacity-50 cursor-pointer"
+            title="Descargar todos los gastos filtrados a Excel"
+          >
+            <span>{isExportando ? '⏳' : '📥'}</span>
+            <span>{isExportando ? 'Exportando...' : 'Exportar Excel'}</span>
+          </button>
           <button
             onClick={() => toggleDrawer(true)}
             className="px-3.5 py-1.5 bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold rounded-lg transition-colors shadow-lg shadow-teal-600/20 flex items-center gap-1.5"

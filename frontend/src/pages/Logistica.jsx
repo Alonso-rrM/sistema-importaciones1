@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import useDebounce from '../hooks/useDebounce';
 import Paginador from '../components/Paginador';
+import { descargarExcel } from '../utils/exportUtils';
 
 const KPI_KEYS = ['FIJO_DESPACHO', 'POST_LEVANTE', 'EXTRAORDINARIO', 'GLOBAL'];
 
@@ -63,6 +64,7 @@ const Logistica = () => {
   const [modalNuevaDam, setModalNuevaDam] = useState({ open: false, numero_de_dam: '', serie: '', canal_control: 'VERDE', monto_valor_provisional_usd: '' });
   const [modalNuevoGasto, setModalNuevoGasto] = useState({ open: false, id_dam: '', id_concepto: '', id_proveedor: '', id_tipo_doc: '', numero_documento: '', monto_original: '', moneda: 'USD' });
   const [isSubmittingInline, setIsSubmittingInline] = useState(false);
+  const [isExportando, setIsExportando] = useState(false);
 
   // Detección de Rol desde Token JWT
   const userRole = useMemo(() => {
@@ -338,6 +340,24 @@ const Logistica = () => {
   const cfr = (parseFloat(formData.fob_usd || 0) + parseFloat(formData.flete_usd || 0)).toFixed(2);
   const amortizacion = estadoCuenta?.porcentaje_amortizado ? parseFloat(estadoCuenta.porcentaje_amortizado).toFixed(1) : '0.0';
 
+  const handleExportarExcel = async () => {
+    setIsExportando(true);
+    try {
+      const params = {};
+      if (debouncedSearch) params.search = debouncedSearch;
+      if (estadoLevanteFiltro) params.estado_levante = estadoLevanteFiltro;
+      if (statusLlegadaFiltro) params.status_llegada = statusLlegadaFiltro;
+      if (importadorFiltro) params.id_importador = importadorFiltro;
+      if (tipoValorFiltro) params.tipo_valor = tipoValorFiltro;
+
+      await descargarExcel('/maestros/exportar', params, 'Reporte_Logistica.xlsx');
+    } catch (error) {
+      alert(`Error al exportar reporte: ${error.response?.data?.detail || error.message || 'Error desconocido'}`);
+    } finally {
+      setIsExportando(false);
+    }
+  };
+
   return (
     <main className="flex-1 flex overflow-hidden h-full">
       {/* BANDEJA IZQUIERDA (38%) */}
@@ -348,7 +368,19 @@ const Logistica = () => {
               <h2 className="text-xs font-bold uppercase tracking-wider text-slate-300">Expedientes</h2>
               <span className="px-1.5 py-0.5 rounded bg-slate-700 text-[10px] font-mono text-slate-300">{totalRegistros}</span>
             </div>
-            <button onClick={handleNuevo} className="inline-flex items-center px-2.5 py-1 text-[11px] font-bold rounded bg-teal-600 hover:bg-teal-500 text-white shadow-sm transition-all">+ Nuevo</button>
+            <div className="flex items-center gap-1.5">
+              <button 
+                type="button" 
+                onClick={handleExportarExcel} 
+                disabled={isExportando}
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded bg-emerald-700/80 hover:bg-emerald-600 text-white shadow-sm transition-all disabled:opacity-50 cursor-pointer"
+                title="Descargar todos los expedientes filtrados a Excel"
+              >
+                <span>{isExportando ? '⏳' : '📥'}</span>
+                <span>{isExportando ? 'Exportando...' : 'Excel'}</span>
+              </button>
+              <button onClick={handleNuevo} className="inline-flex items-center px-2.5 py-1 text-[11px] font-bold rounded bg-teal-600 hover:bg-teal-500 text-white shadow-sm transition-all">+ Nuevo</button>
+            </div>
           </div>
           <div className="flex items-center gap-1.5">
             <div className="relative flex-1">

@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import useDebounce from '../hooks/useDebounce';
 import Paginador from '../components/Paginador';
+import { descargarExcel } from '../utils/exportUtils';
 
 const Dams = () => {
   const location = useLocation();
@@ -33,6 +34,7 @@ const Dams = () => {
   const [isGuardando, setIsGuardando] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [modalEliminar, setModalEliminar] = useState({ open: false, id: null, motivo: '' });
+  const [isExportando, setIsExportando] = useState(false);
 
   const estadoInicial = {
     id_maestro: '',
@@ -238,6 +240,23 @@ const Dams = () => {
   const maestroActual = maestrosMap[formData.id_maestro];
   const esGarantizado = maestroActual?.tipo_valor === 'GARANTIZADO';
 
+  const handleExportarExcel = async () => {
+    setIsExportando(true);
+    try {
+      const params = {};
+      if (debouncedSearch) params.search = debouncedSearch;
+      if (canalFiltro) params.canal_control = canalFiltro;
+      if (aforoFiltro !== '') params.aforo_realizado = aforoFiltro === 'SI';
+      if (tipoValorFiltro) params.tipo_valor = tipoValorFiltro;
+
+      await descargarExcel('/dams/exportar', params, 'Reporte_Dams.xlsx');
+    } catch (error) {
+      alert(`Error al exportar reporte: ${error.response?.data?.detail || error.message || 'Error desconocido'}`);
+    } finally {
+      setIsExportando(false);
+    }
+  };
+
   return (
     <main className="flex-1 flex overflow-hidden h-full">
       {/* BANDEJA IZQUIERDA (38%) */}
@@ -248,7 +267,19 @@ const Dams = () => {
               <h2 className="text-xs font-bold uppercase tracking-wider text-slate-300">Declaraciones DAMs</h2>
               <span className="px-1.5 py-0.5 rounded bg-slate-700 text-[10px] font-mono text-slate-300">{totalRegistros}</span>
             </div>
-            <button onClick={handleNuevo} className="inline-flex items-center px-2.5 py-1 text-[11px] font-bold rounded bg-teal-600 hover:bg-teal-500 text-white shadow-sm transition-all">+ Nueva DAM</button>
+            <div className="flex items-center gap-1.5">
+              <button 
+                type="button" 
+                onClick={handleExportarExcel} 
+                disabled={isExportando}
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded bg-emerald-700/80 hover:bg-emerald-600 text-white shadow-sm transition-all disabled:opacity-50 cursor-pointer"
+                title="Descargar todas las DAMs filtradas a Excel"
+              >
+                <span>{isExportando ? '⏳' : '📥'}</span>
+                <span>{isExportando ? 'Exportando...' : 'Excel'}</span>
+              </button>
+              <button onClick={handleNuevo} className="inline-flex items-center px-2.5 py-1 text-[11px] font-bold rounded bg-teal-600 hover:bg-teal-500 text-white shadow-sm transition-all">+ Nueva DAM</button>
+            </div>
           </div>
           <div className="flex items-center gap-1.5">
             <div className="relative flex-1">

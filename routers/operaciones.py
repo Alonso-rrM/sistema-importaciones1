@@ -1,6 +1,7 @@
 from typing import List, Optional
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.orm.exc import StaleDataError
 from sqlalchemy import func
@@ -9,6 +10,7 @@ import models
 import schemas
 from dependencies import get_db, get_current_user, RoleChecker
 from services.audit import registrar_auditoria
+from services.excel_exporter import generar_excel_maestros, generar_excel_dams
 
 router = APIRouter(tags=["Operaciones"])
 
@@ -237,6 +239,56 @@ def listar_facturas(
         "data": data
     }
 
+@router.get("/maestros/exportar")
+def exportar_maestros_excel(
+    search: Optional[str] = None,
+    estado_levante: Optional[str] = None,
+    status_llegada: Optional[str] = None,
+    id_importador: Optional[int] = None,
+    tipo_valor: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(get_current_user)
+):
+    filtros = [models.MaestroImportacion.estado_registro == "ACTIVO"]
+    if search:
+        termino = f"%{search.strip()}%"
+        filtros.append(
+            models.MaestroImportacion.numero_factura.ilike(termino) |
+            models.MaestroImportacion.documento_transporte.ilike(termino) |
+            models.MaestroImportacion.n_cont_fisico.ilike(termino)
+        )
+    if estado_levante:
+        filtros.append(models.MaestroImportacion.estado_levante == estado_levante)
+    if status_llegada:
+        filtros.append(models.MaestroImportacion.status_llegada == status_llegada)
+    if id_importador:
+        filtros.append(models.MaestroImportacion.id_importador == id_importador)
+    if tipo_valor:
+        filtros.append(models.MaestroImportacion.tipo_valor == tipo_valor)
+
+    maestros = (
+        db.query(models.MaestroImportacion)
+        .options(
+            joinedload(models.MaestroImportacion.importador_rel),
+            joinedload(models.MaestroImportacion.proveedor_rel),
+            joinedload(models.MaestroImportacion.agente_rel),
+            joinedload(models.MaestroImportacion.almacen_rel)
+        )
+        .filter(*filtros)
+        .order_by(models.MaestroImportacion.numero_factura.asc(), models.MaestroImportacion.id_maestro.asc())
+        .all()
+    )
+
+    stream, filename = generar_excel_maestros(maestros)
+    return StreamingResponse(
+        stream,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Access-Control-Expose-Headers": "Content-Disposition"
+        }
+    )
+
 @router.get("/reporte-maestro/{id_maestro}", response_model=schemas.MaestroConDetalles)
 def reporte_completo_factura(id_maestro: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     factura = db.query(models.MaestroImportacion).filter(models.MaestroImportacion.id_maestro == id_maestro).first()
@@ -406,6 +458,52 @@ def listar_dams(
         "total_paginas": total_paginas,
         "data": data
     }
+
+@router.get("/dams/exportar")
+def exportar_dams_excel(
+    search: Optional[str] = None,
+    canal_control: Optional[str] = None,
+    aforo_realizado: Optional[bool] = None,
+    tipo_valor: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(get_current_user)
+):
+    query = db.query(models.DetalleDam).outerjoin(models.DetalleDam.maestro)
+    filtros = []
+
+    if search:
+        termino = f"%{search.strip()}%"
+        filtros.append(
+            models.DetalleDam.numero_de_dam.ilike(termino) |
+            models.DetalleDam.serie.ilike(termino) |
+            models.MaestroImportacion.numero_factura.ilike(termino)
+        )
+    if canal_control:
+        filtros.append(models.DetalleDam.canal_control == canal_control)
+    if aforo_realizado is not None:
+        filtros.append(models.DetalleDam.aforo_realizado == aforo_realizado)
+    if tipo_valor:
+        filtros.append(models.MaestroImportacion.tipo_valor == tipo_valor)
+
+    dams = (
+        query
+        .filter(*filtros)
+        .options(
+            joinedload(models.DetalleDam.maestro).joinedload(models.MaestroImportacion.importador_rel)
+        )
+        .order_by(models.MaestroImportacion.numero_factura.asc(), models.DetalleDam.numero_de_dam.asc())
+        .all()
+    )
+
+    stream, filename = generar_excel_dams(dams)
+    return StreamingResponse(
+        stream,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Access-Control-Expose-Headers": "Content-Disposition"
+        }
+    )
 
 def evaluar_levante_reactivo(db: Session, id_maestro: int):
     """Disparador Reactivo: Evalúa si el Maestro puede obtener o mantener el estado CON LEVANTE."""

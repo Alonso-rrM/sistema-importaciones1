@@ -3,6 +3,7 @@ from datetime import date, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 import json
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import StreamingResponse
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.orm.exc import StaleDataError
@@ -13,6 +14,7 @@ import models
 import schemas
 from dependencies import get_db, get_current_user, RoleChecker
 from services.audit import registrar_auditoria
+from services.excel_exporter import generar_excel_gastos
 from domain.finanzas import calcular_amortizacion_cruzada
 
 router = APIRouter(tags=["Finanzas"])
@@ -250,6 +252,105 @@ def listar_gastos(
         "data": resultado
     }
 
+@router.get("/gastos/exportar")
+def exportar_gastos_excel(
+    search: Optional[str] = None,
+    estado_pago: Optional[str] = None,
+    moneda: Optional[str] = None,
+    tipo_gasto: Optional[str] = None,
+    id_concepto: Optional[int] = None,
+    id_proveedor: Optional[int] = None,
+    vencimiento: Optional[str] = None,
+    db: Session = Depends(get_db), 
+    current_user: models.Usuario = Depends(get_current_user)
+):
+    query = (
+        db.query(models.RegistroGasto)
+        .outerjoin(models.RegistroGasto.dam)
+        .outerjoin(models.DetalleDam.maestro)
+        .outerjoin(models.MaestroImportacion.importador_rel)
+        .outerjoin(models.RegistroGasto.concepto_rel)
+        .outerjoin(models.RegistroGasto.proveedor_rel)
+        .outerjoin(models.RegistroGasto.tipo_doc_rel)
+    )
+
+    filtros = [models.RegistroGasto.estado_registro == "ACTIVO"]
+    if estado_pago:
+        if "," in estado_pago:
+            estados = [e.strip() for e in estado_pago.split(",")]
+            filtros.append(models.RegistroGasto.estado_pago.in_(estados))
+        else:
+            filtros.append(models.RegistroGasto.estado_pago == estado_pago)
+
+    if moneda:
+        filtros.append(models.RegistroGasto.moneda == moneda)
+
+    if tipo_gasto:
+        filtros.append(models.CatConceptoPago.tipo_gasto == tipo_gasto)
+
+    if id_concepto:
+        filtros.append(models.RegistroGasto.id_concepto == id_concepto)
+
+    if id_proveedor:
+        filtros.append(models.RegistroGasto.id_proveedor == id_proveedor)
+
+    if vencimiento:
+        hoy = date.today()
+        if vencimiento == "VENCIDOS":
+            filtros.append(
+                (models.RegistroGasto.fecha_vencimiento < hoy) &
+                (models.RegistroGasto.estado_pago != "PAGADO")
+            )
+        elif vencimiento == "POR_VENCER_7D":
+            limite_7d = hoy + timedelta(days=7)
+            filtros.append(
+                (models.RegistroGasto.fecha_vencimiento >= hoy) &
+                (models.RegistroGasto.fecha_vencimiento <= limite_7d) &
+                (models.RegistroGasto.estado_pago != "PAGADO")
+            )
+
+    if search:
+        termino = f"%{search.strip()}%"
+        filtros.append(
+            models.RegistroGasto.numero_documento.ilike(termino) |
+            models.RegistroGasto.estado_pago.ilike(termino) |
+            models.DetalleDam.numero_de_dam.ilike(termino) |
+            models.MaestroImportacion.numero_factura.ilike(termino) |
+            models.CatImportador.nombre.ilike(termino) |
+            models.CatProveedor.nombre.ilike(termino) |
+            models.CatConceptoPago.nombre.ilike(termino)
+        )
+
+    gastos = (
+        query
+        .filter(*filtros)
+        .options(
+            joinedload(models.RegistroGasto.dam)
+            .joinedload(models.DetalleDam.maestro)
+            .joinedload(models.MaestroImportacion.importador_rel),
+            joinedload(models.RegistroGasto.pagos),
+            joinedload(models.RegistroGasto.proveedor_rel),
+            joinedload(models.RegistroGasto.concepto_rel),
+            joinedload(models.RegistroGasto.tipo_doc_rel)
+        )
+        .order_by(
+            models.MaestroImportacion.numero_factura.asc(),
+            models.DetalleDam.numero_de_dam.asc(),
+            models.RegistroGasto.fecha_vencimiento.asc(),
+            models.RegistroGasto.id_gasto.asc()
+        )
+        .all()
+    )
+
+    stream, filename = generar_excel_gastos(gastos)
+    return StreamingResponse(
+        stream,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Access-Control-Expose-Headers": "Content-Disposition"
+        }
+    )
 
 @router.delete("/gastos/{id_gasto}")
 def eliminar_gasto(id_gasto: int, req: schemas.EliminacionRequest, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
