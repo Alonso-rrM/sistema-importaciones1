@@ -83,6 +83,23 @@ const Pagos = () => {
     monto_moneda_origen: ''
   });
 
+  // Tab activo: 'REGISTRAR' | 'HISTORIAL'
+  const [activeTab, setActiveTab] = useState('REGISTRAR');
+
+  // Estados para la pestaña Historial de Pagos Realizados
+  const [pagosHistorial, setPagosHistorial] = useState([]);
+  const [searchHistorial, setSearchHistorial] = useState('');
+  const debouncedSearchHistorial = useDebounce(searchHistorial, 400);
+  const [pageHistorial, setPageHistorial] = useState(1);
+  const [limitHistorial, setLimitHistorial] = useState(20);
+  const [totalRegistrosHistorial, setTotalRegistrosHistorial] = useState(0);
+  const [totalPagesHistorial, setTotalPagesHistorial] = useState(1);
+  const [isLoadingHistorial, setIsLoadingHistorial] = useState(false);
+
+  // Modal de anulación de pago en Historial
+  const [modalEliminarPago, setModalEliminarPago] = useState({ open: false, pago: null, motivo: '' });
+  const [isEliminandoPago, setIsEliminandoPago] = useState(false);
+
   // Decodificación segura del rol del usuario
   const userRole = useMemo(() => {
     try {
@@ -108,6 +125,12 @@ const Pagos = () => {
   useEffect(() => {
     cargarGastos();
   }, [debouncedSearch, page, limit, estadoFiltro]);
+
+  useEffect(() => {
+    if (activeTab === 'HISTORIAL') {
+      cargarPagosHistorial();
+    }
+  }, [activeTab, debouncedSearchHistorial, pageHistorial, limitHistorial]);
 
   // Manejo de parámetro URL ?gasto_id=... para auto-seleccionar
   useEffect(() => {
@@ -284,12 +307,56 @@ const Pagos = () => {
 
       // Recargar gastos y actualizar el seleccionado
       await cargarGastos();
+      if (activeTab === 'HISTORIAL') {
+        await cargarPagosHistorial();
+      }
 
     } catch (error) {
       const detalle = error.response?.data?.detail || 'Error inesperado al procesar la liquidación.';
       setMensajeError(`Error en pago: ${detalle}`);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const cargarPagosHistorial = async () => {
+    setIsLoadingHistorial(true);
+    try {
+      const params = {
+        page: pageHistorial,
+        limit: limitHistorial,
+        search: debouncedSearchHistorial.trim() || undefined
+      };
+      const res = await api.get('/pagos/', { params });
+      setPagosHistorial(res.data?.data || []);
+      setTotalRegistrosHistorial(res.data?.total_registros || 0);
+      setTotalPagesHistorial(res.data?.total_paginas || 1);
+    } catch (error) {
+      console.error("Error al cargar historial de pagos:", error);
+    } finally {
+      setIsLoadingHistorial(false);
+    }
+  };
+
+  const handleEliminarPagoHistorial = async () => {
+    if (!modalEliminarPago.motivo || modalEliminarPago.motivo.trim().length < 10) {
+      alert("Debe ingresar un motivo de anulación válido (mínimo 10 caracteres).");
+      return;
+    }
+    setIsEliminandoPago(true);
+    try {
+      await api.delete(`/pagos/${modalEliminarPago.pago.id_pago}`, {
+        data: { motivo: modalEliminarPago.motivo.trim() }
+      });
+      setModalEliminarPago({ open: false, pago: null, motivo: '' });
+      await cargarPagosHistorial();
+      await cargarGastos();
+      setMensajeExito(`✅ Pago #${modalEliminarPago.pago.id_pago} anulado y saldos restituidos exitosamente.`);
+    } catch (error) {
+      const err = error.response?.data?.detail || 'Error al anular pago.';
+      setMensajeError(`❌ ${err}`);
+    } finally {
+      setIsEliminandoPago(false);
     }
   };
 
@@ -355,7 +422,41 @@ const Pagos = () => {
         </div>
       </header>
 
-      {/* WORKSTATION GRID MASTER-DETAIL (38% BANDEJA / 62% ESTACIÓN DE LIQUIDACIÓN) */}
+      {/* SELECTOR DE PESTAÑAS TESORERÍA */}
+      <div className="px-6 pt-2 bg-slate-900/60 border-b border-slate-800 flex items-center gap-2 shrink-0">
+        <button
+          type="button"
+          onClick={() => setActiveTab('REGISTRAR')}
+          className={`px-4 py-2 text-xs font-bold rounded-t-lg transition-all border-b-2 flex items-center gap-2 cursor-pointer ${
+            activeTab === 'REGISTRAR'
+              ? 'bg-slate-950 text-purple-400 border-purple-500 shadow-sm'
+              : 'text-slate-400 hover:text-slate-200 border-transparent hover:bg-slate-800/50'
+          }`}
+        >
+          <span>💸</span>
+          <span>Registrar Nuevo Pago</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('HISTORIAL')}
+          className={`px-4 py-2 text-xs font-bold rounded-t-lg transition-all border-b-2 flex items-center gap-2 cursor-pointer ${
+            activeTab === 'HISTORIAL'
+              ? 'bg-slate-950 text-purple-400 border-purple-500 shadow-sm'
+              : 'text-slate-400 hover:text-slate-200 border-transparent hover:bg-slate-800/50'
+          }`}
+        >
+          <span>📋</span>
+          <span>Historial de Pagos Realizados</span>
+          {totalRegistrosHistorial > 0 && (
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-purple-500/20 text-purple-300 font-mono">
+              {totalRegistrosHistorial}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* VISTA 1: WORKSTATION REGISTRAR PAGO (38% BANDEJA / 62% ESTACIÓN) */}
+      {activeTab === 'REGISTRAR' && (
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-5 p-5 min-h-0 overflow-hidden">
         
         {/* ======================================================== */}
@@ -818,6 +919,253 @@ const Pagos = () => {
         </section>
 
       </div>
+      )}
+
+      {/* VISTA 2: HISTORIAL DE PAGOS REALIZADOS */}
+      {activeTab === 'HISTORIAL' && (
+        <div className="flex-1 flex flex-col p-5 overflow-hidden space-y-4 min-h-0">
+          {/* BARRA SUPERIOR DE BÚSQUEDA Y TOTAL */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-900 border border-slate-800 p-4 rounded-xl shrink-0">
+            <div className="relative w-full sm:w-96">
+              <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500 pointer-events-none text-xs">
+                🔍
+              </span>
+              <input
+                type="text"
+                value={searchHistorial}
+                onChange={(e) => {
+                  setSearchHistorial(e.target.value);
+                  setPageHistorial(1);
+                }}
+                placeholder="Buscar por DAM, Voucher, Importador, Concepto, Comprobante..."
+                className="w-full pl-8 pr-8 py-2 bg-slate-950 border border-slate-700 rounded-lg text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-purple-500 transition-all"
+              />
+              {searchHistorial && (
+                <button
+                  type="button"
+                  onClick={() => setSearchHistorial('')}
+                  className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-500 hover:text-slate-300 text-xs cursor-pointer"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-3 text-xs text-slate-400">
+              <span>Total Registros: <strong className="text-white font-mono">{totalRegistrosHistorial}</strong></span>
+              <button
+                type="button"
+                onClick={cargarPagosHistorial}
+                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
+                title="Actualizar listado de pagos"
+              >
+                <span>🔄</span>
+                <span>Actualizar</span>
+              </button>
+            </div>
+          </div>
+
+          {/* TABLA PRINCIPAL DE HISTORIAL */}
+          <div className="flex-1 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex flex-col min-h-0 shadow-xl">
+            <div className="flex-1 overflow-x-auto overflow-y-auto">
+              <table className="w-full text-left text-xs text-slate-300 border-collapse">
+                <thead className="bg-slate-950 sticky top-0 z-10 border-b border-slate-800 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  <tr>
+                    <th className="py-3 px-4">ID / Fecha</th>
+                    <th className="py-3 px-4">DAM / Factura</th>
+                    <th className="py-3 px-4">Importador</th>
+                    <th className="py-3 px-4">Concepto / Proveedor</th>
+                    <th className="py-3 px-4">Gasto / Comprobante</th>
+                    <th className="py-3 px-4 text-right">Importe Pagado</th>
+                    <th className="py-3 px-4">Voucher OP / Banco</th>
+                    <th className="py-3 px-4 text-center">Tipo Cambio</th>
+                    <th className="py-3 px-4 text-center">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  {isLoadingHistorial ? (
+                    <tr>
+                      <td colSpan={9} className="py-12 text-center text-slate-500">
+                        <div className="w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+                        <span>Cargando historial de pagos...</span>
+                      </td>
+                    </tr>
+                  ) : pagosHistorial.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="py-12 text-center text-slate-500">
+                        No se encontraron registros de pagos.
+                      </td>
+                    </tr>
+                  ) : (
+                    pagosHistorial.map((pago) => (
+                      <tr key={pago.id_pago} className="hover:bg-slate-800/40 transition-colors">
+                        <td className="py-3 px-4">
+                          <div className="font-mono font-bold text-slate-100">#{pago.id_pago}</div>
+                          <div className="text-[10px] text-slate-400 font-mono">{pago.fecha_pago || 'S/F'}</div>
+                          {pago.es_ajuste_sistema && (
+                            <span className="inline-block mt-0.5 px-1.5 py-0.2 rounded text-[9px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/30">
+                              Ajuste ZD
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="font-mono text-slate-200">{pago.dam_numero || 'Sin DAM'}</div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="font-semibold text-purple-300 truncate max-w-[160px]" title={pago.importador_nombre}>
+                            {pago.importador_nombre || 'N/A'}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="font-medium text-slate-200">{pago.concepto_nombre || 'N/A'}</div>
+                          <div className="text-[10px] text-slate-400 truncate max-w-[150px]">{pago.proveedor_nombre || ''}</div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="font-mono text-slate-300">{pago.gasto_documento || (pago.id_gasto ? `Gasto #${pago.id_gasto}` : 'N/A')}</div>
+                          {pago.gasto_monto && (
+                            <div className="text-[10px] text-slate-500 font-mono">
+                              Total: {pago.gasto_moneda} {parseFloat(pago.gasto_monto).toFixed(2)}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <div className="font-mono font-bold text-emerald-400 text-sm">
+                            {pago.moneda === 'PEN' ? 'S/' : '$'} {parseFloat(pago.importe).toFixed(2)}
+                          </div>
+                          {pago.pago_moneda_cruzada && (
+                            <div className="text-[10px] text-amber-400 font-mono">
+                              Cruzado (Orig: {parseFloat(pago.monto_moneda_origen).toFixed(2)})
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="font-mono text-teal-400 font-bold">{pago.numero_operacion || 'S/V'}</div>
+                          <div className="text-[10px] text-slate-400">{pago.banco_nombre || 'Sin Banco'}</div>
+                        </td>
+                        <td className="py-3 px-4 text-center font-mono text-slate-300">
+                          {pago.tipo_cambio ? parseFloat(pago.tipo_cambio).toFixed(3) : '1.000'}
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <button
+                            type="button"
+                            onClick={() => setModalEliminarPago({ open: true, pago, motivo: '' })}
+                            className="px-2.5 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 mx-auto cursor-pointer"
+                            title="Anular y reversar este pago"
+                          >
+                            <span>🗑️</span>
+                            <span>Anular</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* PAGINADOR HISTORIAL */}
+            <div className="p-3 bg-slate-950 border-t border-slate-800">
+              <Paginador
+                paginaActual={pageHistorial}
+                totalPaginas={totalPagesHistorial}
+                onCambiarPagina={(p) => setPageHistorial(p)}
+                limite={limitHistorial}
+                onCambiarLimite={(l) => { setLimitHistorial(l); setPageHistorial(1); }}
+                totalRegistros={totalRegistrosHistorial}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL DE ANULACIÓN DE PAGO (DARK SLATE) */}
+      {/* ======================================================== */}
+      {modalEliminarPago.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-slate-900 border border-slate-800 rounded-xl shadow-2xl w-full max-w-md overflow-hidden text-slate-100">
+            <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950">
+              <div className="flex items-center gap-2 text-rose-400 font-bold text-sm">
+                <span>🔄</span>
+                <h3>Anular Pago #{modalEliminarPago.pago?.id_pago}</h3>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setModalEliminarPago({ open: false, pago: null, motivo: '' })} 
+                className="text-slate-400 hover:text-white text-xs cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="p-5 space-y-4">
+              <div className="bg-slate-950 border border-slate-800 p-3 rounded-lg text-xs space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Importe a Reversar:</span>
+                  <span className="font-mono font-bold text-emerald-400">
+                    {modalEliminarPago.pago?.moneda === 'PEN' ? 'S/' : '$'} {parseFloat(modalEliminarPago.pago?.importe || 0).toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Voucher / Op:</span>
+                  <span className="text-slate-200">
+                    {modalEliminarPago.pago?.banco_nombre ? `${modalEliminarPago.pago.banco_nombre} - ` : ''}
+                    {modalEliminarPago.pago?.numero_operacion || 'S/V'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Gasto Afectado:</span>
+                  <span className="font-mono text-slate-200">
+                    {modalEliminarPago.pago?.gasto_documento || (modalEliminarPago.pago?.id_gasto ? `Gasto #${modalEliminarPago.pago?.id_gasto}` : 'N/A')}
+                  </span>
+                </div>
+              </div>
+
+              <p className="text-xs text-slate-300">
+                Al anular este pago, el dinero será devuelto íntegramente al saldo disponible del voucher bancario y el gasto asociado volverá a recalcular su saldo pendiente.
+              </p>
+              
+              <div>
+                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
+                  Motivo de Anulación (Mín. 10 caracteres) *
+                </label>
+                <textarea 
+                  rows={3} 
+                  value={modalEliminarPago.motivo} 
+                  onChange={(e) => setModalEliminarPago({ ...modalEliminarPago, motivo: e.target.value })} 
+                  placeholder="Justifique la razón de anulación para la auditoría de Tesorería..." 
+                  className="w-full text-xs p-3 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:border-rose-500 resize-none"
+                />
+              </div>
+            </div>
+            
+            <div className="px-5 py-3.5 bg-slate-950 border-t border-slate-800 flex items-center justify-end gap-2.5">
+              <button 
+                type="button" 
+                onClick={() => setModalEliminarPago({ open: false, pago: null, motivo: '' })} 
+                className="px-3.5 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-800 border border-slate-700 rounded-lg transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button 
+                type="button" 
+                onClick={handleEliminarPagoHistorial} 
+                disabled={isEliminandoPago || modalEliminarPago.motivo.trim().length < 10} 
+                className="px-4 py-1.5 text-xs font-bold bg-rose-600 hover:bg-rose-500 disabled:opacity-40 text-white rounded-lg transition-all shadow-md shadow-rose-600/20 flex items-center gap-1.5 cursor-pointer"
+              >
+                {isEliminandoPago ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    <span>Anulando...</span>
+                  </>
+                ) : (
+                  <span>Confirmar Anulación</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

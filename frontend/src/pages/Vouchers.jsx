@@ -73,6 +73,12 @@ const Vouchers = () => {
   const [modalEliminar, setModalEliminar] = useState({ open: false, voucher: null, motivo: '' });
   const [isEliminando, setIsEliminando] = useState(false);
 
+  // Pagos vinculados al voucher seleccionado
+  const [pagosVinculados, setPagosVinculados] = useState([]);
+  const [isLoadingPagosVinculados, setIsLoadingPagosVinculados] = useState(false);
+  const [modalReversarPagoVoucher, setModalReversarPagoVoucher] = useState({ open: false, pago: null, motivo: '' });
+  const [isReversandoPagoVoucher, setIsReversandoPagoVoucher] = useState(false);
+
   const estadoInicial = {
     banco_id: null,
     id_importador: null,
@@ -90,6 +96,14 @@ const Vouchers = () => {
   useEffect(() => {
     cargarVouchers();
   }, [debouncedSearch, page, limit, filtroSaldo]);
+
+  useEffect(() => {
+    if (selectedId) {
+      cargarPagosVinculados(selectedId);
+    } else {
+      setPagosVinculados([]);
+    }
+  }, [selectedId]);
 
   const cargarCatalogos = async () => {
     try {
@@ -256,6 +270,46 @@ const Vouchers = () => {
       mostrarAlerta(`❌ ${err}`, 'error');
     } finally {
       setIsEliminando(false);
+    }
+  };
+
+  const cargarPagosVinculados = async (idVoucher) => {
+    if (!idVoucher) {
+      setPagosVinculados([]);
+      return;
+    }
+    setIsLoadingPagosVinculados(true);
+    try {
+      const res = await api.get(`/vouchers/${idVoucher}/pagos`);
+      setPagosVinculados(res.data || []);
+    } catch (error) {
+      console.error('Error al cargar pagos vinculados:', error);
+      setPagosVinculados([]);
+    } finally {
+      setIsLoadingPagosVinculados(false);
+    }
+  };
+
+  const handleReversarPagoVoucher = async () => {
+    if (!modalReversarPagoVoucher.motivo || modalReversarPagoVoucher.motivo.trim().length < 10) {
+      return alert('Debe ingresar un motivo de anulación válido (mínimo 10 caracteres).');
+    }
+    setIsReversandoPagoVoucher(true);
+    try {
+      await api.delete(`/pagos/${modalReversarPagoVoucher.pago.id_pago}`, {
+        data: { motivo: modalReversarPagoVoucher.motivo.trim() }
+      });
+      mostrarAlerta(`✅ Pago #${modalReversarPagoVoucher.pago.id_pago} reversado. El saldo fue devuelto al voucher.`, 'exito');
+      setModalReversarPagoVoucher({ open: false, pago: null, motivo: '' });
+      await cargarVouchers();
+      if (selectedId) {
+        await cargarPagosVinculados(selectedId);
+      }
+    } catch (error) {
+      const err = error.response?.data?.detail || 'Error al reversar pago.';
+      mostrarAlerta(`❌ ${err}`, 'error');
+    } finally {
+      setIsReversandoPagoVoucher(false);
     }
   };
 
@@ -616,6 +670,87 @@ const Vouchers = () => {
                       <div className="text-slate-400">Fondos aplicables exclusivamente a esta razón social</div>
                     </div>
                   </div>
+
+                  {voucherTieneUso && (
+                    <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-200 text-xs flex items-center gap-3">
+                      <span className="text-amber-400 text-base">⚠️</span>
+                      <div>
+                        <strong className="text-amber-300">Voucher en uso activo:</strong> Tiene consumidos <strong>{selectedVoucher.moneda} {(parseFloat(selectedVoucher.monto_total) - parseFloat(selectedVoucher.saldo_disponible)).toFixed(2)}</strong>.
+                        Para eliminar este voucher, primero reverse los pagos vinculados abajo.
+                      </div>
+                    </div>
+                  )}
+
+                  {/* SECCIÓN DE PAGOS VINCULADOS A ESTE VOUCHER */}
+                  <div className="pt-3 border-t border-slate-800 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                        <span>💳</span>
+                        <span>Pagos Financiados por este Voucher</span>
+                      </h4>
+                      <span className="text-[10px] font-mono text-slate-400">
+                        {pagosVinculados.length} {pagosVinculados.length === 1 ? 'pago' : 'pagos'}
+                      </span>
+                    </div>
+
+                    {isLoadingPagosVinculados ? (
+                      <div className="py-4 text-center text-slate-500 text-xs">
+                        <div className="w-4 h-4 border-2 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-1"></div>
+                        <span>Cargando pagos vinculados...</span>
+                      </div>
+                    ) : pagosVinculados.length === 0 ? (
+                      <div className="py-4 text-center text-slate-500 text-xs bg-slate-900/40 rounded-lg border border-slate-800/60">
+                        Este voucher no tiene pagos vinculados activos. Saldo 100% íntegro.
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {pagosVinculados.map(pago => (
+                          <div
+                            key={pago.id_pago}
+                            className="bg-slate-900 border border-slate-800 rounded-lg p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
+                          >
+                            <div className="space-y-0.5">
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono font-bold text-slate-200">Pago #{pago.id_pago}</span>
+                                <span className="text-slate-500 text-[10px]">•</span>
+                                <span className="font-mono text-slate-400 text-[10px]">{pago.fecha_pago || 'S/F'}</span>
+                                <span className="text-slate-500 text-[10px]">•</span>
+                                <span className="text-purple-300 font-semibold">{pago.concepto_nombre || 'Gasto'}</span>
+                              </div>
+                              <div className="text-[11px] text-slate-400 flex items-center gap-2">
+                                <span>DAM: <strong className="text-slate-300 font-mono">{pago.dam_numero || 'S/D'}</strong></span>
+                                <span>•</span>
+                                <span>Comprobante: <span className="text-slate-300">{pago.gasto_documento || 'N/A'}</span></span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-800">
+                              <div className="text-right">
+                                <div className="font-mono font-bold text-emerald-400">
+                                  {pago.moneda === 'PEN' ? 'S/' : '$'} {parseFloat(pago.importe).toFixed(2)}
+                                </div>
+                                {pago.pago_moneda_cruzada && (
+                                  <div className="text-[10px] text-amber-400 font-mono">
+                                    Debitado: {parseFloat(pago.monto_moneda_origen).toFixed(2)} {selectedVoucher.moneda}
+                                  </div>
+                                )}
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => setModalReversarPagoVoucher({ open: true, pago, motivo: '' })}
+                                className="px-2.5 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 cursor-pointer"
+                                title="Anular este pago y restituir el saldo al voucher"
+                              >
+                                <span>🗑️</span>
+                                <span>Reversar</span>
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               ) : (
                 <form onSubmit={handleGuardar} className="bg-slate-950/80 border border-slate-800 rounded-xl p-5 space-y-4">
@@ -770,22 +905,39 @@ const Vouchers = () => {
             </div>
             
             <div className="p-5 space-y-4">
-              <p className="text-xs text-slate-300">
-                La eliminación de un voucher bancario es auditada por Tesorería. Por favor justifique el motivo de anulación:
-              </p>
-              
-              <div>
-                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
-                  Motivo de Anulación (Mínimo 10 caracteres) *
-                </label>
-                <textarea
-                  rows={3}
-                  value={modalEliminar.motivo}
-                  onChange={e => setModalEliminar({ ...modalEliminar, motivo: e.target.value })}
-                  placeholder="Explique detalladamente la razón de anulación del voucher..."
-                  className="w-full text-xs p-3 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:border-rose-500 resize-none"
-                />
-              </div>
+              {voucherTieneUso ? (
+                <div className="p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-lg text-rose-300 text-xs space-y-2">
+                  <div className="font-bold flex items-center gap-1.5 text-rose-400 text-sm">
+                    <span>⛔</span>
+                    <span>Eliminación Bloqueada</span>
+                  </div>
+                  <p>
+                    Este voucher no puede eliminarse porque tiene un saldo consumido de <strong>{modalEliminar.voucher?.moneda} {(parseFloat(modalEliminar.voucher?.monto_total || 0) - parseFloat(modalEliminar.voucher?.saldo_disponible || 0)).toFixed(2)}</strong>.
+                  </p>
+                  <p className="text-slate-300">
+                    Para poder eliminar este voucher, primero debe anular o reversar los pagos asociados que consumieron dicho saldo (usando los botones <em>"Reversar"</em> en la sección de Pagos Financiados).
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <p className="text-xs text-slate-300">
+                    La eliminación de un voucher bancario es auditada por Tesorería. Por favor justifique el motivo de anulación:
+                  </p>
+                  
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
+                      Motivo de Anulación (Mínimo 10 caracteres) *
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={modalEliminar.motivo}
+                      onChange={e => setModalEliminar({ ...modalEliminar, motivo: e.target.value })}
+                      placeholder="Explique detalladamente la razón de anulación del voucher..."
+                      className="w-full text-xs p-3 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:border-rose-500 resize-none"
+                    />
+                  </div>
+                </>
+              )}
             </div>
             
             <div className="px-5 py-3.5 bg-slate-950 border-t border-slate-800 flex items-center justify-end gap-2.5">
@@ -799,7 +951,7 @@ const Vouchers = () => {
               <button
                 type="button"
                 onClick={handleEliminarConfirm}
-                disabled={isEliminando || modalEliminar.motivo.trim().length < 10}
+                disabled={voucherTieneUso || isEliminando || modalEliminar.motivo.trim().length < 10}
                 className="px-4 py-1.5 text-xs font-bold bg-rose-600 hover:bg-rose-500 disabled:opacity-40 text-white rounded-lg transition-all shadow-md shadow-rose-600/20 flex items-center gap-1.5 cursor-pointer"
               >
                 {isEliminando ? (
@@ -809,6 +961,92 @@ const Vouchers = () => {
                   </>
                 ) : (
                   <span>Confirmar Eliminación</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE REVERSIÓN DE PAGO INDIVIDUAL DESDE VOUCHER */}
+      {modalReversarPagoVoucher.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-slate-900 border border-slate-800 rounded-xl shadow-2xl w-full max-w-md overflow-hidden text-slate-100">
+            <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950">
+              <div className="flex items-center gap-2 text-rose-400 font-bold text-sm">
+                <span>🔄</span>
+                <h3>Reversar Pago #{modalReversarPagoVoucher.pago?.id_pago}</h3>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setModalReversarPagoVoucher({ open: false, pago: null, motivo: '' })} 
+                className="text-slate-400 hover:text-white text-xs cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="p-5 space-y-4">
+              <div className="bg-slate-950 border border-slate-800 p-3 rounded-lg text-xs space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Importe a Reversar:</span>
+                  <span className="font-mono font-bold text-emerald-400">
+                    {modalReversarPagoVoucher.pago?.moneda === 'PEN' ? 'S/' : '$'} {parseFloat(modalReversarPagoVoucher.pago?.importe || 0).toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Voucher / Op:</span>
+                  <span className="text-teal-400 font-mono font-bold">
+                    {selectedVoucher?.numero_operacion}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Gasto Vinculado:</span>
+                  <span className="text-slate-200">
+                    {modalReversarPagoVoucher.pago?.gasto_documento || (modalReversarPagoVoucher.pago?.id_gasto ? `Gasto #${modalReversarPagoVoucher.pago?.id_gasto}` : 'N/A')}
+                  </span>
+                </div>
+              </div>
+
+              <p className="text-xs text-slate-300">
+                Al reversar este pago, el monto amortizado será reintegrado automáticamente al saldo disponible de este voucher.
+              </p>
+              
+              <div>
+                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
+                  Motivo de Anulación (Mínimo 10 caracteres) *
+                </label>
+                <textarea 
+                  rows={3} 
+                  value={modalReversarPagoVoucher.motivo} 
+                  onChange={e => setModalReversarPagoVoucher({ ...modalReversarPagoVoucher, motivo: e.target.value })} 
+                  placeholder="Justifique la razón de reversión para auditoría..." 
+                  className="w-full text-xs p-3 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:border-rose-500 resize-none"
+                />
+              </div>
+            </div>
+            
+            <div className="px-5 py-3.5 bg-slate-950 border-t border-slate-800 flex items-center justify-end gap-2.5">
+              <button 
+                type="button" 
+                onClick={() => setModalReversarPagoVoucher({ open: false, pago: null, motivo: '' })} 
+                className="px-3.5 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-800 border border-slate-700 rounded-lg transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button 
+                type="button" 
+                onClick={handleReversarPagoVoucher} 
+                disabled={isReversandoPagoVoucher || modalReversarPagoVoucher.motivo.trim().length < 10} 
+                className="px-4 py-1.5 text-xs font-bold bg-rose-600 hover:bg-rose-500 disabled:opacity-40 text-white rounded-lg transition-all shadow-md shadow-rose-600/20 flex items-center gap-1.5 cursor-pointer"
+              >
+                {isReversandoPagoVoucher ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    <span>Reversando...</span>
+                  </>
+                ) : (
+                  <span>Confirmar Reversión</span>
                 )}
               </button>
             </div>

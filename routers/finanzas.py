@@ -187,7 +187,9 @@ def listar_gastos(
             joinedload(models.RegistroGasto.dam)
             .joinedload(models.DetalleDam.maestro)
             .joinedload(models.MaestroImportacion.importador_rel),
-            joinedload(models.RegistroGasto.pagos),
+            joinedload(models.RegistroGasto.pagos)
+            .joinedload(models.RegistroPago.voucher_rel)
+            .joinedload(models.VoucherBancario.banco_rel),
             joinedload(models.RegistroGasto.proveedor_rel),
             joinedload(models.RegistroGasto.concepto_rel),
             joinedload(models.RegistroGasto.tipo_doc_rel)
@@ -201,6 +203,7 @@ def listar_gastos(
     resultado = []
     for g in data:
         total_pagado = Decimal("0.00")
+        pagos_lista = []
         for p in g.pagos:
             if p.estado_registro == "ACTIVO":
                 importe_db = Decimal(str(p.importe))
@@ -208,6 +211,22 @@ def listar_gastos(
                 if tc_db <= Decimal("0.00"):
                     tc_db = Decimal("1.00")
                 total_pagado += calcular_amortizacion_cruzada(importe_db, tc_db, g.moneda, p.moneda)
+
+                v_rel = p.voucher_rel
+                banco_nom = v_rel.banco_rel.nombre if (v_rel and v_rel.banco_rel) else None
+                num_op = v_rel.numero_operacion if v_rel else ("Ajuste ZD" if p.es_ajuste_sistema else "S/V")
+                pagos_lista.append(schemas.PagoDetalleSimple(
+                    id_pago=p.id_pago,
+                    fecha_pago=p.fecha_pago,
+                    moneda=p.moneda,
+                    importe=p.importe,
+                    tipo_cambio=tc_db,
+                    voucher_id=p.voucher_id,
+                    numero_operacion=num_op,
+                    banco_nombre=banco_nom,
+                    monto_moneda_origen=p.monto_moneda_origen,
+                    es_ajuste_sistema=p.es_ajuste_sistema or False
+                ))
 
         monto_base = Decimal(str(g.monto_original)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         saldo_calc = max(Decimal("0.00"), (monto_base - total_pagado).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
@@ -240,7 +259,8 @@ def listar_gastos(
             importador_nombre=imp_obj.nombre if imp_obj else "Desconocido",
             proveedor_nombre=prov_nombre,
             concepto_nombre=g.concepto_rel.nombre if g.concepto_rel else None,
-            tipo_doc_nombre=g.tipo_doc_rel.nombre_documento if g.tipo_doc_rel else None
+            tipo_doc_nombre=g.tipo_doc_rel.nombre_documento if g.tipo_doc_rel else None,
+            pagos_detalle=pagos_lista
         )
         resultado.append(g_dict)
 
@@ -352,18 +372,106 @@ def exportar_gastos_excel(
         }
     )
 
+@router.get("/gastos/{id_gasto}/pagos", response_model=List[schemas.PagoDetalleSimple])
+def obtener_pagos_de_gasto(
+    id_gasto: int,
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(get_current_user)
+):
+    pagos = (
+        db.query(models.RegistroPago)
+        .filter(
+            models.RegistroPago.id_gasto == id_gasto,
+            models.RegistroPago.estado_registro == "ACTIVO"
+        )
+        .options(
+            joinedload(models.RegistroPago.voucher_rel).joinedload(models.VoucherBancario.banco_rel)
+        )
+        .order_by(models.RegistroPago.id_pago.asc())
+        .all()
+    )
+    resultado = []
+    for p in pagos:
+        v_rel = p.voucher_rel
+        banco_nom = v_rel.banco_rel.nombre if (v_rel and v_rel.banco_rel) else None
+        num_op = v_rel.numero_operacion if v_rel else ("Ajuste ZD" if p.es_ajuste_sistema else "S/V")
+        tc_val = Decimal(str(p.tipo_cambio_aplicado or p.tipo_cambio or "1.00"))
+        resultado.append(schemas.PagoDetalleSimple(
+            id_pago=p.id_pago,
+            fecha_pago=p.fecha_pago,
+            moneda=p.moneda,
+            importe=p.importe,
+            tipo_cambio=tc_val,
+            voucher_id=p.voucher_id,
+            numero_operacion=num_op,
+            banco_nombre=banco_nom,
+            monto_moneda_origen=p.monto_moneda_origen,
+            es_ajuste_sistema=p.es_ajuste_sistema or False
+        ))
+    return resultado
+
 @router.delete("/gastos/{id_gasto}")
-def eliminar_gasto(id_gasto: int, req: schemas.EliminacionRequest, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def eliminar_gasto(
+    id_gasto: int, 
+    req: schemas.EliminacionRequest, 
+    forzar_reversion_pagos: bool = Query(False),
+    db: Session = Depends(get_db), 
+    current_user: models.Usuario = Depends(get_current_user)
+):
     gasto = db.query(models.RegistroGasto).filter(models.RegistroGasto.id_gasto == id_gasto).first()
     if not gasto:
         raise HTTPException(status_code=404, detail="Gasto no encontrado")
         
-    tiene_pagos = db.query(models.RegistroPago).filter(models.RegistroPago.id_gasto == id_gasto).first()
-    if tiene_pagos:
-        raise HTTPException(
-            status_code=400, 
-            detail="❌ Bloqueo: No se puede eliminar el Gasto porque tiene Pagos asociados. Elimine primero los Pagos."
+    pagos_asociados = (
+        db.query(models.RegistroPago)
+        .filter(
+            models.RegistroPago.id_gasto == id_gasto,
+            models.RegistroPago.estado_registro == "ACTIVO"
         )
+        .options(
+            joinedload(models.RegistroPago.voucher_rel).joinedload(models.VoucherBancario.banco_rel),
+            joinedload(models.RegistroPago.dam),
+            joinedload(models.RegistroPago.importador),
+            joinedload(models.RegistroPago.concepto_rel)
+        )
+        .all()
+    )
+    
+    if pagos_asociados:
+        if not forzar_reversion_pagos:
+            total_amortizado = sum([Decimal(str(p.importe)) for p in pagos_asociados])
+            raise HTTPException(
+                status_code=400, 
+                detail=f"❌ Bloqueo: El gasto tiene {len(pagos_asociados)} pago(s) asociado(s) por un total de {total_amortizado} {gasto.moneda}. Puede eliminarlos individualmente o confirmar la eliminación con reversión de pagos."
+            )
+            
+        # Reversión de pagos en cascada
+        cols_respaldo_pago = {c.name for c in models.PagoEliminado.__table__.columns}
+        for pago in pagos_asociados:
+            if pago.voucher_rel:
+                pago.voucher_rel.saldo_disponible += pago.monto_moneda_origen
+                
+            datos_pago = {c.name: getattr(pago, c.name) for c in pago.__table__.columns if c.name in cols_respaldo_pago}
+            snapshot_pago = {
+                "Voucher": pago.voucher_rel.numero_operacion if pago.voucher_rel else "N/A",
+                "Banco": pago.voucher_rel.banco_rel.nombre if (pago.voucher_rel and pago.voucher_rel.banco_rel) else "N/A",
+                "Importador": pago.importador.nombre if pago.importador else "N/A",
+                "Concepto": pago.concepto_rel.nombre if pago.concepto_rel else "N/A",
+                "DAM": pago.dam.numero_de_dam if pago.dam else "N/A",
+                "Ref. Gasto": f"Gasto #{id_gasto} ({gasto.monto_original} {gasto.moneda})"
+            }
+            respaldo_pago = models.PagoEliminado(
+                **datos_pago,
+                motivo_eliminacion=f"Reversión automática en cascada por anulación de Gasto #{id_gasto}: {req.motivo}",
+                usuario_id=current_user.id_usuario,
+                nombre_usuario_ejecutor=current_user.username,
+                identificador_principal=f"Pago {pago.id_pago}",
+                detalles_legibles=snapshot_pago
+            )
+            db.add(respaldo_pago)
+            db.delete(pago)
+            
+        db.flush()
         
     cols_respaldo = {c.name for c in models.GastoEliminado.__table__.columns}
     datos = {c.name: getattr(gasto, c.name) for c in gasto.__table__.columns if c.name in cols_respaldo}
@@ -384,7 +492,7 @@ def eliminar_gasto(id_gasto: int, req: schemas.EliminacionRequest, db: Session =
     db.add(respaldo)
     db.delete(gasto)
     db.commit()
-    return {"mensaje": f"Gasto {id_gasto} eliminado físicamente con respaldo de auditoría."}
+    return {"mensaje": f"Gasto {id_gasto} eliminado físicamente con respaldo de auditoría y reversión de amortizaciones."}
 
 # ==========================================
 # 2. VOUCHERS
@@ -741,6 +849,60 @@ def actualizar_pago(id_pago: int, pago_editado: schemas.RegistroPagoUpdate, db: 
     db.refresh(db_pago)
     return db_pago
 
+@router.get("/vouchers/{id_voucher}/pagos", response_model=List[schemas.RegistroPago])
+def obtener_pagos_de_voucher(
+    id_voucher: int,
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(get_current_user)
+):
+    pagos = (
+        db.query(models.RegistroPago)
+        .filter(
+            models.RegistroPago.voucher_id == id_voucher,
+            models.RegistroPago.estado_registro == "ACTIVO"
+        )
+        .options(
+            joinedload(models.RegistroPago.dam),
+            joinedload(models.RegistroPago.importador),
+            joinedload(models.RegistroPago.concepto_rel),
+            joinedload(models.RegistroPago.voucher_rel).joinedload(models.VoucherBancario.banco_rel),
+            joinedload(models.RegistroPago.gasto_rel).joinedload(models.RegistroGasto.proveedor_rel)
+        )
+        .order_by(models.RegistroPago.id_pago.asc())
+        .all()
+    )
+    resultado = []
+    for p in pagos:
+        resultado.append(schemas.RegistroPago(
+            id_pago=p.id_pago,
+            id_dam=p.id_dam,
+            id_concepto=p.id_concepto,
+            moneda=p.moneda,
+            importe=p.importe,
+            tipo_cambio=p.tipo_cambio,
+            estado_pago=p.estado_pago,
+            fecha_pago=p.fecha_pago,
+            id_importador=p.id_importador,
+            id_gasto=p.id_gasto,
+            es_ajuste_sistema=p.es_ajuste_sistema or False,
+            tipo_cambio_aplicado=p.tipo_cambio_aplicado,
+            voucher_id=p.voucher_id,
+            pago_moneda_cruzada=p.pago_moneda_cruzada or False,
+            gasto_financiero_tc=p.gasto_financiero_tc or Decimal("0.00"),
+            monto_moneda_origen=p.monto_moneda_origen,
+            created_at=p.created_at,
+            dam_numero=p.dam.numero_de_dam if p.dam else "N/A",
+            importador_nombre=p.importador.nombre if p.importador else "N/A",
+            concepto_nombre=p.concepto_rel.nombre if p.concepto_rel else "N/A",
+            numero_operacion=p.voucher_rel.numero_operacion if p.voucher_rel else ("Ajuste ZD" if p.es_ajuste_sistema else "S/V"),
+            banco_nombre=p.voucher_rel.banco_rel.nombre if (p.voucher_rel and p.voucher_rel.banco_rel) else None,
+            gasto_documento=p.gasto_rel.numero_documento if (p.gasto_rel and p.gasto_rel.numero_documento) else (f"Gasto #{p.id_gasto}" if p.id_gasto else "N/A"),
+            proveedor_nombre=p.gasto_rel.proveedor_rel.nombre if (p.gasto_rel and p.gasto_rel.proveedor_rel) else None,
+            gasto_moneda=p.gasto_rel.moneda if p.gasto_rel else None,
+            gasto_monto=p.gasto_rel.monto_original if p.gasto_rel else None
+        ))
+    return resultado
+
 @router.get("/pagos/", response_model=schemas.PaginatedResponse[schemas.RegistroPago])
 def listar_pagos(
     page: int = Query(1, ge=1),
@@ -749,32 +911,84 @@ def listar_pagos(
     db: Session = Depends(get_db), 
     current_user: models.Usuario = Depends(get_current_user)
 ):
-    filtros = []
+    query = (
+        db.query(models.RegistroPago)
+        .outerjoin(models.RegistroPago.dam)
+        .outerjoin(models.RegistroPago.importador)
+        .outerjoin(models.RegistroPago.concepto_rel)
+        .outerjoin(models.RegistroPago.voucher_rel)
+        .outerjoin(models.RegistroPago.gasto_rel)
+    )
+
+    filtros = [models.RegistroPago.estado_registro == "ACTIVO"]
     if search:
-        termino = f"%{search}%"
+        termino = f"%{search.strip()}%"
         filtros.append(
             models.RegistroPago.estado_pago.ilike(termino) |
-            models.RegistroPago.moneda.ilike(termino)
+            models.RegistroPago.moneda.ilike(termino) |
+            models.DetalleDam.numero_de_dam.ilike(termino) |
+            models.CatImportador.nombre.ilike(termino) |
+            models.CatConceptoPago.nombre.ilike(termino) |
+            models.VoucherBancario.numero_operacion.ilike(termino) |
+            models.RegistroGasto.numero_documento.ilike(termino)
         )
 
-    total_registros = db.query(func.count(models.RegistroPago.id_pago)).filter(*filtros).scalar() or 0
+    total_registros = query.filter(*filtros).with_entities(func.count(models.RegistroPago.id_pago)).scalar() or 0
     total_paginas = (total_registros + limit - 1) // limit if total_registros > 0 else 0
 
     data = (
-        db.query(models.RegistroPago)
+        query
         .filter(*filtros)
-        .order_by(models.RegistroPago.id_pago.asc())
+        .options(
+            joinedload(models.RegistroPago.dam),
+            joinedload(models.RegistroPago.importador),
+            joinedload(models.RegistroPago.concepto_rel),
+            joinedload(models.RegistroPago.voucher_rel).joinedload(models.VoucherBancario.banco_rel),
+            joinedload(models.RegistroPago.gasto_rel).joinedload(models.RegistroGasto.proveedor_rel)
+        )
+        .order_by(models.RegistroPago.id_pago.desc())
         .offset((page - 1) * limit)
         .limit(limit)
         .all()
     )
+
+    resultado = []
+    for p in data:
+        resultado.append(schemas.RegistroPago(
+            id_pago=p.id_pago,
+            id_dam=p.id_dam,
+            id_concepto=p.id_concepto,
+            moneda=p.moneda,
+            importe=p.importe,
+            tipo_cambio=p.tipo_cambio,
+            estado_pago=p.estado_pago,
+            fecha_pago=p.fecha_pago,
+            id_importador=p.id_importador,
+            id_gasto=p.id_gasto,
+            es_ajuste_sistema=p.es_ajuste_sistema or False,
+            tipo_cambio_aplicado=p.tipo_cambio_aplicado,
+            voucher_id=p.voucher_id,
+            pago_moneda_cruzada=p.pago_moneda_cruzada or False,
+            gasto_financiero_tc=p.gasto_financiero_tc or Decimal("0.00"),
+            monto_moneda_origen=p.monto_moneda_origen,
+            created_at=p.created_at,
+            dam_numero=p.dam.numero_de_dam if p.dam else "N/A",
+            importador_nombre=p.importador.nombre if p.importador else "N/A",
+            concepto_nombre=p.concepto_rel.nombre if p.concepto_rel else "N/A",
+            numero_operacion=p.voucher_rel.numero_operacion if p.voucher_rel else ("Ajuste ZD" if p.es_ajuste_sistema else "S/V"),
+            banco_nombre=p.voucher_rel.banco_rel.nombre if (p.voucher_rel and p.voucher_rel.banco_rel) else None,
+            gasto_documento=p.gasto_rel.numero_documento if (p.gasto_rel and p.gasto_rel.numero_documento) else (f"Gasto #{p.id_gasto}" if p.id_gasto else "N/A"),
+            proveedor_nombre=p.gasto_rel.proveedor_rel.nombre if (p.gasto_rel and p.gasto_rel.proveedor_rel) else None,
+            gasto_moneda=p.gasto_rel.moneda if p.gasto_rel else None,
+            gasto_monto=p.gasto_rel.monto_original if p.gasto_rel else None
+        ))
 
     return {
         "total_registros": total_registros,
         "pagina": page,
         "limite": limit,
         "total_paginas": total_paginas,
-        "data": data
+        "data": resultado
     }
 
 @router.delete("/pagos/{id_pago}")

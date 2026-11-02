@@ -272,6 +272,19 @@ class RegistroGastoCreate(BaseModel):
     monto_original: Decimal
     moneda: str = "USD"
 
+class PagoDetalleSimple(BaseModel):
+    id_pago: int
+    fecha_pago: Optional[date] = None
+    moneda: str
+    importe: Decimal
+    tipo_cambio: Decimal
+    voucher_id: Optional[int] = None
+    numero_operacion: Optional[str] = None
+    banco_nombre: Optional[str] = None
+    monto_moneda_origen: Optional[Decimal] = None
+    es_ajuste_sistema: bool = False
+    model_config = ConfigDict(from_attributes=True)
+
 class RegistroGasto(RegistroGastoCreate):
     id_gasto: int
     estado_pago: str
@@ -287,6 +300,7 @@ class RegistroGasto(RegistroGastoCreate):
     proveedor_nombre: Optional[str] = None
     concepto_nombre: Optional[str] = None
     tipo_doc_nombre: Optional[str] = None
+    pagos_detalle: Optional[List[PagoDetalleSimple]] = []
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -330,6 +344,18 @@ class RegistroPagoCreate(BaseModel):
 class RegistroPago(RegistroPagoCreate):
     id_pago: int
     created_at: Optional[datetime] = None
+    
+    # Propiedades enriquecidas para UI y trazabilidad
+    dam_numero: Optional[str] = None
+    importador_nombre: Optional[str] = None
+    concepto_nombre: Optional[str] = None
+    numero_operacion: Optional[str] = None
+    banco_nombre: Optional[str] = None
+    gasto_documento: Optional[str] = None
+    proveedor_nombre: Optional[str] = None
+    gasto_moneda: Optional[str] = None
+    gasto_monto: Optional[Decimal] = None
+
     model_config = ConfigDict(from_attributes=True)
 
 class RegistroPagoUpdate(BaseModel):

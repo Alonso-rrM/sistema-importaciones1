@@ -85,6 +85,10 @@ const Gastos = () => {
 
   // Estado para el modal nativo de eliminación
   const [modalEliminar, setModalEliminar] = useState({ open: false, id: null, motivo: '' });
+  
+  // Estado para el modal de reversión individual de pagos
+  const [modalReversarPago, setModalReversarPago] = useState({ open: false, pago: null, motivo: '' });
+  const [isReversandoPago, setIsReversandoPago] = useState(false);
 
   const estadoInicialForm = {
     id_maestro_temp: null,
@@ -351,12 +355,31 @@ const Gastos = () => {
       return;
     }
     try {
-      await api.delete(`/gastos/${modalEliminar.id}`, { data: { motivo: modalEliminar.motivo.trim() } });
+      await api.delete(`/gastos/${modalEliminar.id}?forzar_reversion_pagos=true`, { data: { motivo: modalEliminar.motivo.trim() } });
       setModalEliminar({ open: false, id: null, motivo: '' });
       setSelectedId(null);
       await cargarListaGastos();
     } catch (error) { 
       alert(`Error al eliminar:\n${extractErrorMsg(error)}`);
+    }
+  };
+
+  const handleReversarPagoConfirm = async () => {
+    if (!modalReversarPago.motivo || modalReversarPago.motivo.trim().length < 10) {
+      alert("Debe ingresar un motivo de anulación válido (mínimo 10 caracteres).");
+      return;
+    }
+    setIsReversandoPago(true);
+    try {
+      await api.delete(`/pagos/${modalReversarPago.pago.id_pago}`, {
+        data: { motivo: modalReversarPago.motivo.trim() }
+      });
+      setModalReversarPago({ open: false, pago: null, motivo: '' });
+      await cargarListaGastos();
+    } catch (error) {
+      alert(`Error al reversar pago:\n${extractErrorMsg(error)}`);
+    } finally {
+      setIsReversandoPago(false);
     }
   };
 
@@ -876,6 +899,86 @@ const Gastos = () => {
                 </div>
               </div>
 
+              {/* HISTORIAL DE AMORTIZACIONES Y PAGOS APLICADOS */}
+              <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-5 space-y-3">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                  <div className="flex items-center gap-2">
+                    <span className="text-purple-400 text-sm">💳</span>
+                    <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                      Amortizaciones y Pagos Aplicados
+                    </h3>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/10 text-purple-400 border border-purple-500/30">
+                    {(selectedGasto.pagos_detalle?.length || 0)} {selectedGasto.pagos_detalle?.length === 1 ? 'pago' : 'pagos'}
+                  </span>
+                </div>
+
+                {(!selectedGasto.pagos_detalle || selectedGasto.pagos_detalle.length === 0) ? (
+                  <div className="text-center py-6 text-slate-500 text-xs">
+                    Sin pagos registrados. Este gasto no ha recibido amortizaciones.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {selectedGasto.pagos_detalle.map((pago) => (
+                      <div
+                        key={pago.id_pago}
+                        className="bg-slate-900 border border-slate-800/80 rounded-lg p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs hover:border-slate-700 transition-colors"
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-bold text-slate-200">
+                              Pago #{pago.id_pago}
+                            </span>
+                            <span className="text-slate-500 text-[11px]">•</span>
+                            <span className="font-mono text-slate-400 text-[11px]">
+                              {pago.fecha_pago || 'Fecha no indicada'}
+                            </span>
+                            {pago.es_ajuste_sistema && (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/30">
+                                Ajuste ZD
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-slate-400 text-[11px] flex items-center gap-2 flex-wrap">
+                            <span>
+                              <strong className="text-slate-300">Voucher / Op:</strong> {pago.banco_nombre ? `${pago.banco_nombre} - ` : ''}<span className="font-mono text-teal-400">{pago.numero_operacion || 'S/V'}</span>
+                            </span>
+                            {pago.tipo_cambio && parseFloat(pago.tipo_cambio) !== 1 && (
+                              <span>
+                                <strong className="text-slate-300">T/C:</strong> {parseFloat(pago.tipo_cambio).toFixed(3)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-800">
+                          <div className="text-right">
+                            <div className="font-mono font-bold text-emerald-400 text-sm">
+                              {pago.moneda === 'PEN' ? 'S/' : '$'} {parseFloat(pago.importe).toFixed(2)}
+                            </div>
+                            {pago.monto_moneda_origen && parseFloat(pago.monto_moneda_origen) !== parseFloat(pago.importe) && (
+                              <div className="font-mono text-[10px] text-slate-400">
+                                Origen: {parseFloat(pago.monto_moneda_origen).toFixed(2)}
+                              </div>
+                            )}
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => setModalReversarPago({ open: true, pago, motivo: '' })}
+                            className="px-2.5 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 cursor-pointer"
+                            title="Anular y reversar este pago"
+                          >
+                            <span>🗑️</span>
+                            <span>Reversar</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
             </div>
           )}
         </section>
@@ -1105,17 +1208,30 @@ const Gastos = () => {
             <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950">
               <div className="flex items-center gap-2 text-rose-400 font-bold text-sm">
                 <span>⚠️</span>
-                <h3>Eliminar Registro de Gasto</h3>
+                <h3>Eliminar Registro de Gasto #{modalEliminar.id}</h3>
               </div>
               <button 
                 onClick={() => setModalEliminar({ open: false, id: null, motivo: '' })} 
-                className="text-slate-400 hover:text-white text-xs"
+                className="text-slate-400 hover:text-white text-xs cursor-pointer"
               >
                 ✕
               </button>
             </div>
             
             <div className="p-5 space-y-4">
+              {selectedGasto?.pagos_detalle && selectedGasto.pagos_detalle.length > 0 && (
+                <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-200 text-xs space-y-1">
+                  <div className="font-bold flex items-center gap-1.5 text-amber-400">
+                    <span>⚡</span>
+                    <span>Reversión Automática de Pagos</span>
+                  </div>
+                  <p>
+                    Este gasto tiene <strong>{selectedGasto.pagos_detalle.length} pago(s)</strong> asociado(s). 
+                    Al confirmar, todos los pagos serán <strong>anulados</strong> y el dinero será <strong>devuelto a sus vouchers bancarios</strong> automáticamente.
+                  </p>
+                </div>
+              )}
+
               <p className="text-xs text-slate-300">
                 Esta acción registrará la anulación del gasto en la pista de auditoría contable. Por favor especifique el motivo:
               </p>
@@ -1138,7 +1254,7 @@ const Gastos = () => {
               <button 
                 type="button" 
                 onClick={() => setModalEliminar({ open: false, id: null, motivo: '' })} 
-                className="px-3.5 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-800 border border-slate-700 rounded-lg transition-colors"
+                className="px-3.5 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-800 border border-slate-700 rounded-lg transition-colors cursor-pointer"
               >
                 Cancelar
               </button>
@@ -1146,9 +1262,91 @@ const Gastos = () => {
                 type="button" 
                 onClick={handleEliminarConfirm} 
                 disabled={modalEliminar.motivo.trim().length < 10} 
-                className="px-4 py-1.5 text-xs font-bold bg-rose-600 hover:bg-rose-500 disabled:opacity-40 text-white rounded-lg transition-all shadow-md shadow-rose-600/20"
+                className="px-4 py-1.5 text-xs font-bold bg-rose-600 hover:bg-rose-500 disabled:opacity-40 text-white rounded-lg transition-all shadow-md shadow-rose-600/20 cursor-pointer"
               >
                 Confirmar Eliminación
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL DE REVERSIÓN DE PAGO INDIVIDUAL (DARK SLATE) */}
+      {/* ======================================================== */}
+      {modalReversarPago.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-slate-900 border border-slate-800 rounded-xl shadow-2xl w-full max-w-md overflow-hidden text-slate-100">
+            <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950">
+              <div className="flex items-center gap-2 text-rose-400 font-bold text-sm">
+                <span>🔄</span>
+                <h3>Reversar Pago #{modalReversarPago.pago?.id_pago}</h3>
+              </div>
+              <button 
+                onClick={() => setModalReversarPago({ open: false, pago: null, motivo: '' })} 
+                className="text-slate-400 hover:text-white text-xs cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="p-5 space-y-4">
+              <div className="bg-slate-950 border border-slate-800 p-3 rounded-lg text-xs space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Importe a Reversar:</span>
+                  <span className="font-mono font-bold text-emerald-400">
+                    {modalReversarPago.pago?.moneda === 'PEN' ? 'S/' : '$'} {parseFloat(modalReversarPago.pago?.importe || 0).toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Voucher / Destino:</span>
+                  <span className="text-slate-200">
+                    {modalReversarPago.pago?.banco_nombre ? `${modalReversarPago.pago.banco_nombre} - ` : ''}
+                    {modalReversarPago.pago?.numero_operacion || 'S/V'}
+                  </span>
+                </div>
+              </div>
+
+              <p className="text-xs text-slate-300">
+                Al reversar este pago, el saldo será restituido al voucher bancario correspondiente y el saldo pendiente del gasto será recalculado automáticamente.
+              </p>
+              
+              <div>
+                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
+                  Motivo de la Reversión (Mín. 10 caracteres) *
+                </label>
+                <textarea 
+                  rows={3} 
+                  value={modalReversarPago.motivo} 
+                  onChange={(e) => setModalReversarPago({ ...modalReversarPago, motivo: e.target.value })} 
+                  placeholder="Justifique el motivo de anulación o extorno de este pago..." 
+                  className="w-full text-xs p-3 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:border-rose-500 resize-none"
+                />
+              </div>
+            </div>
+            
+            <div className="px-5 py-3.5 bg-slate-950 border-t border-slate-800 flex items-center justify-end gap-2.5">
+              <button 
+                type="button" 
+                onClick={() => setModalReversarPago({ open: false, pago: null, motivo: '' })} 
+                className="px-3.5 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-800 border border-slate-700 rounded-lg transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button 
+                type="button" 
+                onClick={handleReversarPagoConfirm} 
+                disabled={isReversandoPago || modalReversarPago.motivo.trim().length < 10} 
+                className="px-4 py-1.5 text-xs font-bold bg-rose-600 hover:bg-rose-500 disabled:opacity-40 text-white rounded-lg transition-all shadow-md shadow-rose-600/20 flex items-center gap-1.5 cursor-pointer"
+              >
+                {isReversandoPago ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    <span>Reversando...</span>
+                  </>
+                ) : (
+                  <span>Confirmar Reversión</span>
+                )}
               </button>
             </div>
           </div>
