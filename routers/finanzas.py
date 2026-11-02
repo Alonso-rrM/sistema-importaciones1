@@ -520,6 +520,7 @@ def listar_vouchers(
     limit: int = Query(20, ge=1, le=100),
     search: Optional[str] = None,
     saldo_mayor_cero: bool = False, 
+    saldo_cero: bool = False,
     id_importador: Optional[int] = None, 
     db: Session = Depends(get_db), 
     current_user: models.Usuario = Depends(get_current_user)
@@ -527,6 +528,8 @@ def listar_vouchers(
     filtros = [models.VoucherBancario.estado_registro == "ACTIVO"]
     if saldo_mayor_cero:
         filtros.append(models.VoucherBancario.saldo_disponible > 0)
+    if saldo_cero:
+        filtros.append(models.VoucherBancario.saldo_disponible <= 0)
     if id_importador is not None:
         filtros.append(models.VoucherBancario.id_importador == id_importador)
     if search:

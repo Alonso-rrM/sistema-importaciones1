@@ -58,7 +58,7 @@ const Vouchers = () => {
   
   const [searchTerm, setSearchTerm] = useState('');
   const debouncedSearch = useDebounce(searchTerm, 400);
-  const [filtroSaldo, setFiltroSaldo] = useState('CON_SALDO'); // 'CON_SALDO', 'TODOS', 'AGOTADOS'
+  const [filtroSaldo, setFiltroSaldo] = useState('TODOS'); // 'TODOS', 'CON_SALDO', 'AGOTADOS'
 
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
@@ -142,6 +142,9 @@ const Vouchers = () => {
         const found = dataList.find(v => v.id_voucher === selectedId);
         if (found && viewMode === 'DETALLE') {
           syncFormData(found);
+        } else if (!found && dataList.length > 0 && viewMode === 'DETALLE') {
+          setSelectedId(dataList[0].id_voucher);
+          syncFormData(dataList[0]);
         }
       } else if (dataList.length > 0 && viewMode === 'DETALLE') {
         setSelectedId(dataList[0].id_voucher);
@@ -207,10 +210,12 @@ const Vouchers = () => {
 
   const tienePagos = useMemo(() => {
     if (!selectedVoucher) return false;
-    const total = parseFloat(selectedVoucher.monto_total);
-    const saldo = parseFloat(selectedVoucher.saldo_disponible);
+    const total = parseFloat(selectedVoucher.monto_total || 0);
+    const saldo = parseFloat(selectedVoucher.saldo_disponible || 0);
     return Math.abs(total - saldo) > 0.009;
   }, [selectedVoucher]);
+
+  const voucherTieneUso = tienePagos;
 
   const handleGuardar = async (e) => {
     e.preventDefault();
@@ -616,7 +621,7 @@ const Vouchers = () => {
                   <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
                     <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Monto Total</span>
                     <div className="mt-1 font-mono font-bold text-sm text-slate-100 tabular-nums">
-                      {selectedVoucher.moneda === 'PEN' ? 'S/' : '$'} {parseFloat(selectedVoucher.monto_total).toFixed(2)}
+                      {selectedVoucher?.moneda === 'PEN' ? 'S/' : '$'} {parseFloat(selectedVoucher?.monto_total || 0).toFixed(2)}
                     </div>
                     <span className="text-[10px] text-slate-500 mt-0.5 block">Depósito inicial</span>
                   </div>
@@ -624,7 +629,7 @@ const Vouchers = () => {
                   <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
                     <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Consumido</span>
                     <div className="mt-1 font-mono font-bold text-sm text-slate-300 tabular-nums">
-                      {selectedVoucher.moneda === 'PEN' ? 'S/' : '$'} {(parseFloat(selectedVoucher.monto_total) - parseFloat(selectedVoucher.saldo_disponible)).toFixed(2)}
+                      {selectedVoucher?.moneda === 'PEN' ? 'S/' : '$'} {(parseFloat(selectedVoucher?.monto_total || 0) - parseFloat(selectedVoucher?.saldo_disponible || 0)).toFixed(2)}
                     </div>
                     <span className="text-[10px] text-slate-500 mt-0.5 block">Liquidado en gastos</span>
                   </div>
@@ -632,7 +637,7 @@ const Vouchers = () => {
                   <div className="bg-emerald-950/20 border border-emerald-500/30 rounded-xl p-3">
                     <span className="text-[10px] uppercase font-bold text-emerald-400 block tracking-wider">Saldo Disponible</span>
                     <div className="mt-1 font-mono font-bold text-sm text-emerald-400 tabular-nums">
-                      {selectedVoucher.moneda === 'PEN' ? 'S/' : '$'} {parseFloat(selectedVoucher.saldo_disponible).toFixed(2)}
+                      {selectedVoucher?.moneda === 'PEN' ? 'S/' : '$'} {parseFloat(selectedVoucher?.saldo_disponible || 0).toFixed(2)}
                     </div>
                     <span className="text-[10px] text-emerald-500 mt-0.5 block">A favor de la empresa</span>
                   </div>
@@ -640,7 +645,7 @@ const Vouchers = () => {
                   <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
                     <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Tasa de Consumo</span>
                     <div className="mt-1 font-mono text-sm text-slate-200">
-                      {Math.round(((parseFloat(selectedVoucher.monto_total) - parseFloat(selectedVoucher.saldo_disponible)) / parseFloat(selectedVoucher.monto_total)) * 100)}%
+                      {parseFloat(selectedVoucher?.monto_total || 0) > 0 ? Math.round(((parseFloat(selectedVoucher?.monto_total || 0) - parseFloat(selectedVoucher?.saldo_disponible || 0)) / parseFloat(selectedVoucher?.monto_total || 1)) * 100) : 0}%
                     </div>
                     <span className="text-[10px] text-slate-500 mt-0.5 block">Amortizado</span>
                   </div>

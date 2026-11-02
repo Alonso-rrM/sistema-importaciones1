@@ -1066,11 +1066,11 @@ const Pagos = () => {
             {/* PAGINADOR HISTORIAL */}
             <div className="p-3 bg-slate-950 border-t border-slate-800">
               <Paginador
-                paginaActual={pageHistorial}
-                totalPaginas={totalPagesHistorial}
-                onCambiarPagina={(p) => setPageHistorial(p)}
-                limite={limitHistorial}
-                onCambiarLimite={(l) => { setLimitHistorial(l); setPageHistorial(1); }}
+                page={pageHistorial}
+                totalPages={totalPagesHistorial}
+                setPage={setPageHistorial}
+                limit={limitHistorial}
+                setLimit={setLimitHistorial}
                 totalRegistros={totalRegistrosHistorial}
               />
             </div>
