@@ -122,8 +122,8 @@ const ModalLiquidacionContenedor = ({ isOpen, idMaestro, onClose }) => {
             </style>
             <!-- Copiar las hojas de estilo de la página activa para preservar colores exactos -->
             ${Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
-              .map(tag => tag.outerHTML)
-              .join('\n')}
+          .map(tag => tag.outerHTML)
+          .join('\n')}
           </head>
           <body style="background: #ffffff !important; padding: 4mm;">
             ${area.outerHTML}
@@ -193,7 +193,7 @@ const ModalLiquidacionContenedor = ({ isOpen, idMaestro, onClose }) => {
       {/* Contenedor Modal */}
       <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex justify-center items-start overflow-y-auto p-2 sm:p-4 md:p-6 modal-backdrop-filtro">
         <div className="bg-slate-900 border border-slate-800 rounded-xl shadow-2xl w-full max-w-6xl 2xl:max-w-7xl overflow-hidden my-2 md:my-4">
-          
+
           {/* BARRA SUPERIOR DE ACCIONES */}
           <div className="px-5 py-3 bg-slate-950 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 sticky top-0 z-20 modal-barra-acciones">
             <div className="flex items-center gap-2.5">
@@ -375,7 +375,7 @@ const ModalLiquidacionContenedor = ({ isOpen, idMaestro, onClose }) => {
                       <col className="w-[6%]" />  {/* Estado */}
                       <col className="w-[7%]" />  {/* Voucher */}
                     </colgroup>
-                    
+
                     <thead>
                       <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-300 text-[9px] uppercase tracking-wider">
                         <th className="p-1.5 text-center border-r border-slate-200">Fecha</th>
@@ -453,7 +453,7 @@ const ModalLiquidacionContenedor = ({ isOpen, idMaestro, onClose }) => {
                           Tesorería
                         </span>
                       </div>
-                      
+
                       <div className="space-y-1.5 text-[9.5px]">
                         {/* Bloque USD */}
                         <div className="bg-white p-2 rounded border border-slate-200 space-y-1">
@@ -618,11 +618,10 @@ const renderFilasGastos = (gastos) => {
         {g.moneda === 'USD' ? '$' : 'S/'} {g.saldo_pendiente?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
       </td>
       <td className="p-1 text-center border-r border-slate-200 text-[8px] font-bold">
-        <span className={`px-1 py-0.5 rounded ${
-          g.estado_pago === 'PAGADO' ? 'bg-emerald-100 text-emerald-800' :
-          g.estado_pago === 'PARCIAL' ? 'bg-amber-100 text-amber-800' :
-          'bg-rose-100 text-rose-800'
-        }`}>
+        <span className={`px-1 py-0.5 rounded ${g.estado_pago === 'PAGADO' ? 'bg-emerald-100 text-emerald-800' :
+            g.estado_pago === 'PARCIAL' ? 'bg-amber-100 text-amber-800' :
+              'bg-rose-100 text-rose-800'
+          }`}>
           {g.estado_pago}
         </span>
       </td>
