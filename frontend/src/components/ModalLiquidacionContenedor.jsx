@@ -478,3 +478,4 @@ const renderTablaGastos = (gastos, tc) => {
 };
 
 export default ModalLiquidacionContenedor;
+
