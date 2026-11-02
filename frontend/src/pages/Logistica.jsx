@@ -5,6 +5,7 @@ import useDebounce from '../hooks/useDebounce';
 import Paginador from '../components/Paginador';
 import { descargarExcel } from '../utils/exportUtils';
 import ModalLiquidacionContenedor from '../components/ModalLiquidacionContenedor';
+import ModalCrearProveedorRapido from '../components/ModalCrearProveedorRapido';
 
 const KPI_KEYS = ['FIJO_DESPACHO', 'POST_LEVANTE', 'EXTRAORDINARIO', 'GLOBAL'];
 
@@ -67,6 +68,16 @@ const Logistica = () => {
   const [isSubmittingInline, setIsSubmittingInline] = useState(false);
   const [isExportando, setIsExportando] = useState(false);
   const [modalLiquidacionOpen, setModalLiquidacionOpen] = useState(false);
+  const [modalCrearProveedor, setModalCrearProveedor] = useState({ open: false, context: 'maestro', categoriaDefecto: 'INTERNACIONAL' });
+
+  const handleProveedorCreado = (nuevoProv) => {
+    setOpcionesProveedores(prev => [nuevoProv, ...prev]);
+    if (modalCrearProveedor.context === 'maestro') {
+      handleFormChange('id_proveedor', String(nuevoProv.id_proveedor));
+    } else if (modalCrearProveedor.context === 'gasto_inline') {
+      setModalNuevoGasto(prev => ({ ...prev, id_proveedor: String(nuevoProv.id_proveedor) }));
+    }
+  };
 
   // Detección de Rol desde Token JWT
   const userRole = useMemo(() => {
@@ -888,7 +899,25 @@ const Logistica = () => {
                   <h3 className="text-xs font-bold uppercase tracking-wider text-teal-400 border-b border-slate-700/80 pb-1.5">4. Actores & Destino</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div><label className="block text-[10px] font-bold text-slate-400 mb-1">Importador</label><select value={formData.id_importador} onChange={e => handleFormChange('id_importador', e.target.value)} disabled={isReadOnly} className="w-full bg-slate-900 border border-slate-600 text-slate-200 text-xs rounded px-2.5 py-2 disabled:opacity-60"><option value="">-- Seleccionar --</option>{opcionesImportadores.map(o => <option key={o.id_importador} value={o.id_importador}>{o.nombre}</option>)}</select></div>
-                    <div><label className="block text-[10px] font-bold text-slate-400 mb-1">Proveedor (Shipper)</label><select value={formData.id_proveedor} onChange={e => handleFormChange('id_proveedor', e.target.value)} disabled={isReadOnly} className="w-full bg-slate-900 border border-slate-600 text-slate-200 text-xs rounded px-2.5 py-2 disabled:opacity-60"><option value="">-- Seleccionar --</option>{opcionesProveedores.map(o => <option key={o.id_proveedor} value={o.id_proveedor}>{o.nombre}</option>)}</select></div>
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-[10px] font-bold text-slate-400">Proveedor (Shipper)</label>
+                        {!isReadOnly && (
+                          <button
+                            type="button"
+                            onClick={() => setModalCrearProveedor({ open: true, context: 'maestro', categoriaDefecto: 'INTERNACIONAL' })}
+                            title="Registrar nuevo proveedor (+)"
+                            className="flex items-center justify-center w-5 h-5 rounded bg-teal-600/30 hover:bg-teal-600 text-teal-300 hover:text-white border border-teal-500/40 text-xs font-bold leading-none transition shadow-sm cursor-pointer"
+                          >
+                            +
+                          </button>
+                        )}
+                      </div>
+                      <select value={formData.id_proveedor} onChange={e => handleFormChange('id_proveedor', e.target.value)} disabled={isReadOnly} className="w-full bg-slate-900 border border-slate-600 text-slate-200 text-xs rounded px-2.5 py-2 disabled:opacity-60">
+                        <option value="">-- Seleccionar --</option>
+                        {opcionesProveedores.map(o => <option key={o.id_proveedor} value={o.id_proveedor}>{o.nombre}</option>)}
+                      </select>
+                    </div>
                     <div><label className="block text-[10px] font-bold text-slate-400 mb-1">Agente de Aduanas</label><select value={formData.id_agente} onChange={e => handleFormChange('id_agente', e.target.value)} disabled={isReadOnly} className="w-full bg-slate-900 border border-slate-600 text-slate-200 text-xs rounded px-2.5 py-2 disabled:opacity-60"><option value="">-- Seleccionar --</option>{opcionesAgentes.map(o => <option key={o.id_agente} value={o.id_agente}>{o.nombre}</option>)}</select></div>
                     <div><label className="block text-[10px] font-bold text-slate-400 mb-1">Almacén Destino</label><select value={formData.id_almacen} onChange={e => handleFormChange('id_almacen', e.target.value)} disabled={isReadOnly} className="w-full bg-slate-900 border border-slate-600 text-slate-200 text-xs rounded px-2.5 py-2 disabled:opacity-60"><option value="">-- Seleccionar --</option>{opcionesAlmacenes.map(o => <option key={o.id_almacen} value={o.id_almacen}>{o.nombre}</option>)}</select></div>
                   </div>
@@ -1155,7 +1184,17 @@ const Logistica = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Proveedor *</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[10px] font-bold uppercase text-slate-400">Proveedor *</label>
+                    <button
+                      type="button"
+                      onClick={() => setModalCrearProveedor({ open: true, context: 'gasto_inline', categoriaDefecto: 'NACIONAL' })}
+                      title="Registrar nuevo proveedor (+)"
+                      className="flex items-center justify-center w-5 h-5 rounded bg-teal-600/30 hover:bg-teal-600 text-teal-300 hover:text-white border border-teal-500/40 text-xs font-bold leading-none transition shadow-sm cursor-pointer"
+                    >
+                      +
+                    </button>
+                  </div>
                   <select
                     required
                     value={modalNuevoGasto.id_proveedor}
@@ -1249,6 +1288,13 @@ const Logistica = () => {
         isOpen={modalLiquidacionOpen}
         idMaestro={selectedId}
         onClose={() => setModalLiquidacionOpen(false)}
+      />
+      {/* Modal Rápida para Crear Proveedor (Nacional o Internacional) */}
+      <ModalCrearProveedorRapido
+        isOpen={modalCrearProveedor.open}
+        onClose={() => setModalCrearProveedor(prev => ({ ...prev, open: false }))}
+        onProveedorCreado={handleProveedorCreado}
+        categoriaDefecto={modalCrearProveedor.categoriaDefecto}
       />
     </main>
   );

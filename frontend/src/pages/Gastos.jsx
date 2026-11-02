@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../services/api';
 import Select from 'react-select';
 import Paginador from '../components/Paginador';
+import ModalCrearProveedorRapido from '../components/ModalCrearProveedorRapido';
 import useDebounce from '../hooks/useDebounce';
 import { descargarExcel } from '../utils/exportUtils';
 
@@ -103,6 +104,16 @@ const Gastos = () => {
     dam_numero: ''
   };
   const [form, setForm] = useState(estadoInicialForm);
+  const [modalCrearProveedorOpen, setModalCrearProveedorOpen] = useState(false);
+
+  const handleProveedorCreado = (nuevoProv) => {
+    const nuevaOpcion = {
+      value: nuevoProv.id_proveedor,
+      label: nuevoProv.ruc ? `${nuevoProv.ruc} - ${nuevoProv.nombre}` : nuevoProv.nombre
+    };
+    setOpcionesProveedores(prev => [nuevaOpcion, ...prev]);
+    setForm(prev => ({ ...prev, id_proveedor: nuevoProv.id_proveedor }));
+  };
 
   useEffect(() => {
     cargarCatalogos();
@@ -1086,9 +1097,19 @@ const Gastos = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-300 uppercase tracking-wide mb-1.5">
-                  Proveedor de Servicio *
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-bold text-slate-300 uppercase tracking-wide">
+                    Proveedor de Servicio *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setModalCrearProveedorOpen(true)}
+                    title="Registrar nuevo proveedor (+)"
+                    className="flex items-center justify-center w-5 h-5 rounded bg-teal-600/30 hover:bg-teal-600 text-teal-300 hover:text-white border border-teal-500/40 text-xs font-bold leading-none transition shadow-sm cursor-pointer"
+                  >
+                    +
+                  </button>
+                </div>
                 <Select 
                   options={opcionesProveedores} 
                   value={opcionesProveedores.find(op => op.value === form.id_proveedor) || null} 
@@ -1352,6 +1373,14 @@ const Gastos = () => {
           </div>
         </div>
       )}
+
+      {/* Modal Rápida para Crear Proveedor */}
+      <ModalCrearProveedorRapido
+        isOpen={modalCrearProveedorOpen}
+        onClose={() => setModalCrearProveedorOpen(false)}
+        onProveedorCreado={handleProveedorCreado}
+        categoriaDefecto="NACIONAL"
+      />
 
     </div>
   );

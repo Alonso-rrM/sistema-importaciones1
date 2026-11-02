@@ -162,11 +162,21 @@ def eliminar_agentes_fisico(id_agente: int, db: Session = Depends(get_db), curre
 # ==========================================
 @router.post("/proveedores/", response_model=schemas.CatProveedor)
 def crear_proveedor(proveedor: schemas.CatProveedorCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
-    nuevo_proveedor = models.CatProveedor(**proveedor.model_dump())
-    db.add(nuevo_proveedor)
-    db.commit()
-    db.refresh(nuevo_proveedor)
-    return nuevo_proveedor
+    data = proveedor.model_dump()
+    if not data.get("ruc") or not str(data.get("ruc")).strip():
+        data["ruc"] = None
+    else:
+        data["ruc"] = str(data["ruc"]).strip()
+
+    nuevo_proveedor = models.CatProveedor(**data)
+    try:
+        db.add(nuevo_proveedor)
+        db.commit()
+        db.refresh(nuevo_proveedor)
+        return nuevo_proveedor
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Error: El Nombre o RUC ya están registrados.")
 
 @router.get("/proveedores/", response_model=List[schemas.CatProveedor])
 def listar_proveedores(mostrar_inactivos: bool = False, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):

@@ -45,7 +45,7 @@ class CatAgenteUpdate(BaseModel):
 
 class CatProveedorCreate(BaseModel):
     nombre: str
-    ruc: str
+    ruc: Optional[str] = None
     categoria: str = "NACIONAL"
 
 class CatProveedor(BaseModel):
