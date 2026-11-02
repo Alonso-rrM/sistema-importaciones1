@@ -447,7 +447,7 @@ def obtener_datos_liquidacion_contenedor(id_maestro: int, db: Session, tc_ref: D
                         total_pagado += pagado_linea
 
                         v_rel = p.voucher_rel
-                        banco_nom = v_rel.banco_rel.nombre_banco if (v_rel and v_rel.banco_rel) else "Banco"
+                        banco_nom = v_rel.banco_rel.nombre if (v_rel and v_rel.banco_rel) else "Banco"
                         op_num = v_rel.numero_operacion if v_rel else "S/N"
                         pagos_detalle.append({
                             "id_pago": p.id_pago,

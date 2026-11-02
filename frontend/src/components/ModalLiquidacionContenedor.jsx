@@ -99,8 +99,8 @@ const ModalLiquidacionContenedor = ({ isOpen, idMaestro, onClose }) => {
         }
       `}</style>
 
-      <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex justify-center items-start overflow-y-auto p-4 md:p-6 no-print">
-        <div className="bg-slate-900 border border-slate-800 rounded-xl shadow-2xl w-full max-w-5xl overflow-hidden my-4">
+      <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex justify-center items-start overflow-y-auto p-3 md:p-6 no-print">
+        <div className="bg-slate-900 border border-slate-800 rounded-xl shadow-2xl w-full max-w-6xl 2xl:max-w-7xl overflow-hidden my-2 md:my-4">
           
           {/* BARRA SUPERIOR DE ACCIONES (NO SE IMPRIME) */}
           <div className="px-5 py-3.5 bg-slate-950 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 sticky top-0 z-10">
@@ -177,7 +177,7 @@ const ModalLiquidacionContenedor = ({ isOpen, idMaestro, onClose }) => {
             ) : data ? (
               <div
                 id="area-impresion-liquidacion"
-                className="w-full max-w-[210mm] bg-white text-slate-900 p-8 rounded-lg shadow-xl border border-slate-200 text-[11px] leading-tight font-sans"
+                className="w-full max-w-[240mm] bg-white text-slate-900 p-6 md:p-10 rounded-lg shadow-2xl border border-slate-200 text-[11px] leading-tight font-sans"
               >
                 {/* 1. MEMBRETE / CABECERA OFICIAL */}
                 <div className="border-b-2 border-slate-900 pb-3 mb-4 flex justify-between items-start">

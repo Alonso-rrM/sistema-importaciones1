@@ -455,3 +455,103 @@ def generar_excel_liquidacion_contenedor(liq_data: dict) -> tuple[io.BytesIO, st
     filename = f"Liquidacion_Gastos_{clean_id}_{ticket}.xlsx"
     return stream, filename
 
+
+def generar_excel_sabana_global(filas_sabana: list[dict]) -> tuple[io.BytesIO, str]:
+    """
+    Genera el archivo Maestro Consolidado (Sábana Global) de todos los contenedores y sus gastos.
+    Diseñado específicamente para el área de finanzas/contabilidad para construir Tablas Dinámicas:
+    - 1 fila continua por cada gasto registrado en cualquier contenedor.
+    - CERO celdas combinadas y CERO filas intermedias vacías.
+    - Metadatos de la importación y del gasto completos en cada línea.
+    """
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Sabana_Liquidaciones"
+    ws.views.sheetView[0].showGridLines = True
+
+    columnas = [
+        "Factura Comercial",
+        "Contenedor Físico",
+        "Doc. Transporte (B/L)",
+        "Importador",
+        "RUC Importador",
+        "Agente Aduana",
+        "Almacén Aduanero",
+        "Status Llegada",
+        "Estado Levante",
+        "Fecha Arribo",
+        "N° DAM",
+        "Etapa de Gasto",
+        "Proveedor",
+        "RUC Proveedor",
+        "Tipo Documento",
+        "N° Documento Gasto",
+        "Concepto de Gasto",
+        "Fecha Vencimiento",
+        "Moneda",
+        "Monto Original",
+        "Total Pagado",
+        "Saldo Pendiente",
+        "Estado Pago",
+        "TC Referencial",
+        "Equivalente USD",
+        "Vouchers / Pagos"
+    ]
+
+    alineaciones = [
+        "center", "center", "center", "left", "center",
+        "left", "left", "center", "center", "center",
+        "center", "center", "left", "center", "center",
+        "center", "left", "center", "center",
+        "right", "right", "right", "center", "right", "right", "left"
+    ]
+
+    formatos = [
+        "@", "@", "@", "@", "@",
+        "@", "@", "@", "@", "yyyy-mm-dd",
+        "@", "@", "@", "@", "@",
+        "@", "@", "yyyy-mm-dd", "@",
+        "#,##0.00", "#,##0.00", "#,##0.00", "@", "0.000", "$#,##0.00", "@"
+    ]
+
+    datos = []
+    for f in filas_sabana:
+        datos.append([
+            f.get("numero_factura") or "-",
+            f.get("n_cont_fisico") or "-",
+            f.get("documento_transporte") or "-",
+            f.get("importador_nombre") or "-",
+            f.get("importador_ruc") or "-",
+            f.get("agente_nombre") or "-",
+            f.get("almacen_nombre") or "-",
+            f.get("status_llegada") or "-",
+            f.get("estado_levante") or "-",
+            f.get("fecha_arribo") if f.get("fecha_arribo") else None,
+            f.get("numero_de_dam") or "-",
+            f.get("tipo_gasto") or "FIJO_DESPACHO",
+            f.get("proveedor_nombre") or "-",
+            f.get("proveedor_ruc") or "-",
+            f.get("tipo_doc_nombre") or "-",
+            f.get("numero_documento") or "-",
+            f.get("concepto_nombre") or "-",
+            f.get("fecha_vencimiento") if f.get("fecha_vencimiento") else None,
+            f.get("moneda") or "USD",
+            float(f.get("monto_original") or 0.0),
+            float(f.get("total_pagado") or 0.0),
+            float(f.get("saldo_pendiente") or 0.0),
+            f.get("estado_pago") or "PENDIENTE",
+            float(f.get("tipo_cambio_ref") or 3.80),
+            float(f.get("equivalente_usd") or 0.0),
+            f.get("vouchers_str") or "-"
+        ])
+
+    aplicar_estilos_profesionales(ws, columnas, datos, formatos, alineaciones)
+
+    stream = io.BytesIO()
+    wb.save(stream)
+    stream.seek(0)
+
+    ticket = generar_ticket_reporte("REP")
+    filename = f"Sabana_Consolidada_Liquidaciones_{ticket}.xlsx"
+    return stream, filename
+

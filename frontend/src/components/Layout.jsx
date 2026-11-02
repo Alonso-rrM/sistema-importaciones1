@@ -28,6 +28,8 @@ function Layout() {
           <div className="h-9 w-9 bg-teal-500/10 border border-teal-500/30 rounded-lg flex items-center justify-center text-teal-400 font-bold text-xs" title="ERP Admin">ER</div>
           <div className="w-6 h-px bg-slate-700 my-0.5"></div>
           <nav className="flex flex-col gap-2 w-full px-2">
+            <NavLink to="/app/reportes" className={navClass} title="Centro de Reportes & Analítica">📊</NavLink>
+            <div className="w-6 h-px bg-slate-700 my-0.5 mx-auto"></div>
             <NavLink to="/app/logistica" className={navClass} title="Logística y Maestros">📦<span className="active-indicator absolute left-[-8px] top-2 bottom-2 w-0.5 bg-teal-400 rounded-r hidden"></span></NavLink>
             <NavLink to="/app/dams" className={navClass} title="Declaraciones (DAMs)">📄</NavLink>
             <div className="w-6 h-px bg-slate-700 my-1 mx-auto"></div>

@@ -13,7 +13,7 @@ import schemas
 from database import SessionLocal
 from security import get_password_hash
 from dependencies import get_db, get_current_user, RoleChecker, limiter
-from routers import auth, catalogos, operaciones, finanzas
+from routers import auth, catalogos, operaciones, finanzas, reportes
 
 app = FastAPI(title="API de Importaciones y Pagos")
 
@@ -37,6 +37,7 @@ app.include_router(auth.router)
 app.include_router(catalogos.router)
 app.include_router(operaciones.router)
 app.include_router(finanzas.router)
+app.include_router(reportes.router)
 
 @app.get("/")
 def ruta_principal():

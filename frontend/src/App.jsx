@@ -17,6 +17,7 @@ import Gastos from './pages/Gastos'
 import Pagos from './pages/Pagos'
 import Vouchers from './pages/Vouchers'
 import Auditoria from './pages/Auditoria'
+import Reportes from './pages/Reportes'
 
 function App() {
   return (
@@ -27,6 +28,9 @@ function App() {
 
         {/* Zona Corporativa */}
         <Route path="/app" element={<Layout />}>
+          {/* Inteligencia y Reportes */}
+          <Route path="reportes" element={<Reportes />} />
+
           {/* Operaciones */}
           <Route path="logistica" element={<Logistica />} />
           <Route path="dams" element={<Dams />} />
