@@ -355,3 +355,4 @@ def generar_excel_gastos(gastos) -> tuple[io.BytesIO, str]:
     ticket = generar_ticket_reporte("REP")
     filename = f"Reporte_Gastos_{ticket}.xlsx"
     return stream, filename
+

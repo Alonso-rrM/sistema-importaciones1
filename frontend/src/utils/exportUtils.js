@@ -33,3 +33,4 @@ export async function descargarExcel(endpoint, params = {}, fallbackFilename = '
   link.remove();
   window.URL.revokeObjectURL(url);
 }
+
