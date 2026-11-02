@@ -1,5 +1,5 @@
 from typing import List, Optional
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 import json
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -111,6 +111,11 @@ def listar_gastos(
     limit: int = Query(20, ge=1, le=100),
     search: Optional[str] = None,
     estado_pago: Optional[str] = None,
+    moneda: Optional[str] = None,
+    tipo_gasto: Optional[str] = None,
+    id_concepto: Optional[int] = None,
+    id_proveedor: Optional[int] = None,
+    vencimiento: Optional[str] = None,
     db: Session = Depends(get_db), 
     current_user: models.Usuario = Depends(get_current_user)
 ):
@@ -119,6 +124,8 @@ def listar_gastos(
         .outerjoin(models.RegistroGasto.dam)
         .outerjoin(models.DetalleDam.maestro)
         .outerjoin(models.MaestroImportacion.importador_rel)
+        .outerjoin(models.RegistroGasto.concepto_rel)
+        .outerjoin(models.RegistroGasto.proveedor_rel)
     )
 
     filtros = [models.RegistroGasto.estado_registro == "ACTIVO"]
@@ -129,14 +136,43 @@ def listar_gastos(
         else:
             filtros.append(models.RegistroGasto.estado_pago == estado_pago)
 
+    if moneda:
+        filtros.append(models.RegistroGasto.moneda == moneda)
+
+    if tipo_gasto:
+        filtros.append(models.CatConceptoPago.tipo_gasto == tipo_gasto)
+
+    if id_concepto:
+        filtros.append(models.RegistroGasto.id_concepto == id_concepto)
+
+    if id_proveedor:
+        filtros.append(models.RegistroGasto.id_proveedor == id_proveedor)
+
+    if vencimiento:
+        hoy = date.today()
+        if vencimiento == "VENCIDOS":
+            filtros.append(
+                (models.RegistroGasto.fecha_vencimiento < hoy) &
+                (models.RegistroGasto.estado_pago != "PAGADO")
+            )
+        elif vencimiento == "POR_VENCER_7D":
+            limite_7d = hoy + timedelta(days=7)
+            filtros.append(
+                (models.RegistroGasto.fecha_vencimiento >= hoy) &
+                (models.RegistroGasto.fecha_vencimiento <= limite_7d) &
+                (models.RegistroGasto.estado_pago != "PAGADO")
+            )
+
     if search:
-        termino = f"%{search}%"
+        termino = f"%{search.strip()}%"
         filtros.append(
             models.RegistroGasto.numero_documento.ilike(termino) |
             models.RegistroGasto.estado_pago.ilike(termino) |
             models.DetalleDam.numero_de_dam.ilike(termino) |
             models.MaestroImportacion.numero_factura.ilike(termino) |
-            models.CatImportador.nombre.ilike(termino)
+            models.CatImportador.nombre.ilike(termino) |
+            models.CatProveedor.nombre.ilike(termino) |
+            models.CatConceptoPago.nombre.ilike(termino)
         )
 
     total_registros = query.filter(*filtros).with_entities(func.count(models.RegistroGasto.id_gasto)).scalar() or 0

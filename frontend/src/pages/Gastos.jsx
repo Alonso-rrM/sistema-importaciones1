@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../services/api';
 import Select from 'react-select';
 import Paginador from '../components/Paginador';
@@ -49,6 +49,7 @@ const selectDarkStyles = {
 
 const Gastos = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [viewMode, setViewMode] = useState('LISTA'); // 'LISTA', 'NUEVO', 'MODIFICAR'
   const [selectedId, setSelectedId] = useState(null);
 
@@ -60,6 +61,11 @@ const Gastos = () => {
   const debouncedSearch = useDebounce(searchTerm, 400);
   const [estadoFiltro, setEstadoFiltro] = useState('');
   const [monedaFiltro, setMonedaFiltro] = useState('');
+  const [tipoGastoFiltro, setTipoGastoFiltro] = useState('');
+  const [conceptoFiltro, setConceptoFiltro] = useState('');
+  const [proveedorFiltro, setProveedorFiltro] = useState('');
+  const [vencimientoFiltro, setVencimientoFiltro] = useState('');
+  const [mostrarFiltros, setMostrarFiltros] = useState(false);
 
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
@@ -98,7 +104,23 @@ const Gastos = () => {
 
   useEffect(() => {
     cargarListaGastos();
-  }, [debouncedSearch, page, limit, estadoFiltro, monedaFiltro]);
+  }, [debouncedSearch, page, limit, estadoFiltro, monedaFiltro, tipoGastoFiltro, conceptoFiltro, proveedorFiltro, vencimientoFiltro]);
+
+  // Si proviene desde Dams.jsx con estado precargado
+  useEffect(() => {
+    if (location.state?.fromDam) {
+      const dam = location.state.fromDam;
+      setForm({
+        ...estadoInicialForm,
+        id_dam: dam.id_dam || '',
+        id_maestro_temp: dam.id_maestro || null,
+        dam_numero: dam.numero_de_dam || ''
+      });
+      setViewMode('NUEVO');
+      setIsDrawerOpen(true);
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   // Manejo de la tecla Escape para cerrar modales y paneles
   useEffect(() => {
@@ -120,6 +142,10 @@ const Gastos = () => {
           search: debouncedSearch.trim() || undefined,
           estado_pago: estadoFiltro || undefined,
           moneda: monedaFiltro || undefined,
+          tipo_gasto: tipoGastoFiltro || undefined,
+          id_concepto: conceptoFiltro || undefined,
+          id_proveedor: proveedorFiltro || undefined,
+          vencimiento: vencimientoFiltro || undefined,
           page,
           limit
         }
@@ -144,6 +170,18 @@ const Gastos = () => {
       setIsLoading(false);
     }
   };
+
+  const limpiarFiltros = () => {
+    setSearchTerm('');
+    setEstadoFiltro('');
+    setMonedaFiltro('');
+    setTipoGastoFiltro('');
+    setConceptoFiltro('');
+    setProveedorFiltro('');
+    setVencimientoFiltro('');
+    setPage(1);
+  };
+  const hayFiltrosActivos = !!(searchTerm || estadoFiltro || monedaFiltro || tipoGastoFiltro || conceptoFiltro || proveedorFiltro || vencimientoFiltro);
 
   const extractList = (res) => {
     if (!res || !res.data) return [];
@@ -385,7 +423,7 @@ const Gastos = () => {
 
           <div className="bg-emerald-950/20 p-2.5 rounded-lg border border-emerald-500/30 flex items-center justify-between">
             <div>
-              <span className="text-[10px] font-semibold uppercase text-emerald-400 block tracking-wider">Total Liquidado</span>
+              <span className="text-[10px] font-semibold uppercase text-emerald-400 block tracking-wider">Liquidado (Vista)</span>
               <span className="text-xs font-mono font-bold text-emerald-400 tabular-nums">{formatMultiMoneda('liquidado')}</span>
             </div>
             <span className="text-base text-emerald-400">✅</span>
@@ -393,7 +431,7 @@ const Gastos = () => {
 
           <div className="bg-rose-950/20 p-2.5 rounded-lg border border-rose-500/30 flex items-center justify-between">
             <div>
-              <span className="text-[10px] font-semibold uppercase text-rose-400 block tracking-wider">Total Pendiente</span>
+              <span className="text-[10px] font-semibold uppercase text-rose-400 block tracking-wider">Pendiente (Vista)</span>
               <span className="text-xs font-mono font-bold text-rose-400 tabular-nums">{formatMultiMoneda('pendiente')}</span>
             </div>
             <span className="text-base text-rose-400">⚠️</span>
@@ -401,7 +439,7 @@ const Gastos = () => {
 
           <div className="bg-amber-950/20 p-2.5 rounded-lg border border-amber-500/30 flex items-center justify-between">
             <div>
-              <span className="text-[10px] font-semibold uppercase text-amber-400 block tracking-wider">Total Parcial</span>
+              <span className="text-[10px] font-semibold uppercase text-amber-400 block tracking-wider">Parcial (Vista)</span>
               <span className="text-xs font-mono font-bold text-amber-400 tabular-nums">{formatMultiMoneda('parcial')}</span>
             </div>
             <span className="text-base text-amber-400">⏳</span>
@@ -418,26 +456,42 @@ const Gastos = () => {
         <section className="lg:col-span-5 flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl min-h-0">
           
           {/* BARRA DE BÚSQUEDA Y FILTROS */}
-          <div className="p-3.5 border-b border-slate-800 bg-slate-900/60 space-y-2.5 shrink-0">
-            <div className="relative">
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
-                placeholder="Buscar por Documento, DAM o Factura Maestro..."
-                className="w-full pl-9 pr-4 py-2 text-xs bg-slate-950 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500 transition-all"
-              />
-              <span className="absolute inset-y-0 left-3 flex items-center text-slate-400 text-xs">🔍</span>
-              {searchTerm && (
-                <button onClick={() => setSearchTerm('')} className="absolute inset-y-0 right-3 flex items-center text-slate-400 hover:text-white text-xs">✕</button>
-              )}
+          <div className="p-3.5 border-b border-slate-800 bg-slate-900/60 space-y-2 shrink-0">
+            <div className="flex items-center gap-1.5">
+              <div className="relative flex-1">
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
+                  placeholder="Buscar Documento, DAM, Concepto o Factura..."
+                  className="w-full pl-8 pr-7 py-1.5 text-xs bg-slate-950 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500 transition-all"
+                />
+                <span className="absolute inset-y-0 left-2.5 flex items-center text-slate-400 text-xs">🔍</span>
+                {searchTerm && (
+                  <button onClick={() => { setSearchTerm(''); setPage(1); }} className="absolute inset-y-0 right-2.5 flex items-center text-slate-400 hover:text-white text-xs">✕</button>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setMostrarFiltros(prev => !prev)}
+                className={`px-2 py-1.5 rounded-lg border text-xs font-mono transition flex items-center gap-1 shrink-0 cursor-pointer ${
+                  hayFiltrosActivos 
+                    ? 'bg-teal-950/80 border-teal-500 text-teal-300 font-bold shadow-sm' 
+                    : 'bg-slate-950 border-slate-700 text-slate-400 hover:text-slate-200'
+                }`}
+                title="Alternar filtros contables"
+              >
+                <span>⚙️</span>
+                {hayFiltrosActivos && <span className="w-1.5 h-1.5 rounded-full bg-teal-400"></span>}
+              </button>
             </div>
 
-            <div className="flex items-center gap-2">
+            {/* FILTROS RÁPIDOS PRIMARIOS */}
+            <div className="flex items-center gap-1.5">
               <select
                 value={estadoFiltro}
                 onChange={(e) => { setEstadoFiltro(e.target.value); setPage(1); }}
-                className="w-1/2 py-1.5 px-2.5 text-xs bg-slate-950 border border-slate-700 rounded-lg text-slate-300 font-medium focus:outline-none focus:border-teal-500"
+                className="w-1/2 py-1 px-2 text-[11px] bg-slate-950 border border-slate-700 rounded-md text-slate-300 font-medium focus:outline-none focus:border-teal-500"
               >
                 <option value="">Todos los Estados</option>
                 <option value="PENDIENTE">PENDIENTE</option>
@@ -448,13 +502,83 @@ const Gastos = () => {
               <select
                 value={monedaFiltro}
                 onChange={(e) => { setMonedaFiltro(e.target.value); setPage(1); }}
-                className="w-1/2 py-1.5 px-2.5 text-xs bg-slate-950 border border-slate-700 rounded-lg text-slate-300 font-medium focus:outline-none focus:border-teal-500"
+                className="w-1/2 py-1 px-2 text-[11px] bg-slate-950 border border-slate-700 rounded-md text-slate-300 font-medium focus:outline-none focus:border-teal-500"
               >
                 <option value="">Todas las Monedas</option>
-                <option value="USD">USD - Dólares</option>
-                <option value="PEN">PEN - Soles</option>
+                <option value="USD">USD ($)</option>
+                <option value="PEN">PEN (S/)</option>
               </select>
             </div>
+
+            {/* PANEL COLAPSABLE DE FILTROS AVANZADOS (2 COLUMNAS) */}
+            {mostrarFiltros && (
+              <div className="p-2 bg-slate-950/90 border border-slate-800 rounded-lg space-y-1.5 text-[10px]">
+                <div className="grid grid-cols-2 gap-1.5">
+                  <div>
+                    <label className="block text-slate-500 uppercase font-bold text-[9px] mb-0.5">Etapa Logística</label>
+                    <select 
+                      value={tipoGastoFiltro} 
+                      onChange={e => { setTipoGastoFiltro(e.target.value); setPage(1); }}
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-slate-200 text-[10px]"
+                    >
+                      <option value="">Todas las Etapas</option>
+                      <option value="FIJO_DESPACHO">Fijo Despacho</option>
+                      <option value="POST_LEVANTE">Post-Levante</option>
+                      <option value="EXTRAORDINARIO">Extraordinario</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-slate-500 uppercase font-bold text-[9px] mb-0.5">Vencimiento</label>
+                    <select 
+                      value={vencimientoFiltro} 
+                      onChange={e => { setVencimientoFiltro(e.target.value); setPage(1); }}
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-slate-200 text-[10px]"
+                    >
+                      <option value="">Todos</option>
+                      <option value="VENCIDOS">🚨 Vencidos</option>
+                      <option value="POR_VENCER_7D">⏳ Próximos 7 días</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-slate-500 uppercase font-bold text-[9px] mb-0.5">Concepto</label>
+                    <select 
+                      value={conceptoFiltro} 
+                      onChange={e => { setConceptoFiltro(e.target.value); setPage(1); }}
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-slate-200 text-[10px] truncate"
+                    >
+                      <option value="">Todos</option>
+                      {opcionesConceptos.map(c => (
+                        <option key={c.value} value={c.value}>{c.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-slate-500 uppercase font-bold text-[9px] mb-0.5">Proveedor</label>
+                    <select 
+                      value={proveedorFiltro} 
+                      onChange={e => { setProveedorFiltro(e.target.value); setPage(1); }}
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-slate-200 text-[10px] truncate"
+                    >
+                      <option value="">Todos</option>
+                      {opcionesProveedores.map(p => (
+                        <option key={p.value} value={p.value}>{p.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                {hayFiltrosActivos && (
+                  <div className="flex justify-end pt-1">
+                    <button
+                      type="button"
+                      onClick={limpiarFiltros}
+                      className="text-[10px] text-rose-400 hover:text-rose-300 font-mono hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      ✕ Limpiar filtros
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* LISTA DENSA DE GASTOS */}

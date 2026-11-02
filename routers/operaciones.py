@@ -193,16 +193,29 @@ def listar_facturas(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=1000),
     search: Optional[str] = None,
+    estado_levante: Optional[str] = None,
+    status_llegada: Optional[str] = None,
+    id_importador: Optional[int] = None,
+    tipo_valor: Optional[str] = None,
     db: Session = Depends(get_db), 
     current_user: models.Usuario = Depends(get_current_user)
 ):
-    filtros = []
+    filtros = [models.MaestroImportacion.estado_registro == "ACTIVO"]
     if search:
-        termino = f"%{search}%"
+        termino = f"%{search.strip()}%"
         filtros.append(
             models.MaestroImportacion.numero_factura.ilike(termino) |
-            models.MaestroImportacion.documento_transporte.ilike(termino)
+            models.MaestroImportacion.documento_transporte.ilike(termino) |
+            models.MaestroImportacion.n_cont_fisico.ilike(termino)
         )
+    if estado_levante:
+        filtros.append(models.MaestroImportacion.estado_levante == estado_levante)
+    if status_llegada:
+        filtros.append(models.MaestroImportacion.status_llegada == status_llegada)
+    if id_importador:
+        filtros.append(models.MaestroImportacion.id_importador == id_importador)
+    if tipo_valor:
+        filtros.append(models.MaestroImportacion.tipo_valor == tipo_valor)
 
     total_registros = db.query(func.count(models.MaestroImportacion.id_maestro)).filter(*filtros).scalar() or 0
     total_paginas = (total_registros + limit - 1) // limit if total_registros > 0 else 0
@@ -351,21 +364,34 @@ def listar_dams(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=1000),
     search: Optional[str] = None,
+    canal_control: Optional[str] = None,
+    aforo_realizado: Optional[bool] = None,
+    tipo_valor: Optional[str] = None,
     db: Session = Depends(get_db), 
     current_user: models.Usuario = Depends(get_current_user)
 ):
+    query = db.query(models.DetalleDam).outerjoin(models.DetalleDam.maestro)
     filtros = []
-    if search:
-        termino = f"%{search}%"
-        filtros.append(
-            models.DetalleDam.numero_de_dam.ilike(termino)
-        )
 
-    total_registros = db.query(func.count(models.DetalleDam.id_dam)).filter(*filtros).scalar() or 0
+    if search:
+        termino = f"%{search.strip()}%"
+        filtros.append(
+            models.DetalleDam.numero_de_dam.ilike(termino) |
+            models.DetalleDam.serie.ilike(termino) |
+            models.MaestroImportacion.numero_factura.ilike(termino)
+        )
+    if canal_control:
+        filtros.append(models.DetalleDam.canal_control == canal_control)
+    if aforo_realizado is not None:
+        filtros.append(models.DetalleDam.aforo_realizado == aforo_realizado)
+    if tipo_valor:
+        filtros.append(models.MaestroImportacion.tipo_valor == tipo_valor)
+
+    total_registros = query.filter(*filtros).with_entities(func.count(models.DetalleDam.id_dam)).scalar() or 0
     total_paginas = (total_registros + limit - 1) // limit if total_registros > 0 else 0
 
     data = (
-        db.query(models.DetalleDam)
+        query
         .filter(*filtros)
         .order_by(models.DetalleDam.id_dam.asc())
         .offset((page - 1) * limit)

@@ -15,6 +15,12 @@ const Dams = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const debouncedSearch = useDebounce(searchTerm, 400);
 
+  // Filtros Avanzados de Bandeja
+  const [canalFiltro, setCanalFiltro] = useState('');
+  const [aforoFiltro, setAforoFiltro] = useState('');
+  const [tipoValorFiltro, setTipoValorFiltro] = useState('');
+  const [mostrarFiltros, setMostrarFiltros] = useState(false);
+
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
   const [totalPages, setTotalPages] = useState(1);
@@ -63,7 +69,7 @@ const Dams = () => {
 
   useEffect(() => {
     cargarDams();
-  }, [debouncedSearch, page, limit]);
+  }, [debouncedSearch, page, limit, canalFiltro, aforoFiltro, tipoValorFiltro]);
 
   // Si proviene desde Logistica.jsx con estado precargado
   useEffect(() => {
@@ -91,8 +97,16 @@ const Dams = () => {
 
   const cargarDams = async () => {
     try {
+      const aforoBool = aforoFiltro === 'REALIZADO' ? true : aforoFiltro === 'PENDIENTE' ? false : undefined;
       const response = await api.get('/dams/', {
-        params: { search: debouncedSearch.trim() || undefined, page, limit }
+        params: { 
+          search: debouncedSearch.trim() || undefined, 
+          page, 
+          limit,
+          canal_control: canalFiltro || undefined,
+          aforo_realizado: aforoBool,
+          tipo_valor: tipoValorFiltro || undefined
+        }
       });
       setDams(response.data?.data || []);
       setTotalPages(response.data?.total_paginas || 1);
@@ -101,6 +115,15 @@ const Dams = () => {
       console.error("Error al cargar DAMs:", error);
     }
   };
+
+  const limpiarFiltros = () => {
+    setSearchTerm('');
+    setCanalFiltro('');
+    setAforoFiltro('');
+    setTipoValorFiltro('');
+    setPage(1);
+  };
+  const hayFiltrosActivos = !!(searchTerm || canalFiltro || aforoFiltro || tipoValorFiltro);
 
   const cargarGastosDeDam = async (dam_numero) => {
     if (!dam_numero) return;
@@ -227,16 +250,87 @@ const Dams = () => {
             </div>
             <button onClick={handleNuevo} className="inline-flex items-center px-2.5 py-1 text-[11px] font-bold rounded bg-teal-600 hover:bg-teal-500 text-white shadow-sm transition-all">+ Nueva DAM</button>
           </div>
-          <div className="relative">
-            <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center text-slate-500 text-xs">🔍</span>
-            <input 
-              type="text" 
-              value={searchTerm} 
-              onChange={e => { setSearchTerm(e.target.value); setPage(1); }} 
-              className="w-full bg-slate-900 border border-slate-700 focus:border-teal-500 text-xs text-slate-200 placeholder-slate-500 rounded-md pl-8 py-1.5" 
-              placeholder="Buscar Nº DAM o Serie..." 
-            />
+          <div className="flex items-center gap-1.5">
+            <div className="relative flex-1">
+              <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center text-slate-500 text-xs">🔍</span>
+              <input 
+                type="text" 
+                value={searchTerm} 
+                onChange={e => { setSearchTerm(e.target.value); setPage(1); }} 
+                className="w-full bg-slate-900 border border-slate-700 focus:border-teal-500 text-xs text-slate-200 placeholder-slate-500 rounded-md pl-8 pr-2 py-1.5" 
+                placeholder="Buscar Nº DAM, Serie o Factura..." 
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => setMostrarFiltros(prev => !prev)}
+              className={`px-2 py-1.5 rounded border text-xs font-mono transition flex items-center gap-1 shrink-0 cursor-pointer ${
+                hayFiltrosActivos 
+                  ? 'bg-teal-950/80 border-teal-500 text-teal-300 font-bold shadow-sm' 
+                  : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'
+              }`}
+              title="Alternar filtros avanzados"
+            >
+              <span>⚙️</span>
+              {hayFiltrosActivos && <span className="w-1.5 h-1.5 rounded-full bg-teal-400"></span>}
+            </button>
           </div>
+
+          {/* PANEL COLAPSABLE DE FILTROS COMPACTOS (DAMS) */}
+          {mostrarFiltros && (
+            <div className="p-2 bg-slate-950/90 border border-slate-800 rounded-md space-y-1.5 text-[10px]">
+              <div className="grid grid-cols-3 gap-1.5">
+                <div>
+                  <label className="block text-slate-500 uppercase font-bold text-[9px] mb-0.5">Canal</label>
+                  <select 
+                    value={canalFiltro} 
+                    onChange={e => { setCanalFiltro(e.target.value); setPage(1); }}
+                    className="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-slate-200 text-[10px]"
+                  >
+                    <option value="">Todos</option>
+                    <option value="VERDE">🟢 Verde</option>
+                    <option value="NARANJA">🟠 Naranja</option>
+                    <option value="ROJO">🔴 Rojo</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-slate-500 uppercase font-bold text-[9px] mb-0.5">Aforo</label>
+                  <select 
+                    value={aforoFiltro} 
+                    onChange={e => { setAforoFiltro(e.target.value); setPage(1); }}
+                    className="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-slate-200 text-[10px]"
+                  >
+                    <option value="">Todos</option>
+                    <option value="PENDIENTE">⏳ Pendiente</option>
+                    <option value="REALIZADO">✅ Realizado</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-slate-500 uppercase font-bold text-[9px] mb-0.5">Régimen</label>
+                  <select 
+                    value={tipoValorFiltro} 
+                    onChange={e => { setTipoValorFiltro(e.target.value); setPage(1); }}
+                    className="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-slate-200 text-[10px]"
+                  >
+                    <option value="">Todos</option>
+                    <option value="DEFINITIVO">Definitivo</option>
+                    <option value="GARANTIZADO">Garantizado</option>
+                  </select>
+                </div>
+              </div>
+              {hayFiltrosActivos && (
+                <div className="flex justify-end pt-1">
+                  <button
+                    type="button"
+                    onClick={limpiarFiltros}
+                    className="text-[10px] text-rose-400 hover:text-rose-300 font-mono hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    ✕ Limpiar filtros
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto divide-y divide-slate-800">

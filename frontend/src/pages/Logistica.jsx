@@ -15,6 +15,13 @@ const Logistica = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const debouncedSearch = useDebounce(searchTerm, 400);
 
+  // Filtros Avanzados de Bandeja
+  const [estadoLevanteFiltro, setEstadoLevanteFiltro] = useState('');
+  const [statusLlegadaFiltro, setStatusLlegadaFiltro] = useState('');
+  const [importadorFiltro, setImportadorFiltro] = useState('');
+  const [tipoValorFiltro, setTipoValorFiltro] = useState('');
+  const [mostrarFiltros, setMostrarFiltros] = useState(false);
+
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
   const [totalPages, setTotalPages] = useState(1);
@@ -72,7 +79,9 @@ const Logistica = () => {
   const isReadOnly = userRole !== 1 && formData.estado_levante === 'CON LEVANTE' && viewMode === 'MODIFICAR';
 
   useEffect(() => { cargarCatalogos(); }, []);
-  useEffect(() => { cargarMaestros(); }, [debouncedSearch, page, limit]);
+  useEffect(() => { 
+    cargarMaestros(); 
+  }, [debouncedSearch, page, limit, estadoLevanteFiltro, statusLlegadaFiltro, importadorFiltro, tipoValorFiltro]);
 
   const cargarCatalogos = async () => {
     try {
@@ -99,12 +108,32 @@ const Logistica = () => {
 
   const cargarMaestros = async () => {
     try {
-      const res = await api.get('/maestros/', { params: { search: debouncedSearch.trim() || undefined, page, limit } });
+      const res = await api.get('/maestros/', { 
+        params: { 
+          search: debouncedSearch.trim() || undefined, 
+          page, 
+          limit,
+          estado_levante: estadoLevanteFiltro || undefined,
+          status_llegada: statusLlegadaFiltro || undefined,
+          id_importador: importadorFiltro || undefined,
+          tipo_valor: tipoValorFiltro || undefined
+        } 
+      });
       setMaestros(res.data?.data || []);
       setTotalPages(res.data?.total_paginas || 1);
       setTotalRegistros(res.data?.total_registros || 0);
     } catch (error) { console.error("Error maestros:", error); }
   };
+
+  const limpiarFiltros = () => {
+    setSearchTerm('');
+    setEstadoLevanteFiltro('');
+    setStatusLlegadaFiltro('');
+    setImportadorFiltro('');
+    setTipoValorFiltro('');
+    setPage(1);
+  };
+  const hayFiltrosActivos = !!(searchTerm || estadoLevanteFiltro || statusLlegadaFiltro || importadorFiltro || tipoValorFiltro);
 
   // Optimización de red: Consulta quirúrgica del expediente abierto
   const cargarSubRegistros = async (id_maestro, numero_factura) => {
@@ -321,10 +350,100 @@ const Logistica = () => {
             </div>
             <button onClick={handleNuevo} className="inline-flex items-center px-2.5 py-1 text-[11px] font-bold rounded bg-teal-600 hover:bg-teal-500 text-white shadow-sm transition-all">+ Nuevo</button>
           </div>
-          <div className="relative">
-            <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center text-slate-500 text-xs">🔍</span>
-            <input type="text" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setPage(1); }} className="w-full bg-slate-900 border border-slate-700 focus:border-teal-500 text-xs text-slate-200 placeholder-slate-500 rounded-md pl-8 py-1.5" placeholder="Buscar Factura o BL..." />
+          <div className="flex items-center gap-1.5">
+            <div className="relative flex-1">
+              <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center text-slate-500 text-xs">🔍</span>
+              <input 
+                type="text" 
+                value={searchTerm} 
+                onChange={e => { setSearchTerm(e.target.value); setPage(1); }} 
+                className="w-full bg-slate-900 border border-slate-700 focus:border-teal-500 text-xs text-slate-200 placeholder-slate-500 rounded-md pl-8 pr-2 py-1.5" 
+                placeholder="Buscar Factura, BL o Contenedor..." 
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => setMostrarFiltros(prev => !prev)}
+              className={`px-2 py-1.5 rounded border text-xs font-mono transition flex items-center gap-1 shrink-0 cursor-pointer ${
+                hayFiltrosActivos 
+                  ? 'bg-teal-950/80 border-teal-500 text-teal-300 font-bold shadow-sm' 
+                  : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'
+              }`}
+              title="Alternar filtros avanzados"
+            >
+              <span>⚙️</span>
+              {hayFiltrosActivos && <span className="w-1.5 h-1.5 rounded-full bg-teal-400"></span>}
+            </button>
           </div>
+
+          {/* PANEL COLAPSABLE DE FILTROS COMPACTOS (2 COLUMNAS) */}
+          {mostrarFiltros && (
+            <div className="p-2 bg-slate-950/90 border border-slate-800 rounded-md space-y-1.5 text-[10px]">
+              <div className="grid grid-cols-2 gap-1.5">
+                <div>
+                  <label className="block text-slate-500 uppercase font-bold text-[9px] mb-0.5">Levante</label>
+                  <select 
+                    value={estadoLevanteFiltro} 
+                    onChange={e => { setEstadoLevanteFiltro(e.target.value); setPage(1); }}
+                    className="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-slate-200 text-[10px]"
+                  >
+                    <option value="">Todos</option>
+                    <option value="SIN LEVANTE">Sin Levante</option>
+                    <option value="CON LEVANTE">Con Levante</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-slate-500 uppercase font-bold text-[9px] mb-0.5">Llegada</label>
+                  <select 
+                    value={statusLlegadaFiltro} 
+                    onChange={e => { setStatusLlegadaFiltro(e.target.value); setPage(1); }}
+                    className="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-slate-200 text-[10px]"
+                  >
+                    <option value="">Todos</option>
+                    <option value="EN TRÁNSITO">En Tránsito</option>
+                    <option value="EN PUERTO">En Puerto</option>
+                    <option value="EN ALMACÉN">En Almacén</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-slate-500 uppercase font-bold text-[9px] mb-0.5">Importador</label>
+                  <select 
+                    value={importadorFiltro} 
+                    onChange={e => { setImportadorFiltro(e.target.value); setPage(1); }}
+                    className="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-slate-200 text-[10px] truncate"
+                  >
+                    <option value="">Todos</option>
+                    {opcionesImportadores.map(imp => (
+                      <option key={imp.id_importador} value={imp.id_importador}>{imp.nombre}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-slate-500 uppercase font-bold text-[9px] mb-0.5">Tipo Valor</label>
+                  <select 
+                    value={tipoValorFiltro} 
+                    onChange={e => { setTipoValorFiltro(e.target.value); setPage(1); }}
+                    className="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-slate-200 text-[10px]"
+                  >
+                    <option value="">Todos</option>
+                    <option value="DEFINITIVO">Definitivo</option>
+                    <option value="GARANTIZADO">Garantizado</option>
+                  </select>
+                </div>
+              </div>
+              {hayFiltrosActivos && (
+                <div className="flex justify-end pt-1">
+                  <button
+                    type="button"
+                    onClick={limpiarFiltros}
+                    className="text-[10px] text-rose-400 hover:text-rose-300 font-mono hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    ✕ Limpiar filtros
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto divide-y divide-slate-800">
