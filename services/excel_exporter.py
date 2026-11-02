@@ -356,3 +356,102 @@ def generar_excel_gastos(gastos) -> tuple[io.BytesIO, str]:
     filename = f"Reporte_Gastos_{ticket}.xlsx"
     return stream, filename
 
+
+def generar_excel_liquidacion_contenedor(liq_data: dict) -> tuple[io.BytesIO, str]:
+    """
+    Genera un Excel en Formato Tabular Plano (Tidy Data) de la liquidación de un contenedor.
+    Diseñado específicamente para que los usuarios puedan crear Tablas Dinámicas inmediatamente:
+    - 1 fila = 1 registro de gasto continuo.
+    - CERO celdas combinadas y CERO filas vacías intermedias.
+    - Metadatos completos repetidos en cada fila (Factura, Contenedor, Etapa, DAM).
+    - Columnas bimonetarias con Tipo de Cambio y Equivalente en USD.
+    """
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Liquidacion_Plana"
+    ws.views.sheetView[0].showGridLines = True
+
+    columnas = [
+        "Factura Comercial",
+        "Contenedor Físico",
+        "Doc. Transporte (B/L)",
+        "N° DAM",
+        "Etapa de Gasto",
+        "Proveedor",
+        "RUC Proveedor",
+        "Tipo Documento",
+        "N° Documento Gasto",
+        "Concepto de Gasto",
+        "Fecha Vencimiento",
+        "Moneda",
+        "Monto Original",
+        "Total Pagado",
+        "Saldo Pendiente",
+        "Estado Pago",
+        "TC Referencial",
+        "Equivalente USD",
+        "Vouchers / Pagos"
+    ]
+
+    alineaciones = [
+        "center", "center", "center", "center", "center",
+        "left", "center", "center", "center", "left",
+        "center", "center", "right", "right", "right",
+        "center", "right", "right", "left"
+    ]
+
+    formatos = [
+        "@", "@", "@", "@", "@",
+        "@", "@", "@", "@", "@",
+        "yyyy-mm-dd", "@", "#,##0.00", "#,##0.00", "#,##0.00",
+        "@", "0.000", "$#,##0.00", "@"
+    ]
+
+    datos = []
+    factura = liq_data.get("numero_factura") or "-"
+    contenedor = liq_data.get("n_cont_fisico") or "-"
+    bl = liq_data.get("documento_transporte") or "-"
+    tc_global = liq_data.get("tipo_cambio_referencial") or 3.80
+
+    for g in liq_data.get("gastos", []):
+        vouchers_str = "-"
+        if g.get("pagos_detalle"):
+            vouchers_str = "; ".join(
+                f"{p.get('banco', 'Banco')}: OP-{p.get('numero_operacion', 'S/N')} ({p.get('moneda', '')} {float(p.get('importe', 0)):,.2f})"
+                for p in g["pagos_detalle"]
+            )
+
+        datos.append([
+            factura,
+            contenedor,
+            bl,
+            g.get("numero_de_dam") or "-",
+            g.get("tipo_gasto") or "FIJO_DESPACHO",
+            g.get("proveedor_nombre") or "-",
+            g.get("proveedor_ruc") or "-",
+            g.get("tipo_doc_nombre") or "-",
+            g.get("numero_documento") or "-",
+            g.get("concepto_nombre") or "-",
+            g.get("fecha_vencimiento") if g.get("fecha_vencimiento") else None,
+            g.get("moneda") or "USD",
+            float(g.get("monto_original") or 0.0),
+            float(g.get("total_pagado") or 0.0),
+            float(g.get("saldo_pendiente") or 0.0),
+            g.get("estado_pago") or "PENDIENTE",
+            float(g.get("tipo_cambio_ref") or tc_global),
+            float(g.get("equivalente_usd") or 0.0),
+            vouchers_str
+        ])
+
+    aplicar_estilos_profesionales(ws, columnas, datos, formatos, alineaciones)
+
+    stream = io.BytesIO()
+    wb.save(stream)
+    stream.seek(0)
+
+    identificador = contenedor if contenedor and contenedor != "-" else factura
+    clean_id = "".join(c for c in identificador if c.isalnum() or c in ("-", "_"))
+    ticket = generar_ticket_reporte("REP")
+    filename = f"Liquidacion_Gastos_{clean_id}_{ticket}.xlsx"
+    return stream, filename
+

@@ -10,7 +10,11 @@ import models
 import schemas
 from dependencies import get_db, get_current_user, RoleChecker
 from services.audit import registrar_auditoria
-from services.excel_exporter import generar_excel_maestros, generar_excel_dams
+from services.excel_exporter import (
+    generar_excel_maestros,
+    generar_excel_dams,
+    generar_excel_liquidacion_contenedor
+)
 
 router = APIRouter(tags=["Operaciones"])
 
@@ -363,6 +367,211 @@ def estado_cuenta_factura(
         saldo_general_pendiente_pen=saldo_general_pendiente_pen,
         porcentaje_amortizado=porcentaje_amortizado,
         desglose_dams=desglose_dams
+    )
+
+def obtener_datos_liquidacion_contenedor(id_maestro: int, db: Session, tc_ref: Decimal = Decimal("3.80")) -> dict:
+    """Extrae y estructura la liquidación vertical de gastos bimonetarios de un contenedor."""
+    maestro = (
+        db.query(models.MaestroImportacion)
+        .options(
+            joinedload(models.MaestroImportacion.importador_rel),
+            joinedload(models.MaestroImportacion.proveedor_rel),
+            joinedload(models.MaestroImportacion.agente_rel),
+            joinedload(models.MaestroImportacion.almacen_rel),
+            joinedload(models.MaestroImportacion.dams)
+            .joinedload(models.DetalleDam.gastos)
+            .joinedload(models.RegistroGasto.concepto_rel),
+            joinedload(models.MaestroImportacion.dams)
+            .joinedload(models.DetalleDam.gastos)
+            .joinedload(models.RegistroGasto.proveedor_rel),
+            joinedload(models.MaestroImportacion.dams)
+            .joinedload(models.DetalleDam.gastos)
+            .joinedload(models.RegistroGasto.tipo_doc_rel),
+            joinedload(models.MaestroImportacion.dams)
+            .joinedload(models.DetalleDam.gastos)
+            .joinedload(models.RegistroGasto.pagos)
+            .joinedload(models.RegistroPago.voucher_rel)
+            .joinedload(models.VoucherBancario.banco_rel),
+        )
+        .filter(models.MaestroImportacion.id_maestro == id_maestro)
+        .first()
+    )
+    if not maestro:
+        raise HTTPException(status_code=404, detail="Expediente / Maestro no encontrado")
+
+    if tc_ref <= Decimal("0.00"):
+        tc_ref = Decimal("3.80")
+
+    gastos_list = []
+    total_usd_orig = Decimal("0.00")
+    total_usd_pagado = Decimal("0.00")
+    total_pen_orig = Decimal("0.00")
+    total_pen_pagado = Decimal("0.00")
+
+    subtotales_etapa = {
+        "FIJO_DESPACHO": {"usd": Decimal("0.00"), "pen": Decimal("0.00")},
+        "POST_LEVANTE": {"usd": Decimal("0.00"), "pen": Decimal("0.00")},
+        "EXTRAORDINARIO": {"usd": Decimal("0.00"), "pen": Decimal("0.00")},
+    }
+
+    for dam in maestro.dams:
+        for g in dam.gastos:
+            if g.estado_registro != "ACTIVO":
+                continue
+
+            monto_orig = Decimal(str(g.monto_original)) if g.monto_original else Decimal("0.00")
+            moneda_g = g.moneda or "USD"
+            etapa = g.concepto_rel.tipo_gasto if (g.concepto_rel and g.concepto_rel.tipo_gasto) else "FIJO_DESPACHO"
+            if etapa not in subtotales_etapa:
+                subtotales_etapa[etapa] = {"usd": Decimal("0.00"), "pen": Decimal("0.00")}
+
+            total_pagado = Decimal("0.00")
+            pagos_detalle = []
+            if g.pagos:
+                for p in g.pagos:
+                    if p.estado_registro == "ACTIVO" and p.importe:
+                        imp = Decimal(str(p.importe))
+                        tc_p = Decimal(str(p.tipo_cambio_aplicado or p.tipo_cambio or "1.00"))
+                        if tc_p <= Decimal("0.00"):
+                            tc_p = Decimal("1.00")
+                        
+                        if moneda_g == p.moneda:
+                            pagado_linea = imp
+                        elif moneda_g == "USD" and p.moneda == "PEN":
+                            pagado_linea = imp / tc_p
+                        elif moneda_g == "PEN" and p.moneda == "USD":
+                            pagado_linea = imp * tc_p
+                        else:
+                            pagado_linea = imp
+                        
+                        total_pagado += pagado_linea
+
+                        v_rel = p.voucher_rel
+                        banco_nom = v_rel.banco_rel.nombre_banco if (v_rel and v_rel.banco_rel) else "Banco"
+                        op_num = v_rel.numero_operacion if v_rel else "S/N"
+                        pagos_detalle.append({
+                            "id_pago": p.id_pago,
+                            "fecha_pago": str(p.fecha_pago) if p.fecha_pago else "-",
+                            "importe": float(imp),
+                            "moneda": p.moneda,
+                            "numero_operacion": op_num,
+                            "banco": banco_nom
+                        })
+
+            saldo = max(Decimal("0.00"), monto_orig - total_pagado)
+
+            if moneda_g == "USD":
+                total_usd_orig += monto_orig
+                total_usd_pagado += total_pagado
+                subtotales_etapa[etapa]["usd"] += monto_orig
+                equiv_usd = monto_orig
+            else:
+                total_pen_orig += monto_orig
+                total_pen_pagado += total_pagado
+                subtotales_etapa[etapa]["pen"] += monto_orig
+                equiv_usd = monto_orig / tc_ref
+
+            gastos_list.append({
+                "id_gasto": g.id_gasto,
+                "id_dam": dam.id_dam,
+                "numero_de_dam": dam.numero_de_dam,
+                "tipo_gasto": etapa,
+                "proveedor_nombre": g.proveedor_rel.nombre if g.proveedor_rel else "-",
+                "proveedor_ruc": g.proveedor_rel.ruc if g.proveedor_rel else "-",
+                "tipo_doc_nombre": g.tipo_doc_rel.nombre_documento if g.tipo_doc_rel else "-",
+                "numero_documento": g.numero_documento or "-",
+                "concepto_nombre": g.concepto_rel.nombre if g.concepto_rel else "-",
+                "fecha_vencimiento": str(g.fecha_vencimiento) if g.fecha_vencimiento else None,
+                "moneda": moneda_g,
+                "monto_original": float(monto_orig),
+                "total_pagado": float(total_pagado),
+                "saldo_pendiente": float(saldo),
+                "estado_pago": g.estado_pago or "PENDIENTE",
+                "tipo_cambio_ref": float(tc_ref),
+                "equivalente_usd": round(float(equiv_usd), 2),
+                "pagos_detalle": pagos_detalle
+            })
+
+    orden_etapas = {"FIJO_DESPACHO": 1, "POST_LEVANTE": 2, "EXTRAORDINARIO": 3}
+    gastos_list.sort(key=lambda x: (orden_etapas.get(x["tipo_gasto"], 99), x["fecha_vencimiento"] or "", x["id_gasto"]))
+
+    saldo_usd = max(Decimal("0.00"), total_usd_orig - total_usd_pagado)
+    saldo_pen = max(Decimal("0.00"), total_pen_orig - total_pen_pagado)
+
+    gastos_consolidados_usd = total_usd_orig + (total_pen_orig / tc_ref)
+    pagados_consolidados_usd = total_usd_pagado + (total_pen_pagado / tc_ref)
+    saldo_consolidado_usd = saldo_usd + (saldo_pen / tc_ref)
+    cfr_usd = Decimal(str(maestro.cfr_usd)) if maestro.cfr_usd else Decimal("0.00")
+    costo_total_embarque = cfr_usd + gastos_consolidados_usd
+
+    return {
+        "id_maestro": maestro.id_maestro,
+        "numero_factura": maestro.numero_factura,
+        "n_cont_fisico": maestro.n_cont_fisico or "-",
+        "documento_transporte": maestro.documento_transporte or "-",
+        "importador": maestro.importador_rel.nombre if maestro.importador_rel else "-",
+        "importador_ruc": getattr(maestro.importador_rel, "ruc", "-") or "-",
+        "proveedor": maestro.proveedor_rel.nombre if maestro.proveedor_rel else "-",
+        "agente_aduana": maestro.agente_rel.nombre if maestro.agente_rel else "-",
+        "almacen": maestro.almacen_rel.nombre if maestro.almacen_rel else "-",
+        "fecha_embarque": str(maestro.fecha_embarque) if maestro.fecha_embarque else "-",
+        "fecha_arribo": str(maestro.fecha_arribo) if maestro.fecha_arribo else "-",
+        "status_llegada": maestro.status_llegada or "-",
+        "estado_levante": maestro.estado_levante or "-",
+        "tipo_valor": maestro.tipo_valor or "DEFINITIVO",
+        "fob_usd": float(maestro.fob_usd or 0.0),
+        "flete_usd": float(maestro.flete_usd or 0.0),
+        "cfr_usd": float(cfr_usd),
+        "tipo_cambio_referencial": float(tc_ref),
+        "totales": {
+            "usd": {
+                "original": float(total_usd_orig),
+                "pagado": float(total_usd_pagado),
+                "saldo": float(saldo_usd)
+            },
+            "pen": {
+                "original": float(total_pen_orig),
+                "pagado": float(total_pen_pagado),
+                "saldo": float(saldo_pen)
+            },
+            "consolidado_usd": {
+                "total_gastos": round(float(gastos_consolidados_usd), 2),
+                "total_pagado": round(float(pagados_consolidados_usd), 2),
+                "saldo_pendiente": round(float(saldo_consolidado_usd), 2),
+                "costo_total_embarque_cfr_gastos": round(float(costo_total_embarque), 2)
+            },
+            "subtotales_etapa": {
+                k: {"usd": float(v["usd"]), "pen": float(v["pen"])} for k, v in subtotales_etapa.items()
+            }
+        },
+        "gastos": gastos_list
+    }
+
+@router.get("/maestros/{id_maestro}/liquidacion-gastos")
+def obtener_liquidacion_gastos_contenedor_api(
+    id_maestro: int,
+    tipo_cambio_referencial: Decimal = Query(Decimal("3.80"), description="Tipo de cambio referencial para gastos en USD"),
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(get_current_user)
+):
+    return obtener_datos_liquidacion_contenedor(id_maestro, db, tipo_cambio_referencial)
+
+@router.get("/maestros/{id_maestro}/liquidacion-gastos/exportar")
+def exportar_liquidacion_gastos_excel_api(
+    id_maestro: int,
+    tipo_cambio_referencial: Decimal = Query(Decimal("3.80"), description="Tipo de cambio referencial para gastos en USD"),
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(get_current_user)
+):
+    data = obtener_datos_liquidacion_contenedor(id_maestro, db, tipo_cambio_referencial)
+    stream, filename = generar_excel_liquidacion_contenedor(data)
+    return StreamingResponse(
+        stream,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Access-Control-Expose-Headers": "Content-Disposition"
+        }
     )
 
 @router.delete("/maestros/{id_maestro}")

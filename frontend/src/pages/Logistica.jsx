@@ -4,6 +4,7 @@ import api from '../services/api';
 import useDebounce from '../hooks/useDebounce';
 import Paginador from '../components/Paginador';
 import { descargarExcel } from '../utils/exportUtils';
+import ModalLiquidacionContenedor from '../components/ModalLiquidacionContenedor';
 
 const KPI_KEYS = ['FIJO_DESPACHO', 'POST_LEVANTE', 'EXTRAORDINARIO', 'GLOBAL'];
 
@@ -65,6 +66,7 @@ const Logistica = () => {
   const [modalNuevoGasto, setModalNuevoGasto] = useState({ open: false, id_dam: '', id_concepto: '', id_proveedor: '', id_tipo_doc: '', numero_documento: '', monto_original: '', moneda: 'USD' });
   const [isSubmittingInline, setIsSubmittingInline] = useState(false);
   const [isExportando, setIsExportando] = useState(false);
+  const [modalLiquidacionOpen, setModalLiquidacionOpen] = useState(false);
 
   // Detección de Rol desde Token JWT
   const userRole = useMemo(() => {
@@ -538,6 +540,15 @@ const Logistica = () => {
               <div className="flex items-center gap-2">
                 {viewMode === 'MODIFICAR' && (
                   <>
+                    <button
+                      type="button"
+                      onClick={() => setModalLiquidacionOpen(true)}
+                      className="px-2.5 py-1.5 rounded bg-indigo-600/30 border border-indigo-500/50 hover:bg-indigo-600/50 text-indigo-200 font-bold text-xs transition-colors flex items-center gap-1.5 shadow-sm cursor-pointer"
+                      title="Ver e imprimir liquidación de caja de este contenedor o exportar a Excel"
+                    >
+                      <span>🧾</span>
+                      <span>Liquidación Caja</span>
+                    </button>
                     {userRole === 1 && formData.estado_levante === 'CON LEVANTE' && (
                       <button onClick={handleDesbloquearLevante} className="px-2.5 py-1.5 rounded bg-amber-600/20 border border-amber-500/40 hover:bg-amber-600/30 text-amber-300 font-bold text-xs transition-colors">🔓 Desbloquear Levante</button>
                     )}
@@ -571,6 +582,14 @@ const Logistica = () => {
                       <span className="text-base">📊</span>
                       <span className="text-xs font-bold uppercase tracking-wider text-teal-300">Termómetro Financiero del Contenedor</span>
                       <span className="text-[10px] text-slate-400 font-mono">(Liquidación PEN)</span>
+                      <button
+                        type="button"
+                        onClick={() => setModalLiquidacionOpen(true)}
+                        className="text-[10px] text-teal-300 hover:text-white underline font-mono ml-1 cursor-pointer"
+                        title="Abrir liquidación formal de gastos de este contenedor"
+                      >
+                        [ Ver Liquidación ]
+                      </button>
                     </div>
                     <div className="flex items-center gap-3 text-xs font-mono">
                       <div><span className="text-slate-400 text-[10px] uppercase block">Total Gastos:</span><strong className="text-slate-200">S/ {parseFloat(estadoCuenta.total_general_gastos_pen || 0).toFixed(2)}</strong></div>
@@ -1224,6 +1243,13 @@ const Logistica = () => {
           </div>
         </div>
       )}
+
+      {/* Modal de Liquidación de Despacho y Caja A4 + Excel */}
+      <ModalLiquidacionContenedor
+        isOpen={modalLiquidacionOpen}
+        idMaestro={selectedId}
+        onClose={() => setModalLiquidacionOpen(false)}
+      />
     </main>
   );
 };
