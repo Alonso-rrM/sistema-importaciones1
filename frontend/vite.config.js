@@ -5,7 +5,16 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   server: {
-    host: '0.0.0.0',
+    // Permite acceder desde otras PCs de la red local (ej. http://192.168.1.50:5173)
+    host: true,
     port: 5173,
+    // Reenvía /api/* al backend FastAPI local, así no hace falta exponer el puerto 8000 ni configurar CORS
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, ''),
+      },
+    },
   },
 })
