@@ -457,6 +457,8 @@ const Logistica = () => {
                     <option value="">Todos</option>
                     <option value="EN TRÁNSITO">En Tránsito</option>
                     <option value="EN PUERTO">En Puerto</option>
+                    <option value="EN ALMACÉN TEMPORAL">En Almacén Temporal</option>
+                    <option value="RETIRO PROGRAMADO">Retiro Programado</option>
                     <option value="EN ALMACÉN">En Almacén</option>
                   </select>
                 </div>
@@ -909,7 +911,7 @@ const Logistica = () => {
                         <option value="EN TRÁNSITO">EN TRÁNSITO</option>
                         <option value="EN PUERTO">EN PUERTO</option>
                         <option value="EN ALMACÉN TEMPORAL">EN ALMACÉN TEMPORAL</option>
-                        <option value="PENDIENTE DESCARGA">PENDIENTE DESCARGA</option>
+                        <option value="RETIRO PROGRAMADO">RETIRO PROGRAMADO</option>
                         <option value="EN ALMACÉN">EN ALMACÉN</option>
                       </select>
                     </div>
