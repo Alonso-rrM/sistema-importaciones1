@@ -14,6 +14,7 @@ import models
 import schemas
 from dependencies import get_db, get_current_user, RoleChecker
 from services.audit import registrar_auditoria
+from services.state_machine import evaluar_gatillos_gastos_dam
 from services.excel_exporter import generar_excel_gastos
 from domain.finanzas import calcular_amortizacion_cruzada
 
@@ -81,6 +82,10 @@ async def crear_gasto(
         
         db.commit()
         db.refresh(nuevo_gasto)
+        
+        # Disparador Reactivo: Evaluar si el gasto activa Proforma u OMC
+        evaluar_gatillos_gastos_dam(db, nuevo_gasto.id_dam)
+        
         return nuevo_gasto
     except Exception as e:
         db.rollback()
@@ -822,6 +827,11 @@ async def registrar_pago(
             db.commit()
 
         db.refresh(nuevo_pago)
+        
+        # Disparador Reactivo: Evaluar si el pago libera el levante (Proforma u OMC pagada)
+        if nuevo_pago.id_dam:
+            evaluar_gatillos_gastos_dam(db, nuevo_pago.id_dam)
+            
         return nuevo_pago
         
     except HTTPException:

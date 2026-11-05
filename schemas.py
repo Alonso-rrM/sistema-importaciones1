@@ -183,6 +183,9 @@ class MaestroImportacionBase(BaseModel):
     fecha_arribo: Optional[date] = None
     status_llegada: Optional[str] = "EN TRÁNSITO"
     estado_levante: Optional[str] = "SIN LEVANTE"
+    estado_documentario: Optional[str] = "SIN NUMERAR"
+    fecha_levante_maestro: Optional[date] = None
+    fecha_recepcion_almacen: Optional[date] = None
     id_almacen: Optional[int] = None
     fob_usd: Optional[Decimal] = None
     flete_usd: Optional[Decimal] = None
@@ -211,6 +214,9 @@ class MaestroImportacionUpdate(BaseModel):
     fecha_arribo: date | None = None
     status_llegada: str | None = None
     estado_levante: str | None = None
+    estado_documentario: str | None = None
+    fecha_levante_maestro: date | None = None
+    fecha_recepcion_almacen: date | None = None
     id_almacen: int | None = None
     fob_usd: Decimal | None = None
     flete_usd: Decimal | None = None
@@ -236,6 +242,8 @@ class DetalleDamBase(BaseModel):
     canal_control: Optional[str] = None
     monto_valor_provisional_usd: Optional[Decimal] = None
     aforo_realizado: bool = False  # <--- NUEVO
+    estado_dam: Optional[str] = "NUMERADA / EN EVALUACIÓN"
+    fecha_levante: Optional[date] = None
 
 class DamLookup(BaseModel):
     id_dam: int
@@ -258,6 +266,8 @@ class DetalleDamUpdate(BaseModel):
     canal_control: str | None = None
     monto_valor_provisional_usd: Decimal | None = None
     aforo_realizado: bool | None = None  # <--- NUEVO OPCIONAL
+    estado_dam: str | None = None
+    fecha_levante: date | None = None
 
 
 # --- 4. ESQUEMAS PARA REGISTRO_GASTOS ---

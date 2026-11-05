@@ -118,6 +118,10 @@ class MaestroImportacion(Base):
     fecha_arribo = Column(Date, nullable=True)
     status_llegada = Column(String(50), nullable=True, default="EN TRÁNSITO")
     estado_levante = Column(String(50), nullable=True, default="SIN LEVANTE")
+    # [NUEVO] Máquina de Estados Dual y Cronómetro Logístico
+    estado_documentario = Column(String(50), server_default="SIN NUMERAR", default="SIN NUMERAR", nullable=False)
+    fecha_levante_maestro = Column(Date, nullable=True)
+    fecha_recepcion_almacen = Column(Date, nullable=True)
     id_almacen = Column(Integer, ForeignKey("cat_almacenes.id_almacen"), nullable=True)
     fob_usd = Column(Numeric(15, 2))
     flete_usd = Column(Numeric(15, 2))
@@ -150,6 +154,9 @@ class DetalleDam(Base):
     
     # [NUEVO] Control de Aforo Físico
     aforo_realizado = Column(Boolean, default=False)
+    # [NUEVO] Máquina de Estados Individual de la DAM
+    estado_dam = Column(String(50), server_default="NUMERADA / EN EVALUACIÓN", default="NUMERADA / EN EVALUACIÓN", nullable=False)
+    fecha_levante = Column(Date, nullable=True)
     
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     maestro = relationship("MaestroImportacion", back_populates="dams")

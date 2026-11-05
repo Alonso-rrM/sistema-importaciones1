@@ -10,6 +10,7 @@ import models
 import schemas
 from dependencies import get_db, get_current_user, RoleChecker
 from services.audit import registrar_auditoria
+from services.state_machine import sincronizar_estado_maestro
 from services.excel_exporter import (
     generar_excel_maestros,
     generar_excel_dams,
@@ -54,6 +55,11 @@ def crear_maestro(maestro: schemas.MaestroImportacionCreate, db: Session = Depen
     db.add(nuevo_maestro)
     db.commit()
     db.refresh(nuevo_maestro)
+
+    # Disparador Reactivo: Inicializar estado documentario del nuevo contenedor
+    sincronizar_estado_maestro(db, nuevo_maestro.id_maestro)
+    db.refresh(nuevo_maestro)
+
     return nuevo_maestro
 
 @router.put("/maestros/{id_maestro}", response_model=schemas.MaestroImportacion)
@@ -63,16 +69,18 @@ def actualizar_maestro(id_maestro: int, maestro_editado: schemas.MaestroImportac
     if not db_maestro:
         raise HTTPException(status_code=404, detail="Maestro de importación no encontrado")
         
-    # Regla Crítica B.1: Si ya tiene LEVANTE, se bloquea la edición normal
-    if db_maestro.estado_levante == "CON LEVANTE" and current_user.id_rol != 1:
+    # Regla Crítica: Si ya está en ATE. TOTAL, se bloquea la edición normal
+    if db_maestro.estado_documentario == "ATE. TOTAL" and current_user.id_rol != 1:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, 
-            detail="Operación Denegada: Los registros con LEVANTE están blindados. Solicita desbloqueo al Administrador."
+            detail="Operación Denegada: Los registros con ATENCIÓN TOTAL están blindados. Solicita desbloqueo al Administrador."
         )
     
     update_data = maestro_editado.model_dump(exclude_unset=True)
     
-    # Prevención de Bypass: estado_levante es calculado reactivamente por la máquina de estados
+    # Prevención de Bypass: estado_documentario y estado_levante son calculados reactivamente por la máquina de estados
+    if "estado_documentario" in update_data and current_user.id_rol != 1:
+        del update_data["estado_documentario"]
     if "estado_levante" in update_data and current_user.id_rol != 1:
         del update_data["estado_levante"]
     
@@ -87,6 +95,11 @@ def actualizar_maestro(id_maestro: int, maestro_editado: schemas.MaestroImportac
     try:
         db.commit()
         db.refresh(db_maestro)
+        
+        # Disparador Reactivo: Sincronizar estado del contenedor tras actualizar Maestro
+        sincronizar_estado_maestro(db, db_maestro.id_maestro)
+        db.refresh(db_maestro)
+
         return db_maestro
     except StaleDataError:
         db.rollback()
@@ -714,28 +727,6 @@ def exportar_dams_excel(
         }
     )
 
-def evaluar_levante_reactivo(db: Session, id_maestro: int):
-    """Disparador Reactivo: Evalúa si el Maestro puede obtener o mantener el estado CON LEVANTE."""
-    maestro_padre = db.query(models.MaestroImportacion).filter(models.MaestroImportacion.id_maestro == id_maestro).first()
-    if not maestro_padre:
-        return
-    
-    todas_listas = True
-    for dam in maestro_padre.dams:
-        if dam.canal_control == 'ROJO' and maestro_padre.tipo_valor == 'DEFINITIVO':
-            if not dam.aforo_realizado:
-                todas_listas = False
-                break
-    
-    if todas_listas and len(maestro_padre.dams) > 0:
-        if maestro_padre.estado_levante != "CON LEVANTE":
-            maestro_padre.estado_levante = "CON LEVANTE"
-            db.commit()
-    else:
-        if maestro_padre.estado_levante == "CON LEVANTE":
-            maestro_padre.estado_levante = "SIN LEVANTE"
-            db.commit()
-
 @router.post("/dams/", response_model=schemas.DetalleDam)
 def crear_dam(dam: schemas.DetalleDamCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     maestro = db.query(models.MaestroImportacion).filter(models.MaestroImportacion.id_maestro == dam.id_maestro).first()
@@ -753,8 +744,8 @@ def crear_dam(dam: schemas.DetalleDamCreate, db: Session = Depends(get_db), curr
     db.commit()
     db.refresh(nueva_dam)
 
-    # Disparador Reactivo: Evaluar levante tras registrar nueva DAM
-    evaluar_levante_reactivo(db, nueva_dam.id_maestro)
+    # Disparador Reactivo: Evaluar consolidación del contenedor al nacer una DAM
+    sincronizar_estado_maestro(db, nueva_dam.id_maestro)
 
     return nueva_dam
 
@@ -770,11 +761,15 @@ def actualizar_dam(id_dam: int, dam_editada: schemas.DetalleDamUpdate, db: Sessi
     for key, value in update_data.items():
         setattr(db_dam, key, value)
         
+    if db_dam.estado_dam and "LEVANTE" in db_dam.estado_dam and not db_dam.fecha_levante:
+        import datetime
+        db_dam.fecha_levante = datetime.date.today()
+
     db.commit()
     db.refresh(db_dam)
 
-    # Disparador Reactivo: Evaluar si el Maestro puede obtener Levante Automático
-    evaluar_levante_reactivo(db, db_dam.id_maestro)
+    # Disparador Reactivo: Sincronizar estado del contenedor tras actualizar DAM
+    sincronizar_estado_maestro(db, db_dam.id_maestro)
 
     return db_dam
 
@@ -817,8 +812,8 @@ def eliminar_dam(id_dam: int, req: schemas.EliminacionRequest, db: Session = Dep
     db.delete(dam)
     db.commit()
 
-    # Disparador Reactivo: Reevaluar levante tras eliminar DAM
-    evaluar_levante_reactivo(db, id_maestro_padre)
+    # Disparador Reactivo: Sincronizar estado del contenedor tras eliminar DAM
+    sincronizar_estado_maestro(db, id_maestro_padre)
 
     return {"mensaje": f"DAM {dam.numero_de_dam} eliminada físicamente con respaldo de auditoría."}
 

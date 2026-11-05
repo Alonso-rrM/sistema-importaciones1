@@ -42,7 +42,7 @@ const Dams = () => {
     serie: '',
     canal_control: 'VERDE',
     monto_valor_provisional_usd: '',
-    aforo_realizado: false
+    estado_dam: 'NUMERADA / EN EVALUACIÓN'
   };
 
   const [formData, setFormData] = useState(estadoInicial);
@@ -75,7 +75,10 @@ const Dams = () => {
 
   // Si proviene desde Logistica.jsx con estado precargado
   useEffect(() => {
-    if (location.state?.fromMaestro) {
+    if (location.state?.fromDam) {
+      handleSelect(location.state.fromDam);
+      window.history.replaceState({}, document.title);
+    } else if (location.state?.fromMaestro) {
       const fromM = location.state.fromMaestro;
       setSelectedId(null);
       setViewMode('NUEVO');
@@ -155,7 +158,7 @@ const Dams = () => {
       serie: d.serie || '',
       canal_control: d.canal_control || 'VERDE',
       monto_valor_provisional_usd: d.monto_valor_provisional_usd != null ? String(d.monto_valor_provisional_usd) : '',
-      aforo_realizado: Boolean(d.aforo_realizado)
+      estado_dam: d.estado_dam || 'NUMERADA / EN EVALUACIÓN'
     });
     setHasUnsavedChanges(false);
     cargarGastosDeDam(d.numero_de_dam);
@@ -185,7 +188,7 @@ const Dams = () => {
         monto_valor_provisional_usd: formData.monto_valor_provisional_usd !== '' && formData.monto_valor_provisional_usd != null 
           ? parseFloat(formData.monto_valor_provisional_usd) 
           : null,
-        aforo_realizado: Boolean(formData.aforo_realizado)
+        estado_dam: formData.estado_dam || 'NUMERADA / EN EVALUACIÓN'
       };
 
       if (viewMode === 'NUEVO') {
@@ -209,17 +212,14 @@ const Dams = () => {
     }
   };
 
-  const handleToggleAforo = async () => {
-    if (userRole !== 1 && userRole !== 3) return alert("Solo Administradores o personal de Logística pueden certificar el Aforo Físico.");
-    const nuevoEstado = !formData.aforo_realizado;
-    if (!window.confirm(`¿Certificar aforo físico como ${nuevoEstado ? 'REALIZADO' : 'PENDIENTE'}?`)) return;
+  const handleCambiarEstadoDam = async (nuevoEstado) => {
+    if (!window.confirm(`¿Cambiar el estado de la DAM a: ${nuevoEstado}?`)) return;
     try {
-      await api.put(`/dams/${selectedId}`, { aforo_realizado: nuevoEstado });
-      setFormData(prev => ({ ...prev, aforo_realizado: nuevoEstado }));
+      await api.put(`/dams/${selectedId}`, { estado_dam: nuevoEstado });
+      setFormData(prev => ({ ...prev, estado_dam: nuevoEstado }));
       cargarDams();
-      alert("✅ Estado de Aforo actualizado.");
     } catch (err) {
-      alert(`Error al actualizar aforo: ${err.response?.data?.detail || 'Error desconocido'}`);
+      alert(`Error al actualizar estado: ${err.response?.data?.detail || 'Error desconocido'}`);
     }
   };
 
@@ -368,7 +368,7 @@ const Dams = () => {
           {dams.map(d => {
             const isActive = selectedId === d.id_dam;
             const m = maestrosMap[d.id_maestro];
-            const requiereAforo = d.canal_control === 'ROJO' && !d.aforo_realizado;
+            const pendienteAforo = d.estado_dam === 'PENDIENTE DE AFORO';
 
             return (
               <article key={d.id_dam} onClick={() => handleSelect(d)} className={`p-3 border-l-2 cursor-pointer transition-colors group ${isActive ? 'bg-teal-900/20 border-teal-500' : 'border-transparent hover:bg-slate-800/40'}`}>
@@ -376,7 +376,7 @@ const Dams = () => {
                   <div className="flex items-center gap-2">
                     <span className={`font-mono text-[10px] font-medium px-1 rounded border ${isActive ? 'text-teal-400 bg-teal-500/10 border-teal-500/20' : 'text-slate-400 bg-slate-700 border-slate-600'}`}>#{d.id_dam}</span>
                     <span className={`text-sm font-bold font-mono tracking-tight ${isActive ? 'text-teal-300' : 'text-slate-200'}`}>DAM: {d.numero_de_dam}</span>
-                    {requiereAforo && <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" title="Aforo pendiente"></span>}
+                    {pendienteAforo && <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" title="Aforo pendiente"></span>}
                   </div>
                   <div className="flex items-center gap-1">
                     <span className={`px-1.5 py-0.5 text-[9px] font-bold uppercase rounded border ${d.canal_control === 'VERDE' ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300' : d.canal_control === 'ROJO' ? 'bg-rose-500/15 border-rose-500/30 text-rose-300' : 'bg-orange-500/15 border-orange-500/30 text-orange-300'}`}>
@@ -387,12 +387,18 @@ const Dams = () => {
 
                 <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono mb-1">
                   <span>Serie: {d.serie || 'S/N'}</span>
-                  <span>Aforo: {d.aforo_realizado ? '✅ Sí' : '❌ No'}</span>
+                  <span>Factura: <strong className="text-slate-300">{m?.numero_factura || `ID #${d.id_maestro}`}</strong></span>
                 </div>
 
-                <div className="text-[10px] text-slate-500 font-mono flex items-center justify-between">
-                  <span>Factura: <strong className="text-slate-300">{m?.numero_factura || `ID #${d.id_maestro}`}</strong></span>
-                  {d.monto_valor_provisional_usd && <span className="text-emerald-400 font-bold">${parseFloat(d.monto_valor_provisional_usd).toFixed(2)}</span>}
+                <div className="mt-1 flex items-center justify-between text-[10px]">
+                  <span className={`px-1.5 py-0.5 font-bold uppercase rounded border ${
+                    d.estado_dam?.includes('LEVANTE') || d.estado_dam?.includes('LIQUIDADA') ? 'bg-emerald-900/40 text-emerald-400 border-emerald-800' :
+                    d.estado_dam?.includes('OBSERVADA') ? 'bg-rose-900/40 text-rose-400 border-rose-800' :
+                    'bg-amber-900/40 text-amber-400 border-amber-800'
+                  }`}>
+                    {d.estado_dam || 'NUMERADA / EN EVALUACIÓN'}
+                  </span>
+                  {d.monto_valor_provisional_usd && <span className="text-emerald-400 font-bold font-mono">${parseFloat(d.monto_valor_provisional_usd).toFixed(2)}</span>}
                 </div>
               </article>
             );
@@ -446,22 +452,17 @@ const Dams = () => {
 
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {/* KPIs ADUANEROS DE LA DAM */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-2.5">
                 <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-2.5">
                   <span className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Canal de Control</span>
                   <div className={`text-base font-bold font-mono uppercase ${formData.canal_control === 'VERDE' ? 'text-emerald-400' : formData.canal_control === 'ROJO' ? 'text-rose-400' : 'text-orange-400'}`}>
                     {formData.canal_control}
                   </div>
                 </div>
-                <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-2.5">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Aforo Físico</span>
-                  <div className="flex items-center gap-2">
-                    <span className={`text-base font-bold font-mono ${formData.aforo_realizado ? 'text-emerald-400' : 'text-rose-400'}`}>
-                      {formData.aforo_realizado ? '✅ Realizado' : '❌ Pendiente'}
-                    </span>
-                    {viewMode === 'MODIFICAR' && (userRole === 1 || userRole === 3) && (
-                      <button onClick={handleToggleAforo} className="text-[10px] text-teal-400 underline hover:text-teal-300">Alternar</button>
-                    )}
+                <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-2.5 col-span-2">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Estado Legal de la DAM</span>
+                  <div className="text-sm font-bold font-mono text-teal-300">
+                    {formData.estado_dam || 'SIN NUMERAR'}
                   </div>
                 </div>
                 <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-2.5">
@@ -554,17 +555,6 @@ const Dams = () => {
                       </div>
                     )}
 
-                    <div className="flex items-center pt-5">
-                      <label className="flex items-center gap-2 cursor-pointer select-none">
-                        <input 
-                          type="checkbox" 
-                          checked={formData.aforo_realizado} 
-                          onChange={e => handleFormChange('aforo_realizado', e.target.checked)}
-                          className="rounded bg-slate-900 border-slate-600 text-teal-600 focus:ring-teal-500" 
-                        />
-                        <span className="text-xs text-slate-300 font-bold">Aforo Físico Realizado</span>
-                      </label>
-                    </div>
                   </div>
                 </div>
 
@@ -574,6 +564,71 @@ const Dams = () => {
                   </button>
                 </div>
               </form>
+
+              {/* PANEL DE ACCIONES ADUANERAS (MÁQUINA DE ESTADOS) */}
+              {viewMode === 'MODIFICAR' && (
+                <div className="bg-slate-800/60 border border-teal-500/30 rounded-lg p-3.5 space-y-2 mt-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wider text-teal-300 flex items-center gap-1.5">
+                      ⚡ Panel de Operaciones Aduaneras
+                    </span>
+                    <span className="text-[10px] font-mono text-slate-400">Estado Actual: <strong className="text-white">{formData.estado_dam}</strong></span>
+                  </div>
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {formData.estado_dam === 'PENDIENTE DE AFORO' && (
+                      <>
+                        <button type="button" onClick={() => handleCambiarEstadoDam('CON LEVANTE')} className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded text-xs font-bold transition-all shadow-sm">
+                          ✅ Aforo Conforme (Otorgar Levante)
+                        </button>
+                        <button type="button" onClick={() => handleCambiarEstadoDam('OBSERVADA / NOTIFICADA')} className="px-3 py-1.5 bg-rose-700 hover:bg-rose-600 text-white rounded text-xs font-bold transition-all shadow-sm">
+                          ⚠️ Reportar Observación SUNAT
+                        </button>
+                      </>
+                    )}
+
+                    {formData.estado_dam === 'OBSERVADA / NOTIFICADA' && (
+                      <>
+                        {maestroActual?.tipo_valor === 'GARANTIZADO' ? (
+                          <button type="button" onClick={() => handleCambiarEstadoDam('CON LEVANTE (GARANTÍA ACTIVA)')} className="px-3 py-1.5 bg-cyan-700 hover:bg-cyan-600 text-white rounded text-xs font-bold transition-all shadow-sm">
+                            🔓 Otorgar Levante con Garantía (Art. 160)
+                          </button>
+                        ) : (
+                          <button type="button" onClick={() => handleCambiarEstadoDam('EN REVISIÓN')} className="px-3 py-1.5 bg-amber-700 hover:bg-amber-600 text-white rounded text-xs font-bold transition-all shadow-sm">
+                            ⏳ Subir Sustento (Pasar a En Revisión)
+                          </button>
+                        )}
+                      </>
+                    )}
+
+                    {formData.estado_dam === 'EN REVISIÓN' && (
+                      <button type="button" onClick={() => handleCambiarEstadoDam('CON LEVANTE')} className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded text-xs font-bold transition-all shadow-sm">
+                        ✅ Diligencia Conforme (Otorgar Levante)
+                      </button>
+                    )}
+
+                    {formData.estado_dam === 'CON LEVANTE (GARANTÍA ACTIVA)' && (
+                      <>
+                        <button type="button" onClick={() => handleCambiarEstadoDam('EN REVISIÓN OMC (POST-LEVANTE)')} className="px-3 py-1.5 bg-orange-700 hover:bg-orange-600 text-white rounded text-xs font-bold transition-all shadow-sm">
+                          🔍 Iniciar Revisión OMC SUNAT
+                        </button>
+                        <button type="button" onClick={() => handleCambiarEstadoDam('GARANTÍA CERRADA / LIQUIDADA')} className="px-3 py-1.5 bg-emerald-800 hover:bg-emerald-700 text-white rounded text-xs font-bold transition-all shadow-sm">
+                          ✅ Cerrar Garantía (Sin Observación)
+                        </button>
+                      </>
+                    )}
+
+                    {formData.estado_dam === 'EN REVISIÓN OMC (POST-LEVANTE)' && (
+                      <button type="button" onClick={() => handleCambiarEstadoDam('GARANTÍA CERRADA / LIQUIDADA')} className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded text-xs font-bold transition-all shadow-sm">
+                        ✅ Descarte OMC / Garantía Liberada
+                      </button>
+                    )}
+
+                    {!['PENDIENTE DE AFORO', 'OBSERVADA / NOTIFICADA', 'EN REVISIÓN', 'CON LEVANTE (GARANTÍA ACTIVA)', 'EN REVISIÓN OMC (POST-LEVANTE)'].includes(formData.estado_dam) && (
+                      <p className="text-xs text-slate-400 italic">⏳ No se requieren acciones aduaneras manuales para este estado (Esperando pagos o procesos automáticos).</p>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* SUB-TABLA DE GASTOS ASOCIADOS A ESTA DAM */}
               {viewMode === 'MODIFICAR' && (

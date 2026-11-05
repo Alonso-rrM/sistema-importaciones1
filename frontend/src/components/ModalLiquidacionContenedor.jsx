@@ -56,7 +56,7 @@ const ModalLiquidacionContenedor = ({ isOpen, idMaestro, onClose }) => {
     }
   };
 
-  // Impresión y Exportación a PDF mediante iframe aislado garantizado
+  // Impresión y Exportación a PDF mediante diálogo nativo garantizado
   const handleExportarPdf = () => {
     const area = document.getElementById('area-impresion-liquidacion');
     if (!area) {
@@ -65,89 +65,15 @@ const ModalLiquidacionContenedor = ({ isOpen, idMaestro, onClose }) => {
     }
 
     setIsExportingPdf(true);
-    try {
-      let iframe = document.getElementById('iframe-impresion-liquidacion');
-      if (iframe) {
-        iframe.remove();
+    setTimeout(() => {
+      try {
+        window.print();
+      } catch (err) {
+        console.error('Error al imprimir:', err);
+      } finally {
+        setIsExportingPdf(false);
       }
-      iframe = document.createElement('iframe');
-      iframe.id = 'iframe-impresion-liquidacion';
-      iframe.style.position = 'fixed';
-      iframe.style.right = '0';
-      iframe.style.bottom = '0';
-      iframe.style.width = '0';
-      iframe.style.height = '0';
-      iframe.style.border = '0';
-      document.body.appendChild(iframe);
-
-      const doc = iframe.contentWindow.document;
-      doc.open();
-      doc.write(`
-        <!DOCTYPE html>
-        <html lang="es">
-          <head>
-            <meta charset="utf-8" />
-            <title>Liquidacion_${data?.n_cont_fisico || data?.numero_factura || 'Gastos'}</title>
-            <style>
-              @page {
-                size: A4 portrait;
-                margin: 6mm 8mm;
-              }
-              *, *::before, *::after {
-                box-sizing: border-box;
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-              }
-              body {
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-                background-color: #ffffff !important;
-                color: #0f172a !important;
-                margin: 0;
-                padding: 0;
-                font-size: 10px;
-                line-height: 1.25;
-              }
-              table {
-                width: 100%;
-                border-collapse: collapse;
-                table-layout: fixed;
-              }
-              th, td {
-                word-wrap: break-word;
-                overflow-wrap: break-word;
-              }
-              .no-print {
-                display: none !important;
-              }
-            </style>
-            <!-- Copiar las hojas de estilo de la página activa para preservar colores exactos -->
-            ${Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
-          .map(tag => tag.outerHTML)
-          .join('\n')}
-          </head>
-          <body style="background: #ffffff !important; padding: 4mm;">
-            ${area.outerHTML}
-          </body>
-        </html>
-      `);
-      doc.close();
-
-      setTimeout(() => {
-        try {
-          iframe.contentWindow.focus();
-          iframe.contentWindow.print();
-        } catch (e) {
-          console.warn('Iframe print falló, usando print nativo:', e);
-          window.print();
-        } finally {
-          setIsExportingPdf(false);
-        }
-      }, 350);
-    } catch (err) {
-      console.error('Error al preparar impresión PDF:', err);
-      setIsExportingPdf(false);
-      window.print();
-    }
+    }, 150);
   };
 
   if (!isOpen) return null;
@@ -159,29 +85,58 @@ const ModalLiquidacionContenedor = ({ isOpen, idMaestro, onClose }) => {
 
   return (
     <>
-      {/* Estilos para impresión nativa como fallback seguro */}
+      {/* Estilos para impresión nativa / Descargar PDF en A4 profesional */}
       <style>{`
         @media print {
-          body * {
-            visibility: hidden !important;
+          /* Ocultar elementos fuera del modal */
+          header, nav, aside, footer, #main-sidebar, .sidebar {
+            display: none !important;
           }
-          #area-impresion-liquidacion, #area-impresion-liquidacion * {
-            visibility: visible !important;
-          }
-          #area-impresion-liquidacion {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
-            width: 100% !important;
-            margin: 0 !important;
-            padding: 6mm !important;
+          body {
             background: white !important;
             color: #0f172a !important;
-            box-shadow: none !important;
-            border: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
           }
-          .modal-barra-acciones, .modal-backdrop-filtro {
+          .modal-barra-acciones {
             display: none !important;
+          }
+          .modal-backdrop-filtro {
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            width: 100% !important;
+            background: white !important;
+            backdrop-filter: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            overflow: visible !important;
+            z-index: 99999 !important;
+            display: block !important;
+          }
+          .modal-backdrop-filtro > div {
+            background: white !important;
+            border: none !important;
+            box-shadow: none !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          .modal-backdrop-filtro .p-3,
+          .modal-backdrop-filtro .sm\\:p-6,
+          .modal-backdrop-filtro .md\\:p-8 {
+            background: white !important;
+            padding: 0 !important;
+          }
+          #area-impresion-liquidacion {
+            border: none !important;
+            box-shadow: none !important;
+            padding: 2mm !important;
+            margin: 0 auto !important;
+            width: 100% !important;
+            max-width: 100% !important;
           }
           @page {
             size: A4 portrait;
@@ -597,47 +552,53 @@ const renderFilasGastos = (gastos) => {
     );
   }
 
-  return gastos.map((g, idx) => (
-    <tr key={g.id_gasto || idx} className={`border-b border-slate-200 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/70'}`}>
-      <td className="p-1 text-center font-mono border-r border-slate-200 text-slate-700 truncate">{g.fecha_vencimiento || '-'}</td>
-      <td className="p-1 text-center font-mono border-r border-slate-200 text-slate-800 font-medium truncate">{g.numero_documento || '-'}</td>
-      <td className="p-1 text-left border-r border-slate-200 pl-2 font-medium text-slate-900 truncate" title={g.proveedor_nombre}>{g.proveedor_nombre}</td>
-      <td className="p-1 text-left border-r border-slate-200 pl-2 text-slate-700 truncate" title={g.concepto_nombre}>{g.concepto_nombre}</td>
-      <td className="p-1 text-center font-bold border-r border-slate-200 text-[8.5px]">
-        <span className={`px-1 py-0.5 rounded font-mono ${g.moneda === 'USD' ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'}`}>
-          {g.moneda}
-        </span>
-      </td>
-      <td className="p-1 text-right font-mono border-r border-slate-200 pr-2 font-semibold">
-        {g.moneda === 'USD' ? '$' : 'S/'} {g.monto_original?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-      </td>
-      <td className="p-1 text-right font-mono border-r border-slate-200 pr-2 text-emerald-700 font-semibold">
-        {g.moneda === 'USD' ? '$' : 'S/'} {g.total_pagado?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-      </td>
-      <td className={`p-1 text-right font-mono border-r border-slate-200 pr-2 ${g.saldo_pendiente > 0 ? 'text-rose-700 font-bold' : 'text-slate-400'}`}>
-        {g.moneda === 'USD' ? '$' : 'S/'} {g.saldo_pendiente?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-      </td>
-      <td className="p-1 text-center border-r border-slate-200 text-[8px] font-bold">
-        <span className={`px-1 py-0.5 rounded ${g.estado_pago === 'PAGADO' ? 'bg-emerald-100 text-emerald-800' :
+  return gastos.map((g, idx) => {
+    const orig = typeof g.monto_original === 'number' ? g.monto_original : parseFloat(g.monto_original) || 0;
+    const pagado = typeof g.total_pagado === 'number' ? g.total_pagado : parseFloat(g.total_pagado) || 0;
+    const saldo = typeof g.saldo_pendiente === 'number' ? g.saldo_pendiente : parseFloat(g.saldo_pendiente) || 0;
+
+    return (
+      <tr key={g.id_gasto || idx} className={`border-b border-slate-200 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/70'}`}>
+        <td className="p-1 text-center font-mono border-r border-slate-200 text-slate-700 truncate">{g.fecha_vencimiento || '-'}</td>
+        <td className="p-1 text-center font-mono border-r border-slate-200 text-slate-800 font-medium truncate">{g.numero_documento || '-'}</td>
+        <td className="p-1 text-left border-r border-slate-200 pl-2 font-medium text-slate-900 truncate" title={g.proveedor_nombre}>{g.proveedor_nombre}</td>
+        <td className="p-1 text-left border-r border-slate-200 pl-2 text-slate-700 truncate" title={g.concepto_nombre}>{g.concepto_nombre}</td>
+        <td className="p-1 text-center font-bold border-r border-slate-200 text-[8.5px]">
+          <span className={`px-1 py-0.5 rounded font-mono ${g.moneda === 'USD' ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'}`}>
+            {g.moneda}
+          </span>
+        </td>
+        <td className="p-1 text-right font-mono border-r border-slate-200 pr-2 font-semibold">
+          {g.moneda === 'USD' ? '$' : 'S/'} {orig.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+        </td>
+        <td className="p-1 text-right font-mono border-r border-slate-200 pr-2 text-emerald-700 font-semibold">
+          {g.moneda === 'USD' ? '$' : 'S/'} {pagado.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+        </td>
+        <td className={`p-1 text-right font-mono border-r border-slate-200 pr-2 ${saldo > 0 ? 'text-rose-700 font-bold' : 'text-slate-400'}`}>
+          {g.moneda === 'USD' ? '$' : 'S/'} {saldo.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+        </td>
+        <td className="p-1 text-center border-r border-slate-200 text-[8px] font-bold">
+          <span className={`px-1 py-0.5 rounded ${g.estado_pago === 'PAGADO' ? 'bg-emerald-100 text-emerald-800' :
             g.estado_pago === 'PARCIAL' ? 'bg-amber-100 text-amber-800' :
               'bg-rose-100 text-rose-800'
-          }`}>
-          {g.estado_pago}
-        </span>
-      </td>
-      <td className="p-1 text-left text-[8.5px] font-mono text-slate-600 pl-2 truncate" title={g.pagos_detalle?.map(p => `${p.banco}: ${p.numero_operacion}`).join(', ')}>
-        {g.pagos_detalle && g.pagos_detalle.length > 0 ? (
-          g.pagos_detalle.map((p, pIdx) => (
-            <span key={pIdx} className="block truncate">
-              {p.banco}: {p.numero_operacion}
-            </span>
-          ))
-        ) : (
-          <span className="text-slate-400 italic">Pendiente</span>
-        )}
-      </td>
-    </tr>
-  ));
+            }`}>
+            {g.estado_pago}
+          </span>
+        </td>
+        <td className="p-1 text-left text-[8.5px] font-mono text-slate-600 pl-2 truncate" title={g.pagos_detalle?.map(p => `${p.banco}: ${p.numero_operacion}`).join(', ')}>
+          {g.pagos_detalle && g.pagos_detalle.length > 0 ? (
+            g.pagos_detalle.map((p, pIdx) => (
+              <span key={pIdx} className="block truncate">
+                {p.banco}: {p.numero_operacion}
+              </span>
+            ))
+          ) : (
+            <span className="text-slate-400 italic">Pendiente</span>
+          )}
+        </td>
+      </tr>
+    );
+  });
 };
 
 export default ModalLiquidacionContenedor;

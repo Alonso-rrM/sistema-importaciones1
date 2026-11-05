@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { differenceInDays, parseISO, format } from 'date-fns';
 import api from '../services/api';
 import useDebounce from '../hooks/useDebounce';
 import Paginador from '../components/Paginador';
@@ -42,7 +43,8 @@ const Logistica = () => {
   const estadoInicial = {
     numero_factura: '', documento_transporte: '', n_cont_fisico: '', status_llegada: 'EN TRÁNSITO',
     fecha_embarque: '', fecha_arribo: '', id_proveedor: '', id_importador: '', id_agente: '', id_almacen: '',
-    fob_usd: '', flete_usd: '', tipo_valor: 'DEFINITIVO', venta_sucesiva: 'NO', estado_levante: 'SIN LEVANTE'
+    fob_usd: '', flete_usd: '', tipo_valor: 'DEFINITIVO', venta_sucesiva: 'NO',
+    estado_documentario: 'SIN NUMERAR', fecha_levante_maestro: '', fecha_recepcion_almacen: ''
   };
 
   const [formData, setFormData] = useState(estadoInicial);
@@ -91,7 +93,7 @@ const Logistica = () => {
     } catch { return null; }
   }, []);
 
-  const isReadOnly = userRole !== 1 && formData.estado_levante === 'CON LEVANTE' && viewMode === 'MODIFICAR';
+  const isReadOnly = userRole !== 1 && formData.estado_documentario === 'ATE. TOTAL' && viewMode === 'MODIFICAR';
 
   useEffect(() => { cargarCatalogos(); }, []);
   useEffect(() => { 
@@ -193,7 +195,9 @@ const Logistica = () => {
       flete_usd: m.flete_usd != null ? String(m.flete_usd) : '',
       tipo_valor: m.tipo_valor || 'DEFINITIVO',
       venta_sucesiva: m.venta_sucesiva || 'NO',
-      estado_levante: m.estado_levante || 'SIN LEVANTE'
+      estado_documentario: m.estado_documentario || 'SIN NUMERAR',
+      fecha_levante_maestro: m.fecha_levante_maestro ? m.fecha_levante_maestro.split('T')[0] : '',
+      fecha_recepcion_almacen: m.fecha_recepcion_almacen ? m.fecha_recepcion_almacen.split('T')[0] : ''
     });
     setHasUnsavedChanges(false);
     setActiveTab('DAMS');
@@ -221,6 +225,11 @@ const Logistica = () => {
   const handleGuardar = async (e) => {
     e.preventDefault();
     if (isReadOnly) return alert("Este registro cuenta con LEVANTE y está protegido contra edición.");
+
+    if (formData.status_llegada === 'EN ALMACÉN' && !formData.fecha_recepcion_almacen) {
+      return alert("Debe ingresar la Fecha de Recepción en Almacén.");
+    }
+
     setIsGuardando(true);
 
     try {
@@ -231,6 +240,7 @@ const Logistica = () => {
         status_llegada: formData.status_llegada || 'EN TRÁNSITO',
         fecha_embarque: formData.fecha_embarque?.trim() ? formData.fecha_embarque.trim() : null,
         fecha_arribo: formData.fecha_arribo?.trim() ? formData.fecha_arribo.trim() : null,
+        fecha_recepcion_almacen: formData.fecha_recepcion_almacen?.trim() ? formData.fecha_recepcion_almacen.trim() : null,
         id_proveedor: formData.id_proveedor ? parseInt(formData.id_proveedor, 10) : null,
         id_importador: formData.id_importador ? parseInt(formData.id_importador, 10) : null,
         id_agente: formData.id_agente ? parseInt(formData.id_agente, 10) : null,
@@ -505,9 +515,22 @@ const Logistica = () => {
                     <span className={`text-sm font-bold font-mono tracking-tight ${isActive ? 'text-teal-300' : 'text-slate-200'}`}>FAC: {m.numero_factura}</span>
                   </div>
                   <div className="flex items-center gap-1">
-                    <span className={`px-1.5 py-0.5 text-[9px] font-bold uppercase rounded border ${m.estado_levante === 'CON LEVANTE' ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300' : 'bg-rose-500/15 border-rose-500/30 text-rose-300'}`}>{m.estado_levante}</span>
+                    <span className={`px-1.5 py-0.5 text-[9px] font-bold uppercase rounded border ${
+                      m.estado_documentario?.includes('ATE. TOTAL') || m.estado_documentario?.includes('CON LEVANTE') ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300' :
+                      m.estado_documentario?.includes('ATE. PARCIAL') ? 'bg-amber-500/15 border-amber-500/30 text-amber-300' :
+                      m.estado_documentario === 'EN PROCESO' ? 'bg-blue-500/15 border-blue-500/30 text-blue-300' :
+                      'bg-slate-700/40 border-slate-600 text-slate-400'
+                    }`}>
+                      {m.estado_documentario || 'SIN NUMERAR'}
+                    </span>
                   </div>
                 </div>
+                {m.estado_documentario === 'CON LEVANTE (PEND. INGRESO)' && (m.status_llegada === 'EN ALMACÉN TEMPORAL' || m.status_llegada === 'EN PUERTO') && m.fecha_levante_maestro && (() => {
+                  const dias = differenceInDays(new Date(), parseISO(m.fecha_levante_maestro));
+                  if (dias >= 2) return <div className="mt-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-rose-500/20 border border-rose-500/40 text-rose-400 animate-pulse">🚨 DURMIENDO: {dias} días en Temp.</div>;
+                  if (dias >= 0) return <div className="mt-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-300">⚠️ {dias} días con Levante</div>;
+                  return null;
+                })()}
                 <div className="flex items-center justify-between text-[11px] text-slate-400 mb-1 font-mono">
                   <span className="truncate">BL: {m.documento_transporte || 'S/N'}</span>
                   <span>{m.n_cont_fisico || 'S/Cont'}</span>
@@ -560,7 +583,7 @@ const Logistica = () => {
                       <span>🧾</span>
                       <span>Liquidación Caja</span>
                     </button>
-                    {userRole === 1 && formData.estado_levante === 'CON LEVANTE' && (
+                    {userRole === 1 && (formData.estado_documentario === 'ATE. TOTAL' || formData.estado_documentario?.includes('CON LEVANTE')) && (
                       <button onClick={handleDesbloquearLevante} className="px-2.5 py-1.5 rounded bg-amber-600/20 border border-amber-500/40 hover:bg-amber-600/30 text-amber-300 font-bold text-xs transition-colors">🔓 Desbloquear Levante</button>
                     )}
                     <button onClick={() => setModalNuevaDam(prev => ({ ...prev, open: true }))} className="px-2.5 py-1.5 rounded bg-teal-600/20 border border-teal-500/40 hover:bg-teal-600/30 text-teal-300 font-bold text-xs transition-colors">📑 + DAM Rápida</button>
@@ -573,7 +596,7 @@ const Logistica = () => {
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {isReadOnly && (
                 <div className="p-3 bg-amber-950/40 border border-amber-600/50 rounded-lg flex items-center gap-2.5 text-amber-300 text-xs">
-                  <span className="text-base">🔒</span><div><strong>Expediente Blindado con LEVANTE:</strong> Solo usuarios administradores pueden modificar los datos de esta operación.</div>
+                  <span className="text-base">🔒</span><div><strong>Expediente Atendido Totalmente (ATE. TOTAL):</strong> Solo usuarios administradores pueden modificar los datos de esta operación cerrada.</div>
                 </div>
               )}
 
@@ -582,7 +605,12 @@ const Logistica = () => {
                 <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-2.5"><span className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">FOB Declarado</span><div className="text-base font-bold font-mono text-emerald-400">${formData.fob_usd || '0.00'}</div></div>
                 <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-2.5"><span className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Flete Marítimo</span><div className="text-base font-bold font-mono text-sky-400">${formData.flete_usd || '0.00'}</div></div>
                 <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-2.5"><span className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Total CIF Est. (CFR)</span><div className="text-base font-bold font-mono text-slate-100">${cfr}</div></div>
-                <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-2.5"><span className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Estado Levante</span><div className={`text-xs font-bold font-mono uppercase mt-1 ${formData.estado_levante === 'CON LEVANTE' ? 'text-emerald-400' : 'text-rose-400'}`}>{formData.estado_levante}</div></div>
+                <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-2.5">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Estado Documentario</span>
+                  <div className={`text-xs font-bold font-mono uppercase mt-1 ${formData.estado_documentario?.includes('ATE. TOTAL') || formData.estado_documentario?.includes('CON LEVANTE') ? 'text-emerald-400' : 'text-amber-400'}`}>
+                    {formData.estado_documentario || 'SIN NUMERAR'}
+                  </div>
+                </div>
               </div>
 
               {/* TERMÓMETRO FINANCIERO DE LA OPERACIÓN (Punto 1) */}
@@ -870,7 +898,21 @@ const Logistica = () => {
                     <div><label className="block text-[10px] font-bold text-slate-400 mb-1">N° Factura *</label><input type="text" value={formData.numero_factura} onChange={e => handleFormChange('numero_factura', e.target.value)} required disabled={isReadOnly} className="w-full bg-slate-900 border border-slate-600 focus:border-teal-500 text-slate-100 font-mono text-xs rounded px-2.5 py-2 disabled:opacity-60" /></div>
                     <div><label className="block text-[10px] font-bold text-slate-400 mb-1">BL / Transporte</label><input type="text" value={formData.documento_transporte} onChange={e => handleFormChange('documento_transporte', e.target.value)} disabled={isReadOnly} className="w-full bg-slate-900 border border-slate-600 focus:border-teal-500 text-slate-100 font-mono text-xs rounded px-2.5 py-2 disabled:opacity-60" /></div>
                     <div><label className="block text-[10px] font-bold text-slate-400 mb-1">Contenedor Físico</label><input type="text" value={formData.n_cont_fisico} onChange={e => handleFormChange('n_cont_fisico', e.target.value)} disabled={isReadOnly} className="w-full bg-slate-900 border border-slate-600 focus:border-teal-500 text-slate-100 font-mono text-xs rounded px-2.5 py-2 disabled:opacity-60" /></div>
-                    <div><label className="block text-[10px] font-bold text-slate-400 mb-1">Estado Llegada</label><select value={formData.status_llegada} onChange={e => handleFormChange('status_llegada', e.target.value)} disabled={isReadOnly} className="w-full bg-slate-900 border border-slate-600 text-amber-300 font-bold text-xs rounded px-2.5 py-2 disabled:opacity-60"><option>EN TRÁNSITO</option><option>EN PUERTO</option><option>EN ALMACÉN</option></select></div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 mb-1">Estado Llegada (Físico)</label>
+                      <select 
+                        value={formData.status_llegada} 
+                        onChange={e => handleFormChange('status_llegada', e.target.value)} 
+                        disabled={isReadOnly} 
+                        className="w-full bg-slate-900 border border-slate-600 text-amber-300 font-bold text-xs rounded px-2.5 py-2 disabled:opacity-60"
+                      >
+                        <option value="EN TRÁNSITO">EN TRÁNSITO</option>
+                        <option value="EN PUERTO">EN PUERTO</option>
+                        <option value="EN ALMACÉN TEMPORAL">EN ALMACÉN TEMPORAL</option>
+                        <option value="PENDIENTE DESCARGA">PENDIENTE DESCARGA</option>
+                        <option value="EN ALMACÉN">EN ALMACÉN</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
 
@@ -878,9 +920,19 @@ const Logistica = () => {
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                   <div className="bg-slate-800/30 border border-slate-700 rounded-lg p-4 space-y-3">
                     <h3 className="text-xs font-bold uppercase tracking-wider text-teal-400 border-b border-slate-700/80 pb-1.5">2. Fechas Operativas</h3>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div><label className="block text-[10px] font-bold text-slate-400 mb-1">F. Embarque</label><input type="date" value={formData.fecha_embarque} onChange={e => handleFormChange('fecha_embarque', e.target.value)} disabled={isReadOnly} className="w-full bg-slate-900 border border-slate-600 text-slate-100 text-xs rounded px-2.5 py-2 disabled:opacity-60" /></div>
                       <div><label className="block text-[10px] font-bold text-slate-400 mb-1">F. Arribo</label><input type="date" value={formData.fecha_arribo} onChange={e => handleFormChange('fecha_arribo', e.target.value)} disabled={isReadOnly} className="w-full bg-slate-900 border border-slate-600 text-slate-100 text-xs rounded px-2.5 py-2 disabled:opacity-60" /></div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 mb-1">F. Rec. Almacén</label>
+                        <input 
+                          type="date" 
+                          value={formData.fecha_recepcion_almacen} 
+                          onChange={e => handleFormChange('fecha_recepcion_almacen', e.target.value)} 
+                          disabled={isReadOnly || formData.status_llegada !== 'EN ALMACÉN'} 
+                          className="w-full bg-slate-900 border border-slate-600 focus:border-teal-500 text-slate-100 text-xs rounded px-2.5 py-2 disabled:opacity-60" 
+                        />
+                      </div>
                     </div>
                   </div>
                   <div className="bg-slate-800/30 border border-slate-700 rounded-lg p-4 space-y-3">
@@ -973,14 +1025,14 @@ const Logistica = () => {
                                 <th className="px-3 py-2">Nº DAM</th>
                                 <th className="px-3 py-2 w-16">Serie</th>
                                 <th className="px-3 py-2 text-center w-24">Canal</th>
-                                <th className="px-3 py-2 text-center w-28">Aforo Físico</th>
+                                <th className="px-3 py-2 text-center w-36">Estado Legal DAM</th>
                                 <th className="px-3 py-2 text-right w-28">Valor Prov (USD)</th>
                                 <th className="px-3 py-2 text-center w-20">Acción</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-800/80 text-slate-300">
                               {damsVinculadas.map(d => {
-                                const requiereAforo = d.canal_control === 'ROJO' && !d.aforo_realizado;
+                                const requiereAforo = d.estado_dam === 'PENDIENTE DE AFORO';
                                 return (
                                   <tr key={d.id_dam} className="hover:bg-slate-800/50 transition-colors group">
                                     <td className="px-3 py-2 font-mono text-slate-500 group-hover:text-teal-400">#{d.id_dam}</td>
@@ -999,18 +1051,17 @@ const Logistica = () => {
                                       </span>
                                     </td>
                                     <td className="px-3 py-2 text-center">
-                                      <button
-                                        type="button"
-                                        onClick={(e) => handleToggleAforo(e, d)}
-                                        className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all border ${d.aforo_realizado ? 'bg-emerald-900/40 text-emerald-300 border-emerald-700 hover:bg-emerald-900/60' : 'bg-rose-900/40 text-rose-300 border-rose-700 hover:bg-rose-900/60'}`}
-                                        title="Click para alternar certificación de aforo"
-                                      >
-                                        {d.aforo_realizado ? '✅ Realizado' : '❌ Pendiente'}
-                                      </button>
+                                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                                        d.estado_dam?.includes('LEVANTE') || d.estado_dam?.includes('LIQUIDADA') ? 'bg-emerald-900/40 text-emerald-300 border-emerald-700' :
+                                        d.estado_dam?.includes('OBSERVADA') ? 'bg-rose-900/40 text-rose-300 border-rose-700' :
+                                        'bg-amber-900/40 text-amber-300 border-amber-700'
+                                      }`}>
+                                        {d.estado_dam || 'NUMERADA / EN EVALUACIÓN'}
+                                      </span>
                                     </td>
                                     <td className="px-3 py-2 text-right font-mono font-bold text-slate-200">${d.monto_valor_provisional_usd ? parseFloat(d.monto_valor_provisional_usd).toFixed(2) : '0.00'}</td>
                                     <td className="px-3 py-2 text-center">
-                                      <button onClick={() => navigate('/app/dams', { state: { fromMaestro: formData } })} className="text-[10px] text-teal-400 hover:underline">Ver detalle ➔</button>
+                                      <button onClick={() => navigate('/app/dams', { state: { fromDam: d } })} className="text-[10px] text-teal-400 hover:underline font-bold">Ver detalle ➔</button>
                                     </td>
                                   </tr>
                                 );
