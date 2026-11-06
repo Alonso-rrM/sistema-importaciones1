@@ -1,9 +1,11 @@
 import { useMemo } from 'react';
 import { Outlet, NavLink, useNavigate, Navigate } from 'react-router-dom';
+import { useTheme } from '../context/ThemeContext';
 
 function Layout() {
   const navigate = useNavigate();
   const token = localStorage.getItem('token');
+  const { isDark, toggleTheme } = useTheme();
 
   if (!token) {
     return <Navigate to="/login" replace />;
@@ -61,7 +63,15 @@ function Layout() {
           </nav>
         </div>
         <div className="flex flex-col items-center gap-3">
-          <button onClick={cerrarSesion} className="relative h-8 w-8 rounded-full bg-slate-700 border border-slate-600 flex items-center justify-center font-semibold text-slate-300 hover:ring-2 hover:ring-rose-500 transition-all" title="Cerrar Sesión">
+          <button
+            type="button"
+            onClick={toggleTheme}
+            className="theme-toggle-btn relative h-8 w-8 rounded-full bg-slate-700 border border-slate-600 flex items-center justify-center text-sm hover:scale-105 transition-all cursor-pointer shadow-sm"
+            title={isDark ? "Cambiar a Modo Claro" : "Cambiar a Modo Oscuro"}
+          >
+            {isDark ? '☀️' : '🌙'}
+          </button>
+          <button onClick={cerrarSesion} className="relative h-8 w-8 rounded-full bg-slate-700 border border-slate-600 flex items-center justify-center font-semibold text-slate-300 hover:ring-2 hover:ring-rose-500 transition-all cursor-pointer" title="Cerrar Sesión">
             <span className="text-[10px] font-mono">X</span>
           </button>
         </div>
@@ -75,6 +85,15 @@ function Layout() {
             <span className="font-semibold text-slate-100">Panel Central</span>
           </div>
           <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="theme-toggle-btn flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer shadow-sm bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
+              title={isDark ? "Cambiar a Modo Claro" : "Cambiar a Modo Oscuro"}
+            >
+              <span>{isDark ? '☀️' : '🌙'}</span>
+              <span className="hidden sm:inline font-medium">{isDark ? 'Modo Claro' : 'Modo Oscuro'}</span>
+            </button>
             <div className="flex items-center gap-1.5 text-[11px] text-slate-400"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span><span>BD Conectada</span></div>
           </div>
         </header>

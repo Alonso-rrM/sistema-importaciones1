@@ -40,6 +40,39 @@
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
+html.light, [data-theme="light"] {
+  /* Unified Crisp Light ERP Palette */
+  --primary: #0d9488;         /* teal-600 */
+  --primary-dark: #0f766e;    /* teal-700 */
+  --success: #059669;         /* emerald-600 */
+  --success-dark: #047857;    /* emerald-700 */
+  --warning: #d97706;         /* amber-600 */
+  --danger: #e11d48;          /* rose-600 */
+  --danger-dark: #be123c;     /* rose-700 */
+  --purple: #9333ea;          /* purple-600 */
+  --purple-dark: #7e22ce;     /* purple-700 */
+  
+  /* Backgrounds */
+  --bg-body: #f8fafc;          /* slate-50 */
+  --bg-card: #ffffff;          /* white */
+  --bg-sidebar: #ffffff;       /* white */
+  --bg-sidebar-hover: #f1f5f9; /* slate-100 */
+  --bg-table-header: #f8fafc;  /* slate-50 */
+  --bg-hover: #f1f5f9;         /* slate-100 */
+  --bg-selected: rgba(13, 148, 136, 0.1);
+  
+  /* Text */
+  --text-main: #0f172a;        /* slate-900 */
+  --text-muted: #64748b;       /* slate-500 */
+  --text-light: #ffffff;
+  
+  /* Borders & Shadows */
+  --border-color: #cbd5e1;     /* slate-300 */
+  --border-subtle: #e2e8f0;    /* slate-200 */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
 /* Reset & Base */
 * {
   box-sizing: border-box;
@@ -681,4 +714,555 @@ h1, h2, h3, h4 {
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* ========================================================
+   LIGHT THEME ADAPTATION (MODO CLARO PROFESIONAL)
+   Diseño de alta gama: Tarjetas blancas limpias, bordes
+   sutiles y tipografía de alto contraste (sin cuadros grises)
+   ======================================================== */
+
+/* === CANVAS Y FONDOS GENERALES === */
+html.light body,
+html.light #root,
+.light .page-container {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+/* Contenedor principal de la aplicación y layouts */
+.light div.flex-1.bg-slate-950,
+.light div.flex.bg-slate-950,
+.light div[class*="bg-slate-950"]:not(.rounded-full):not(span):not(button) {
+  background-color: #f8fafc !important;
+}
+
+/* === PANELES, WORKSTATIONS Y SIDEBARS === */
+.light aside,
+.light section,
+.light .bg-slate-900,
+.light .bg-slate-900\/60,
+.light .bg-slate-900\/80,
+.light .bg-slate-900\/90 {
+  background-color: #ffffff !important;
+}
+
+/* === CUADROS DE DATOS, FICHAS, BLOQUES DE FORMULARIO Y KPIS === */
+/* Aquí se eliminan por completo los "cuadros grises": ahora son tarjetas blancas limpias */
+.light .bg-slate-800,
+.light .bg-slate-850,
+.light .bg-slate-800\/20,
+.light .bg-slate-800\/30,
+.light .bg-slate-800\/40,
+.light .bg-slate-800\/50,
+.light .bg-slate-800\/60,
+.light .bg-slate-800\/70,
+.light .bg-slate-800\/80,
+.light .bg-slate-950\/40,
+.light .bg-slate-950\/50,
+.light .bg-slate-950\/60,
+.light .bg-slate-950\/70,
+.light .bg-slate-950\/80,
+.light .bg-slate-950\/85,
+.light .bg-slate-950\/90 {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02) !important;
+}
+
+/* === CABECERAS INTERNAS Y TOOLBARS === */
+.light header,
+.light .modal-barra-acciones {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+}
+
+.light .card,
+.light .toolbar {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02) !important;
+}
+
+/* === BORDES UNIFICADOS Y LIMPIOS === */
+.light .border-slate-900,
+.light .border-slate-800,
+.light .border-slate-800\/60,
+.light .border-slate-800\/80,
+.light .border-slate-700,
+.light .border-slate-700\/50,
+.light .border-slate-700\/60,
+.light .border-slate-700\/80 {
+  border-color: #e2e8f0 !important;
+}
+
+.light .border-slate-600,
+.light .border-slate-600\/50 {
+  border-color: #cbd5e1 !important;
+}
+
+.light .border-slate-500,
+.light .border-slate-400,
+.light .border-slate-300 {
+  border-color: #e2e8f0 !important;
+}
+
+/* === FORMULARIOS, INPUTS Y SELECTS === */
+.light input:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="range"]),
+.light select,
+.light textarea {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02) !important;
+}
+
+.light input:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="range"]):focus,
+.light select:focus,
+.light textarea:focus {
+  border-color: #0d9488 !important;
+  box-shadow: 0 0 0 2px rgba(13, 148, 136, 0.15) !important;
+  background-color: #ffffff !important;
+}
+
+.light input:disabled,
+.light select:disabled,
+.light textarea:disabled {
+  background-color: #f8fafc !important;
+  color: #94a3b8 !important;
+  border-color: #e2e8f0 !important;
+  cursor: not-allowed;
+}
+
+.light input::placeholder,
+.light textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+.light select option {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+/* Form-input clase específica */
+.light .form-input {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+.light .form-input:disabled {
+  background-color: #f8fafc !important;
+  color: #94a3b8 !important;
+  border-color: #e2e8f0 !important;
+}
+
+/* === REACT-SELECT EN MODO CLARO === */
+.light [class*="-control"] {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+  box-shadow: none !important;
+}
+
+.light [class*="-control"]:hover {
+  border-color: #94a3b8 !important;
+}
+
+.light [class*="-menu"] {
+  background-color: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #0f172a !important;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1) !important;
+}
+
+.light [class*="-option"] {
+  background-color: transparent !important;
+  color: #1e293b !important;
+}
+
+.light [class*="-option"]:hover {
+  background-color: #f1f5f9 !important;
+  color: #0d9488 !important;
+}
+
+.light [class*="-singleValue"] {
+  color: #0f172a !important;
+}
+
+.light [class*="-Input"] {
+  color: #0f172a !important;
+}
+
+.light [class*="-placeholder"] {
+  color: #94a3b8 !important;
+}
+
+/* === BANDEJA LATERAL (LISTAS) Y ELEMENTOS ACTIVOS === */
+.light aside {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+}
+
+.light aside nav a {
+  color: #64748b !important;
+}
+
+.light aside nav a:hover {
+  color: #0f172a !important;
+  background-color: #f1f5f9 !important;
+}
+
+.light aside nav a.active,
+.light aside nav a[class*="bg-teal"] {
+  background-color: rgba(13, 148, 136, 0.1) !important;
+  color: #0d9488 !important;
+  border-color: rgba(13, 148, 136, 0.3) !important;
+}
+
+/* Riel lateral de iconos: separadores y botón cerrar sesión */
+.light aside .bg-slate-700,
+.light aside [class*="bg-slate-700"] {
+  background-color: #e2e8f0 !important;
+}
+
+.light aside button[title="Cerrar Sesión"] {
+  background-color: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+  color: #64748b !important;
+}
+
+/* Elementos de lista en bandejas (artículos) */
+.light article:hover:not([class*="bg-teal"]) {
+  background-color: #f8fafc !important;
+}
+
+.light article[class*="bg-teal-900"] {
+  background-color: rgba(13, 148, 136, 0.08) !important;
+  border-left-color: #0d9488 !important;
+}
+
+/* Insignias de ID en listas (#{id}) */
+.light .bg-slate-700 {
+  background-color: #f1f5f9 !important;
+  color: #334155 !important;
+  border-color: #e2e8f0 !important;
+}
+
+/* Botones secundarios de navegación / flechas */
+.light button.bg-slate-800,
+.light button.bg-slate-700 {
+  background-color: #ffffff !important;
+  color: #334155 !important;
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+}
+
+.light button.bg-slate-800:hover,
+.light button.bg-slate-700:hover {
+  background-color: #f8fafc !important;
+  color: #0d9488 !important;
+  border-color: #0d9488 !important;
+}
+
+.light .theme-toggle-btn {
+  background-color: #f8fafc !important;
+  color: #1e293b !important;
+  border-color: #cbd5e1 !important;
+}
+
+.light .theme-toggle-btn:hover {
+  background-color: #f1f5f9 !important;
+}
+
+/* === TABLAS Y DETALLES === */
+.light .table-container,
+.light table {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+}
+
+.light thead,
+.light thead tr,
+.light thead th,
+.light thead.bg-slate-950,
+.light thead .bg-slate-950,
+.light .data-table th {
+  background-color: #f8fafc !important;
+  color: #475569 !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+}
+
+.light tbody tr,
+.light .data-table td {
+  background-color: #ffffff !important;
+  color: #1e293b !important;
+  border-bottom: 1px solid #f1f5f9 !important;
+}
+
+.light tbody tr:hover,
+.light .data-table tbody tr:hover {
+  background-color: #f8fafc !important;
+}
+
+.light .divide-slate-800,
+.light .divide-slate-800\/80 {
+  border-color: #f1f5f9 !important;
+}
+
+.light .data-table tr.selected {
+  background-color: rgba(13, 148, 136, 0.08) !important;
+  border-left-color: #0d9488 !important;
+}
+
+.light .data-table tr.selected td {
+  color: #0f172a !important;
+}
+
+.light .data-table tr.inactive {
+  color: #94a3b8 !important;
+  background-color: rgba(241, 245, 249, 0.6) !important;
+}
+
+/* === BARRAS DE PROGRESO (TRACKS DE FONDO) === */
+/* Los rieles de fondo de barras de progreso deben ser un gris limpio, no negro ni blanco */
+.light .rounded-full.bg-slate-950,
+.light [class*="rounded-full"][class*="bg-slate-950"] {
+  background-color: #e2e8f0 !important;
+  border-color: #cbd5e1 !important;
+}
+
+/* === GRADIENTES (TERMÓMETRO Y AVANCE) === */
+.light .from-slate-900,
+.light .to-slate-900 {
+  --tw-gradient-from: #ffffff !important;
+  --tw-gradient-to: #ffffff !important;
+}
+
+.light .via-slate-850 {
+  --tw-gradient-via: #ffffff !important;
+}
+
+/* === TIPOGRAFÍA Y JERARQUÍA VISUAL === */
+.light .text-slate-100 { color: #0f172a !important; }
+.light .text-slate-200 { color: #1e293b !important; }
+.light .text-slate-300 { color: #334155 !important; }
+.light .text-slate-400 { color: #64748b !important; }
+.light .text-slate-500 { color: #64748b !important; }
+.light .text-slate-600 { color: #94a3b8 !important; }
+.light .text-slate-700 { color: #334155 !important; }
+.light .text-slate-800 { color: #1e293b !important; }
+.light .text-slate-900 { color: #0f172a !important; }
+
+.light .page-title,
+.light .section-title,
+.light h1, .light h2, .light h3, .light h4 {
+  color: #0f172a !important;
+}
+
+/* text-white en etiquetas, títulos y contenedores de datos pasa a texto oscuro legible */
+.light h1.text-white,
+.light h2.text-white,
+.light h3.text-white,
+.light h4.text-white,
+.light p.text-white,
+.light div.text-white,
+.light span.text-white,
+.light strong.text-white,
+.light td.text-white,
+.light th.text-white,
+.light tr.text-white,
+.light label.text-white {
+  color: #0f172a !important;
+}
+
+.light [class*="bg-slate-"] h1,
+.light [class*="bg-slate-"] h2,
+.light [class*="bg-slate-"] h3 {
+  color: #0f172a !important;
+}
+
+/* === BADGES DE ESTADO CON ALTO CONTRASTE Y LEGIBILIDAD === */
+.light .text-emerald-400,
+.light .text-emerald-300 {
+  color: #059669 !important;
+}
+
+.light .text-teal-400,
+.light .text-teal-300 {
+  color: #0d9488 !important;
+}
+
+.light .text-amber-400,
+.light .text-amber-300 {
+  color: #b45309 !important;
+}
+
+.light .text-rose-400,
+.light .text-rose-300 {
+  color: #e11d48 !important;
+}
+
+.light .text-sky-400,
+.light .text-sky-300 {
+  color: #0284c7 !important;
+}
+
+.light .text-indigo-200 {
+  color: #4f46e5 !important;
+}
+
+/* Fondos semitransparentes de estado */
+.light .bg-emerald-950\/20,
+.light .bg-emerald-950\/40,
+.light .bg-emerald-950\/70,
+.light .bg-emerald-900\/60,
+.light .bg-emerald-500\/10 {
+  background-color: rgba(16, 185, 129, 0.1) !important;
+}
+
+.light .bg-amber-950\/20,
+.light .bg-amber-950\/40,
+.light .bg-amber-950\/70,
+.light .bg-amber-900\/60,
+.light .bg-amber-500\/10 {
+  background-color: rgba(245, 158, 11, 0.1) !important;
+}
+
+.light .bg-rose-950\/20,
+.light .bg-rose-950\/40,
+.light .bg-rose-950\/70,
+.light .bg-rose-500\/10,
+.light .bg-rose-900\/60 {
+  background-color: rgba(244, 63, 94, 0.1) !important;
+}
+
+.light .bg-teal-950\/20,
+.light .bg-teal-950\/80,
+.light .bg-teal-500\/10,
+.light .bg-teal-500\/15,
+.light .bg-teal-500\/20,
+.light .bg-teal-600\/20,
+.light .bg-teal-600\/30 {
+  background-color: rgba(20, 184, 166, 0.1) !important;
+}
+
+.light .bg-sky-950\/20,
+.light .bg-sky-500\/10 {
+  background-color: rgba(14, 165, 233, 0.1) !important;
+}
+
+.light .bg-indigo-600\/30,
+.light .bg-indigo-600\/50 {
+  background-color: rgba(79, 70, 229, 0.1) !important;
+}
+
+.light .bg-amber-600\/20,
+.light .bg-amber-600\/30 {
+  background-color: rgba(217, 119, 6, 0.1) !important;
+}
+
+/* Bordes de estado */
+.light .border-emerald-800\/40,
+.light .border-emerald-700,
+.light .border-emerald-700\/60 {
+  border-color: rgba(16, 185, 129, 0.3) !important;
+}
+
+.light .border-amber-800\/40,
+.light .border-amber-700,
+.light .border-amber-700\/60,
+.light .border-amber-600\/50,
+.light .border-amber-500\/40 {
+  border-color: rgba(245, 158, 11, 0.3) !important;
+}
+
+.light .border-rose-800\/40,
+.light .border-rose-700,
+.light .border-rose-700\/60 {
+  border-color: rgba(244, 63, 94, 0.3) !important;
+}
+
+.light .border-teal-500\/30,
+.light .border-teal-500\/20,
+.light .border-teal-500\/40 {
+  border-color: rgba(20, 184, 166, 0.3) !important;
+}
+
+.light .border-indigo-500\/50 {
+  border-color: rgba(79, 70, 229, 0.3) !important;
+}
+
+/* === PAGINADOR === */
+.light .paginador-container {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  color: #64748b !important;
+}
+
+.light .paginador-btn {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #1e293b !important;
+}
+
+.light .paginador-btn:hover:not(:disabled) {
+  background-color: #f1f5f9 !important;
+  border-color: var(--primary) !important;
+  color: var(--primary) !important;
+}
+
+.light .paginador-btn:disabled {
+  background-color: #f8fafc !important;
+  color: #cbd5e1 !important;
+  border-color: #e2e8f0 !important;
+}
+
+.light .paginador-select {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+.light .paginador-text {
+  color: #1e293b !important;
+}
+
+/* === MODALES === */
+.light .fixed.inset-0[class*="bg-slate-950"] {
+  background-color: rgba(15, 23, 42, 0.45) !important;
+}
+
+.light .modal-backdrop-filtro {
+  background-color: rgba(15, 23, 42, 0.45) !important;
+}
+
+.light .modal-backdrop-filtro > div {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+}
+
+/* === SCROLLBAR EN MODO CLARO === */
+.light ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.light ::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+.light ::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+.light ::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Pulso de base de datos conectada */
+.light .bg-emerald-400 {
+  background-color: #10b981 !important;
+}
+
+.light .bg-amber-500 {
+  background-color: #f59e0b !important;
 }

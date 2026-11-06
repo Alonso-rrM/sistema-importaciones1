@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { ThemeProvider } from './context/ThemeContext'
 import Login from './pages/Login'
 import Setup from './pages/Setup'
 import AdminPanel from './pages/AdminPanel'
@@ -21,44 +22,46 @@ import Reportes from './pages/Reportes'
 
 function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/setup" element={<Setup />} />
+    <ThemeProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/setup" element={<Setup />} />
 
-        {/* Zona Corporativa */}
-        <Route path="/app" element={<Layout />}>
-          <Route index element={<Navigate to="logistica" replace />} />
-          {/* Inteligencia y Reportes */}
-          <Route path="reportes" element={<Reportes />} />
+          {/* Zona Corporativa */}
+          <Route path="/app" element={<Layout />}>
+            <Route index element={<Navigate to="logistica" replace />} />
+            {/* Inteligencia y Reportes */}
+            <Route path="reportes" element={<Reportes />} />
 
-          {/* Operaciones */}
-          <Route path="logistica" element={<Logistica />} />
-          <Route path="dams" element={<Dams />} />
+            {/* Operaciones */}
+            <Route path="logistica" element={<Logistica />} />
+            <Route path="dams" element={<Dams />} />
 
-          {/* Catálogos */}
-          <Route path="importadores" element={<Importadores />} />
-          <Route path="proveedores" element={<Proveedores />} />
-          <Route path="agentes" element={<Agentes />} />
-          <Route path="almacenes" element={<Almacenes />} />
+            {/* Catálogos */}
+            <Route path="importadores" element={<Importadores />} />
+            <Route path="proveedores" element={<Proveedores />} />
+            <Route path="agentes" element={<Agentes />} />
+            <Route path="almacenes" element={<Almacenes />} />
 
-          <Route path="conceptos" element={<Conceptos />} />
-          <Route path="comprobantes" element={<Comprobantes />} />
-          <Route path="bancos" element={<Bancos />} />
+            <Route path="conceptos" element={<Conceptos />} />
+            <Route path="comprobantes" element={<Comprobantes />} />
+            <Route path="bancos" element={<Bancos />} />
 
-          {/* Finanzas */}
-          <Route path="vouchers" element={<Vouchers />} />
-          <Route path="gastos" element={<Gastos />} />
-          <Route path="pagos" element={<Pagos />} />
-          <Route path="auditoria" element={<Auditoria />} />
+            {/* Finanzas */}
+            <Route path="vouchers" element={<Vouchers />} />
+            <Route path="gastos" element={<Gastos />} />
+            <Route path="pagos" element={<Pagos />} />
+            <Route path="auditoria" element={<Auditoria />} />
 
-          {/* Administración / Carga Masiva (SuperAdmin) */}
-          <Route path="admin" element={<AdminPanel />} />
-        </Route>
+            {/* Administración / Carga Masiva (SuperAdmin) */}
+            <Route path="admin" element={<AdminPanel />} />
+          </Route>
 
-        <Route path="*" element={<Navigate to="/login" replace />} />
-      </Routes>
-    </BrowserRouter>
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </ThemeProvider>
   )
 }
 
