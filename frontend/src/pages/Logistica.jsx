@@ -422,8 +422,8 @@ const Logistica = () => {
               type="button"
               onClick={() => setMostrarFiltros(prev => !prev)}
               className={`px-2 py-1.5 rounded border text-xs font-mono transition flex items-center gap-1 shrink-0 cursor-pointer ${hayFiltrosActivos
-                  ? 'bg-teal-950/80 border-teal-500 text-teal-300 font-bold shadow-sm'
-                  : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'
+                ? 'bg-teal-950/80 border-teal-500 text-teal-300 font-bold shadow-sm'
+                : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'
                 }`}
               title="Alternar filtros avanzados"
             >
@@ -519,9 +519,9 @@ const Logistica = () => {
                   </div>
                   <div className="flex items-center gap-1">
                     <span className={`px-1.5 py-0.5 text-[9px] font-bold uppercase rounded border ${m.estado_documentario?.includes('ATE. TOTAL') || m.estado_documentario?.includes('CON LEVANTE') ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300' :
-                        m.estado_documentario?.includes('ATE. PARCIAL') ? 'bg-amber-500/15 border-amber-500/30 text-amber-300' :
-                          m.estado_documentario === 'EN PROCESO' ? 'bg-blue-500/15 border-blue-500/30 text-blue-300' :
-                            'bg-slate-700/40 border-slate-600 text-slate-400'
+                      m.estado_documentario?.includes('ATE. PARCIAL') ? 'bg-amber-500/15 border-amber-500/30 text-amber-300' :
+                        m.estado_documentario === 'EN PROCESO' ? 'bg-blue-500/15 border-blue-500/30 text-blue-300' :
+                          'bg-slate-700/40 border-slate-600 text-slate-400'
                       }`}>
                       {m.estado_documentario || 'SIN NUMERAR'}
                     </span>
@@ -740,8 +740,8 @@ const Logistica = () => {
                               type="button"
                               onClick={() => setKpiViewIndex(idx)}
                               className={`px-2 py-0.5 rounded transition cursor-pointer ${kpiViewIndex === idx
-                                  ? 'bg-teal-600 text-white font-bold shadow'
-                                  : 'text-slate-400 hover:text-slate-200'
+                                ? 'bg-teal-600 text-white font-bold shadow'
+                                : 'text-slate-400 hover:text-slate-200'
                                 }`}
                             >
                               {key === 'FIJO_DESPACHO' && 'Fijos'}
@@ -836,10 +836,10 @@ const Logistica = () => {
                                 <div
                                   key={idx}
                                   className={`p-2 rounded border text-xs flex items-center justify-between gap-2 font-mono ${isPagado
-                                      ? 'bg-emerald-950/20 border-emerald-800/40 text-slate-200'
-                                      : isPendiente
-                                        ? 'bg-amber-950/20 border-amber-800/40 text-slate-200'
-                                        : 'bg-rose-950/20 border-rose-800/40 text-slate-300'
+                                    ? 'bg-emerald-950/20 border-emerald-800/40 text-slate-200'
+                                    : isPendiente
+                                      ? 'bg-amber-950/20 border-amber-800/40 text-slate-200'
+                                      : 'bg-rose-950/20 border-rose-800/40 text-slate-300'
                                     }`}
                                 >
                                   <div className="flex items-center gap-1.5 truncate">
@@ -1052,8 +1052,8 @@ const Logistica = () => {
                                     </td>
                                     <td className="px-3 py-2 text-center">
                                       <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${d.estado_dam?.includes('LEVANTE') || d.estado_dam?.includes('LIQUIDADA') ? 'bg-emerald-900/40 text-emerald-300 border-emerald-700' :
-                                          d.estado_dam?.includes('OBSERVADA') ? 'bg-rose-900/40 text-rose-300 border-rose-700' :
-                                            'bg-amber-900/40 text-amber-300 border-amber-700'
+                                        d.estado_dam?.includes('OBSERVADA') ? 'bg-rose-900/40 text-rose-300 border-rose-700' :
+                                          'bg-amber-900/40 text-amber-300 border-amber-700'
                                         }`}>
                                         {d.estado_dam || 'NUMERADA / EN EVALUACIÓN'}
                                       </span>
