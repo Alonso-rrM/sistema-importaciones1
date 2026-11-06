@@ -8,7 +8,7 @@ const Proveedores = () => {
   const [proveedores, setProveedores] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [viewMode, setViewMode] = useState('DETALLE'); // 'DETALLE', 'NUEVO', 'MODIFICAR'
-  
+
   const [busqueda, setBusqueda] = useState('');
   const debouncedSearch = useDebounce(busqueda, 300);
   const [filtroEstado, setFiltroEstado] = useState('ACTIVO'); // 'ACTIVO', 'INACTIVO', 'TODOS'
@@ -216,7 +216,7 @@ const Proveedores = () => {
 
   const proveedoresFiltrados = useMemo(() => {
     return proveedores.filter((prov) => {
-      const coincideBusqueda = 
+      const coincideBusqueda =
         (prov.nombre || '').toLowerCase().includes(debouncedSearch.toLowerCase()) ||
         (prov.ruc || '').includes(debouncedSearch);
 
@@ -236,7 +236,7 @@ const Proveedores = () => {
 
   return (
     <div className="flex-1 flex flex-col h-full bg-slate-950 text-slate-100 overflow-hidden font-sans">
-      
+
       {/* HEADER DE MÓDULO */}
       <header className="px-6 py-4 bg-slate-900/90 border-b border-slate-800 flex flex-wrap items-center justify-between gap-4 shrink-0">
         <div className="flex items-center gap-3">
@@ -270,12 +270,12 @@ const Proveedores = () => {
 
       {/* MASTER-DETAIL GRID (38% BANDEJA / 62% ESTACIÓN DE DETALLE) */}
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-5 p-5 min-h-0 overflow-hidden">
-        
+
         {/* ======================================================== */}
         {/* BANDEJA IZQUIERDA (38% / COL-SPAN-5) */}
         {/* ======================================================== */}
         <section className="lg:col-span-5 flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl min-h-0">
-          
+
           {/* BUSCADOR Y PESTAÑAS */}
           <div className="p-3.5 border-b border-slate-800 bg-slate-900/60 space-y-2.5 shrink-0">
             <div className="relative">
@@ -297,22 +297,20 @@ const Proveedores = () => {
                 <button
                   type="button"
                   onClick={() => setFiltroEstado('ACTIVO')}
-                  className={`px-2.5 py-1 rounded-md font-semibold transition-colors ${
-                    filtroEstado === 'ACTIVO'
-                      ? 'bg-teal-600 text-white shadow'
-                      : 'bg-slate-800 text-slate-400 hover:text-slate-200'
-                  }`}
+                  className={`px-2.5 py-1 rounded-md font-semibold transition-colors ${filtroEstado === 'ACTIVO'
+                    ? 'bg-teal-600 text-white shadow'
+                    : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                    }`}
                 >
                   Activos ({proveedores.filter(p => p.estado_registro === 'ACTIVO').length})
                 </button>
                 <button
                   type="button"
                   onClick={() => setFiltroEstado('INACTIVO')}
-                  className={`px-2.5 py-1 rounded-md font-semibold transition-colors ${
-                    filtroEstado === 'INACTIVO'
-                      ? 'bg-teal-600 text-white shadow'
-                      : 'bg-slate-800 text-slate-400 hover:text-slate-200'
-                  }`}
+                  className={`px-2.5 py-1 rounded-md font-semibold transition-colors ${filtroEstado === 'INACTIVO'
+                    ? 'bg-teal-600 text-white shadow'
+                    : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                    }`}
                 >
                   Inactivos
                 </button>
@@ -345,20 +343,18 @@ const Proveedores = () => {
                   <div
                     key={prov.id_proveedor}
                     onClick={() => handleSelect(prov)}
-                    className={`p-3 rounded-lg cursor-pointer transition-all border ${
-                      isSelected
-                        ? 'row-selected'
-                        : 'bg-white dark:bg-slate-900/60 hover:bg-slate-50 dark:hover:bg-slate-800/70 border-slate-200 dark:border-slate-800/80'
-                    }`}
+                    className={`p-3 rounded-lg cursor-pointer transition-all border ${isSelected
+                      ? 'row-selected'
+                      : 'bg-white dark:bg-slate-900/60 hover:bg-slate-50 dark:hover:bg-slate-800/70 border-slate-200 dark:border-slate-800/80'
+                      }`}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-2">
                         <span className="font-mono font-bold text-xs text-teal-400">#{prov.id_proveedor}</span>
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                          isInactivo
-                            ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
-                            : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                        }`}>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${isInactivo
+                          ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                          : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                          }`}>
                           {prov.estado_registro || 'ACTIVO'}
                         </span>
                         <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
@@ -384,16 +380,15 @@ const Proveedores = () => {
         {/* PANEL DERECHO WORKSTATION (62% / COL-SPAN-7) */}
         {/* ======================================================== */}
         <section className="lg:col-span-7 flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl min-h-0">
-          
+
           {/* ALERTA DE MENSAJES */}
           {mensaje.texto && (
-            <div className={`p-3 border-b text-xs flex items-center justify-between animate-fadeIn ${
-              mensaje.tipo === 'exito'
-                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
-                : mensaje.tipo === 'error'
+            <div className={`p-3 border-b text-xs flex items-center justify-between animate-fadeIn ${mensaje.tipo === 'exito'
+              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+              : mensaje.tipo === 'error'
                 ? 'bg-rose-500/10 border-rose-500/30 text-rose-300'
                 : 'bg-teal-500/10 border-teal-500/30 text-teal-300'
-            }`}>
+              }`}>
               <span>{mensaje.texto}</span>
               <button onClick={() => setMensaje({ texto: '', tipo: '' })} className="hover:text-white">✕</button>
             </div>
@@ -417,7 +412,7 @@ const Proveedores = () => {
             </div>
           ) : (
             <div className="flex-1 flex flex-col min-h-0 overflow-y-auto p-5 space-y-5">
-              
+
               {/* CABECERA */}
               <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-4 space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -426,11 +421,10 @@ const Proveedores = () => {
                       {viewMode === 'NUEVO' ? '✨ Nuevo Proveedor' : selectedProveedor?.nombre}
                     </h2>
                     {viewMode !== 'NUEVO' && (
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                        esInactivoSeleccionado
-                          ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
-                          : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                      }`}>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${esInactivoSeleccionado
+                        ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                        : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                        }`}>
                         {selectedProveedor?.estado_registro || 'ACTIVO'}
                       </span>
                     )}
