@@ -1,8 +1,14 @@
 import { useMemo } from 'react';
-import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { Outlet, NavLink, useNavigate, Navigate } from 'react-router-dom';
 
 function Layout() {
   const navigate = useNavigate();
+  const token = localStorage.getItem('token');
+
+  if (!token) {
+    return <Navigate to="/login" replace />;
+  }
+
   const cerrarSesion = () => { localStorage.removeItem('token'); navigate('/login'); };
 
   const userRole = useMemo(() => {

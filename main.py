@@ -97,7 +97,7 @@ def acortar_razon_social(texto: str) -> str:
     return nombre
 
 @app.get("/sunat/ruc/{ruc}", tags=["Integraciones"])
-def consultar_ruc_sunat(ruc: str):
+def consultar_ruc_sunat(ruc: str, current_user: models.Usuario = Depends(get_current_user)):
     if len(ruc) != 11 or not ruc.isdigit():
         raise HTTPException(status_code=400, detail="El RUC debe tener 11 dígitos numéricos.")
         

@@ -50,15 +50,27 @@ def obtener_analytics_cockpit(
 
     en_transito = 0
     en_puerto = 0
+    en_almacen_temporal = 0
+    pendiente_descarga = 0
     en_almacen = 0
     con_levante = 0
 
     for m in maestros:
-        if m.estado_levante == "CON LEVANTE":
+        # Control Documentario: Evaluar si ya cuenta con levante legal
+        if m.estado_documentario in ["CON LEVANTE (PEND. INGRESO)", "ATE. TOTAL", "EN ALMACÉN (PEND. OMC)"] or m.estado_levante == "CON LEVANTE":
             con_levante += 1
-        elif m.status_llegada == "EN PUERTO":
+            
+        # Control Físico: Cronómetro logístico
+        status = m.status_llegada or "EN TRÁNSITO"
+        if status == "EN TRÁNSITO":
+            en_transito += 1
+        elif status == "EN PUERTO":
             en_puerto += 1
-        elif m.status_llegada == "EN ALMACÉN":
+        elif status == "EN ALMACÉN TEMPORAL":
+            en_almacen_temporal += 1
+        elif status == "PENDIENTE DESCARGA":
+            pendiente_descarga += 1
+        elif status == "EN ALMACÉN":
             en_almacen += 1
         else:
             en_transito += 1
@@ -66,7 +78,10 @@ def obtener_analytics_cockpit(
     pipeline_logistico = {
         "en_transito": en_transito,
         "en_puerto": en_puerto,
-        "en_almacen": en_almacen,
+        "en_almacen_temporal": en_almacen_temporal,
+        "pendiente_descarga": pendiente_descarga,
+        "en_almacen": en_almacen + en_almacen_temporal + pendiente_descarga,
+        "en_almacen_final": en_almacen,
         "con_levante": con_levante,
         "total_contenedores": len(maestros)
     }

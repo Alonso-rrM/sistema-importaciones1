@@ -29,17 +29,17 @@ async def crear_gasto(
     request: Request,
     gasto: schemas.RegistroGastoCreate, 
     db: Session = Depends(get_db), 
-    current_user: models.Usuario = Depends(RoleChecker([1, 3])) # 1: Admin, 3: Logística
+    current_user: models.Usuario = Depends(RoleChecker([1, 2])) # 1: Admin, 2: Logística
 ):
     # 1. Consultar información del Proveedor
     proveedor = db.query(models.CatProveedor).filter(models.CatProveedor.id_proveedor == gasto.id_proveedor).first()
     if not proveedor:
         raise HTTPException(status_code=404, detail="El proveedor especificado no existe.")
 
-    # Candado Asimétrico Post-Levante: No se pueden agregar gastos a un contenedor cerrado
+    # Candado Asimétrico de Cierre: Solo se bloquea si el expediente culminó todo su ciclo físico en almacén
     dam_padre = db.query(models.DetalleDam).filter(models.DetalleDam.id_dam == gasto.id_dam).first()
-    if dam_padre and dam_padre.maestro and dam_padre.maestro.estado_levante == "CON LEVANTE" and current_user.id_rol != 1:
-        raise HTTPException(status_code=403, detail="Operación Denegada: El contenedor padre ya cuenta con LEVANTE autorizado. No se pueden agregar nuevos gastos a una operación cerrada.")
+    if dam_padre and dam_padre.maestro and dam_padre.maestro.estado_documentario == "ATE. TOTAL" and current_user.id_rol != 1:
+        raise HTTPException(status_code=403, detail="Operación Denegada: El expediente se encuentra en ATENCIÓN TOTAL. No se pueden agregar nuevos gastos a una operación concluida.")
 
     # 2. Normalización Estricta del Número de Documento
     if proveedor.categoria != "ESTADO_O_TRIBUTO" and gasto.numero_documento and "-" in gasto.numero_documento:
@@ -421,7 +421,7 @@ def eliminar_gasto(
     req: schemas.EliminacionRequest, 
     forzar_reversion_pagos: bool = Query(False),
     db: Session = Depends(get_db), 
-    current_user: models.Usuario = Depends(get_current_user)
+    current_user: models.Usuario = Depends(RoleChecker([1, 2])) # 1: Admin, 2: Logística
 ):
     gasto = db.query(models.RegistroGasto).filter(models.RegistroGasto.id_gasto == id_gasto).first()
     if not gasto:
@@ -494,9 +494,14 @@ def eliminar_gasto(
         detalles_legibles=snapshot
     )
     
+    id_dam_padre = gasto.id_dam
     db.add(respaldo)
     db.delete(gasto)
     db.commit()
+
+    if id_dam_padre:
+        evaluar_gatillos_gastos_dam(db, id_dam_padre)
+
     return {"mensaje": f"Gasto {id_gasto} eliminado físicamente con respaldo de auditoría y reversión de amortizaciones."}
 
 # ==========================================
@@ -504,7 +509,7 @@ def eliminar_gasto(
 # ==========================================
 
 @router.post("/vouchers/", response_model=schemas.VoucherBancarioResponse)
-def crear_voucher(voucher: schemas.VoucherBancarioCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def crear_voucher(voucher: schemas.VoucherBancarioCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1, 3]))): # 1: Admin, 3: Tesorería
     nuevo_voucher = models.VoucherBancario(
         banco_id=voucher.banco_id,
         id_importador=voucher.id_importador,
@@ -614,7 +619,7 @@ def actualizar_voucher(
         )
 
 @router.delete("/vouchers/{id_voucher}")
-def eliminar_voucher(id_voucher: int, req: schemas.EliminacionRequest, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def eliminar_voucher(id_voucher: int, req: schemas.EliminacionRequest, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1, 3]))): # 1: Admin, 3: Tesorería
     voucher = db.query(models.VoucherBancario).filter(models.VoucherBancario.id_voucher == id_voucher).first()
     if not voucher:
         raise HTTPException(status_code=404, detail="Voucher no encontrado")
@@ -651,7 +656,7 @@ async def registrar_pago(
     request: Request,
     pago: schemas.RegistroPagoCreate, 
     db: Session = Depends(get_db), 
-    current_user: models.Usuario = Depends(RoleChecker([1, 2])) # 1: Admin, 2: Tesorería
+    current_user: models.Usuario = Depends(RoleChecker([1, 3])) # 1: Admin, 3: Tesorería
 ):
     # 0. Verificación de Idempotencia (Evita cobros dobles)
     clave_idempotencia = request.headers.get("Idempotency-Key") or request.headers.get("idempotency-key")
@@ -1005,7 +1010,7 @@ def listar_pagos(
     }
 
 @router.delete("/pagos/{id_pago}")
-def eliminar_pago(id_pago: int, req: schemas.EliminacionRequest, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def eliminar_pago(id_pago: int, req: schemas.EliminacionRequest, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1, 3]))): # 1: Admin, 3: Tesorería
     pago = db.query(models.RegistroPago).filter(models.RegistroPago.id_pago == id_pago).first()
     if not pago:
         raise HTTPException(status_code=404, detail="Pago no encontrado")
@@ -1114,6 +1119,10 @@ def eliminar_pago(id_pago: int, req: schemas.EliminacionRequest, db: Session = D
                     gasto.estado_pago = "PAGADO"
                     
         db.commit()
+
+        if id_gasto_afectado and gasto and gasto.id_dam:
+            evaluar_gatillos_gastos_dam(db, gasto.id_dam)
+
         return {"mensaje": f"Pago {id_pago} eliminado exitosamente. Saldos recalculados y sincronizados en los registros de auditoría."}
     except Exception as e:
         db.rollback()

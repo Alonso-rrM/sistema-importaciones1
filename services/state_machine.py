@@ -86,7 +86,7 @@ def evaluar_gatillos_gastos_dam(db: Session, id_dam: int):
     tributos_pagados, percepcion_pagada, omc_pagado = False, False, False
 
     for g in dam.gastos:
-        if not g.concepto_rel:
+        if g.estado_registro != "ACTIVO" or not g.concepto_rel:
             continue
         
         nombre_concepto = g.concepto_rel.nombre.upper()

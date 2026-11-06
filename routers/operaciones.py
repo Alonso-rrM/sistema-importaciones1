@@ -152,7 +152,7 @@ async def autorizar_levante(
     id_maestro: int, 
     request: Request,
     db: Session = Depends(get_db), 
-    current_user: models.Usuario = Depends(RoleChecker([1, 3])) # 1: Admin, 3: Logística
+    current_user: models.Usuario = Depends(RoleChecker([1, 2])) # 1: Admin, 2: Logística
 ):
     # 1. Buscar el maestro
     maestro = db.query(models.MaestroImportacion).filter(models.MaestroImportacion.id_maestro == id_maestro).first()
@@ -588,7 +588,7 @@ def exportar_liquidacion_gastos_excel_api(
     )
 
 @router.delete("/maestros/{id_maestro}")
-def eliminar_maestro(id_maestro: int, req: schemas.EliminacionRequest, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def eliminar_maestro(id_maestro: int, req: schemas.EliminacionRequest, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1, 2]))):
     maestro = db.query(models.MaestroImportacion).filter(models.MaestroImportacion.id_maestro == id_maestro).first()
     if not maestro:
         raise HTTPException(status_code=404, detail="Maestro de importación no encontrado")
@@ -774,7 +774,7 @@ def actualizar_dam(id_dam: int, dam_editada: schemas.DetalleDamUpdate, db: Sessi
     return db_dam
 
 @router.delete("/dams/{id_dam}")
-def eliminar_dam(id_dam: int, req: schemas.EliminacionRequest, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def eliminar_dam(id_dam: int, req: schemas.EliminacionRequest, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1, 2]))):
     dam = db.query(models.DetalleDam).filter(models.DetalleDam.id_dam == id_dam).first()
     if not dam:
         raise HTTPException(status_code=404, detail="DAM no encontrada")

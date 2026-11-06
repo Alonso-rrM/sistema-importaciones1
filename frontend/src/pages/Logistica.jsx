@@ -274,7 +274,7 @@ const Logistica = () => {
   // Micro-acción: Toggle certificación de aforo físico en DAM
   const handleToggleAforo = async (e, dam) => {
     e.stopPropagation();
-    if (userRole !== 1 && userRole !== 3) return alert("Solo Administradores o personal de Logística pueden certificar el Aforo Físico.");
+    if (userRole !== 1 && userRole !== 2) return alert("Solo Administradores o personal de Logística pueden certificar el Aforo Físico.");
     const nuevoEstado = !dam.aforo_realizado;
     if (!window.confirm(`¿Certificar aforo físico de la DAM ${dam.numero_de_dam} como ${nuevoEstado ? 'REALIZADO' : 'PENDIENTE'}?`)) return;
     try {
