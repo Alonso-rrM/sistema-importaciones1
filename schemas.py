@@ -281,6 +281,7 @@ class RegistroGastoCreate(BaseModel):
     fecha_vencimiento: Optional[date] = None
     monto_original: Decimal
     moneda: str = "USD"
+    observaciones: Optional[str] = None
 
 class PagoDetalleSimple(BaseModel):
     id_pago: int
@@ -325,6 +326,7 @@ class RegistroGastoUpdate(BaseModel):
     fecha_vencimiento: date | None = None
     monto_original: Decimal | None = None
     moneda: str | None = None
+    observaciones: str | None = None
 
 
 # --- 5. ESQUEMAS PARA REGISTRO_PAGOS ---
@@ -365,6 +367,7 @@ class RegistroPago(RegistroPagoCreate):
     proveedor_nombre: Optional[str] = None
     gasto_moneda: Optional[str] = None
     gasto_monto: Optional[Decimal] = None
+    gasto_observaciones: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -521,6 +524,7 @@ class GastoEliminadoResponse(AuditoriaBaseResponse):
     id_tipo_doc: Optional[int] = None
     numero_documento: Optional[str] = None
     fecha_vencimiento: Optional[date] = None
+    observaciones: Optional[str] = None
 
 class PagoEliminadoResponse(AuditoriaBaseResponse):
     id_pago: Optional[int] = None

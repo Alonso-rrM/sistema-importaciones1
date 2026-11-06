@@ -264,6 +264,7 @@ def generar_excel_gastos(gastos) -> tuple[io.BytesIO, str]:
         "N° Documento Gasto",
         "Tipo Documento",
         "Concepto de Pago",
+        "Observaciones del Gasto",
         "Etapa / Tipo Gasto",
         "Proveedor / Beneficiario",
         "RUC Proveedor",
@@ -278,13 +279,13 @@ def generar_excel_gastos(gastos) -> tuple[io.BytesIO, str]:
 
     alineaciones = [
         "center", "center", "center", "center", "left", "center",
-        "center", "left", "center", "left", "center", "center",
+        "center", "left", "left", "center", "left", "center", "center",
         "right", "right", "right", "center", "center", "center"
     ]
 
     formatos = [
         "0", "@", "@", "@", "@", "@",
-        "@", "@", "@", "@", "@", "@",
+        "@", "@", "@", "@", "@", "@", "@",
         "#,##0.00", "#,##0.00", "#,##0.00", "@", "yyyy-mm-dd", "@"
     ]
 
@@ -334,6 +335,7 @@ def generar_excel_gastos(gastos) -> tuple[io.BytesIO, str]:
             g.numero_documento or "-",
             tipo_doc.nombre_documento if tipo_doc else "-",
             concepto.nombre if concepto else "-",
+            g.observaciones or "-",
             concepto.tipo_gasto if concepto and concepto.tipo_gasto else "FIJO_DESPACHO",
             proveedor.nombre if proveedor else "-",
             proveedor.ruc if proveedor and proveedor.ruc else "-",
@@ -487,6 +489,7 @@ def generar_excel_sabana_global(filas_sabana: list[dict]) -> tuple[io.BytesIO, s
         "Tipo Documento",
         "N° Documento Gasto",
         "Concepto de Gasto",
+        "Observaciones del Gasto",
         "Fecha Vencimiento",
         "Moneda",
         "Monto Original",
@@ -502,7 +505,7 @@ def generar_excel_sabana_global(filas_sabana: list[dict]) -> tuple[io.BytesIO, s
         "center", "center", "center", "left", "center",
         "left", "left", "center", "center", "center",
         "center", "center", "left", "center", "center",
-        "center", "left", "center", "center",
+        "center", "left", "left", "center", "center",
         "right", "right", "right", "center", "right", "right", "left"
     ]
 
@@ -510,7 +513,7 @@ def generar_excel_sabana_global(filas_sabana: list[dict]) -> tuple[io.BytesIO, s
         "@", "@", "@", "@", "@",
         "@", "@", "@", "@", "yyyy-mm-dd",
         "@", "@", "@", "@", "@",
-        "@", "@", "yyyy-mm-dd", "@",
+        "@", "@", "@", "yyyy-mm-dd", "@",
         "#,##0.00", "#,##0.00", "#,##0.00", "@", "0.000", "$#,##0.00", "@"
     ]
 
@@ -534,6 +537,7 @@ def generar_excel_sabana_global(filas_sabana: list[dict]) -> tuple[io.BytesIO, s
             f.get("tipo_doc_nombre") or "-",
             f.get("numero_documento") or "-",
             f.get("concepto_nombre") or "-",
+            f.get("observaciones") or "-",
             f.get("fecha_vencimiento") if f.get("fecha_vencimiento") else None,
             f.get("moneda") or "USD",
             float(f.get("monto_original") or 0.0),

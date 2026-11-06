@@ -294,6 +294,7 @@ def exportar_sabana_liquidaciones(
             "tipo_doc_nombre": g.tipo_doc_rel.nombre_documento if g.tipo_doc_rel else "-",
             "numero_documento": g.numero_documento or "-",
             "concepto_nombre": g.concepto_rel.nombre if g.concepto_rel else "-",
+            "observaciones": g.observaciones or "-",
             "fecha_vencimiento": g.fecha_vencimiento if g.fecha_vencimiento else None,
             "moneda": moneda_g,
             "monto_original": float(monto_orig),

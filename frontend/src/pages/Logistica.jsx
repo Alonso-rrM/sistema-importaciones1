@@ -67,7 +67,7 @@ const Logistica = () => {
 
   // Modales Inline para Creación Rápida
   const [modalNuevaDam, setModalNuevaDam] = useState({ open: false, numero_de_dam: '', serie: '', canal_control: 'VERDE', monto_valor_provisional_usd: '' });
-  const [modalNuevoGasto, setModalNuevoGasto] = useState({ open: false, id_dam: '', id_concepto: '', id_proveedor: '', id_tipo_doc: '', numero_documento: '', monto_original: '', moneda: 'USD' });
+  const [modalNuevoGasto, setModalNuevoGasto] = useState({ open: false, id_dam: '', id_concepto: '', id_proveedor: '', id_tipo_doc: '', numero_documento: '', monto_original: '', moneda: 'USD', observaciones: '' });
   const [isSubmittingInline, setIsSubmittingInline] = useState(false);
   const [isExportando, setIsExportando] = useState(false);
   const [modalLiquidacionOpen, setModalLiquidacionOpen] = useState(false);
@@ -97,8 +97,8 @@ const Logistica = () => {
   const isReadOnly = userRole !== 1 && formData.estado_documentario === 'ATE. TOTAL' && viewMode === 'MODIFICAR';
 
   useEffect(() => { cargarCatalogos(); }, []);
-  useEffect(() => { 
-    cargarMaestros(); 
+  useEffect(() => {
+    cargarMaestros();
   }, [debouncedSearch, page, limit, estadoLevanteFiltro, statusLlegadaFiltro, importadorFiltro, tipoValorFiltro]);
 
   const cargarCatalogos = async () => {
@@ -126,16 +126,16 @@ const Logistica = () => {
 
   const cargarMaestros = async () => {
     try {
-      const res = await api.get('/maestros/', { 
-        params: { 
-          search: debouncedSearch.trim() || undefined, 
-          page, 
+      const res = await api.get('/maestros/', {
+        params: {
+          search: debouncedSearch.trim() || undefined,
+          page,
           limit,
           estado_levante: estadoLevanteFiltro || undefined,
           status_llegada: statusLlegadaFiltro || undefined,
           id_importador: importadorFiltro || undefined,
           tipo_valor: tipoValorFiltro || undefined
-        } 
+        }
       });
       setMaestros(res.data?.data || []);
       setTotalPages(res.data?.total_paginas || 1);
@@ -329,10 +329,11 @@ const Logistica = () => {
         id_tipo_doc: parseInt(modalNuevoGasto.id_tipo_doc, 10),
         numero_documento: modalNuevoGasto.numero_documento?.trim() || null,
         monto_original: monto,
-        moneda: modalNuevoGasto.moneda || 'USD'
+        moneda: modalNuevoGasto.moneda || 'USD',
+        observaciones: modalNuevoGasto.observaciones?.trim() || null
       };
       await api.post('/gastos/', payload);
-      setModalNuevoGasto({ open: false, id_dam: '', id_concepto: '', id_proveedor: '', id_tipo_doc: '', numero_documento: '', monto_original: '', moneda: 'USD' });
+      setModalNuevoGasto({ open: false, id_dam: '', id_concepto: '', id_proveedor: '', id_tipo_doc: '', numero_documento: '', monto_original: '', moneda: 'USD', observaciones: '' });
       cargarSubRegistros(selectedId, formData.numero_factura);
       alert("✅ Gasto registrado y vinculado al contenedor.");
     } catch (err) {
@@ -393,9 +394,9 @@ const Logistica = () => {
               <span className="px-1.5 py-0.5 rounded bg-slate-700 text-[10px] font-mono text-slate-300">{totalRegistros}</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <button 
-                type="button" 
-                onClick={handleExportarExcel} 
+              <button
+                type="button"
+                onClick={handleExportarExcel}
                 disabled={isExportando}
                 className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold rounded bg-emerald-700/80 hover:bg-emerald-600 text-white shadow-sm transition-all disabled:opacity-50 cursor-pointer"
                 title="Descargar todos los expedientes filtrados a Excel"
@@ -409,22 +410,21 @@ const Logistica = () => {
           <div className="flex items-center gap-1.5">
             <div className="relative flex-1">
               <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center text-slate-500 text-xs"><Search size={13} className="inline-block shrink-0" /></span>
-              <input 
-                type="text" 
-                value={searchTerm} 
-                onChange={e => { setSearchTerm(e.target.value); setPage(1); }} 
-                className="w-full bg-slate-900 border border-slate-700 focus:border-teal-500 text-xs text-slate-200 placeholder-slate-500 rounded-md pl-8 pr-2 py-1.5" 
-                placeholder="Buscar Factura, BL o Contenedor..." 
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={e => { setSearchTerm(e.target.value); setPage(1); }}
+                className="w-full bg-slate-900 border border-slate-700 focus:border-teal-500 text-xs text-slate-200 placeholder-slate-500 rounded-md pl-8 pr-2 py-1.5"
+                placeholder="Buscar Factura, BL o Contenedor..."
               />
             </div>
             <button
               type="button"
               onClick={() => setMostrarFiltros(prev => !prev)}
-              className={`px-2 py-1.5 rounded border text-xs font-mono transition flex items-center gap-1 shrink-0 cursor-pointer ${
-                hayFiltrosActivos 
-                  ? 'bg-teal-950/80 border-teal-500 text-teal-300 font-bold shadow-sm' 
+              className={`px-2 py-1.5 rounded border text-xs font-mono transition flex items-center gap-1 shrink-0 cursor-pointer ${hayFiltrosActivos
+                  ? 'bg-teal-950/80 border-teal-500 text-teal-300 font-bold shadow-sm'
                   : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'
-              }`}
+                }`}
               title="Alternar filtros avanzados"
             >
               <Settings size={13} className="inline-block shrink-0" />
@@ -438,8 +438,8 @@ const Logistica = () => {
               <div className="grid grid-cols-2 gap-1.5">
                 <div>
                   <label className="block text-slate-500 uppercase font-bold text-[9px] mb-0.5">Levante</label>
-                  <select 
-                    value={estadoLevanteFiltro} 
+                  <select
+                    value={estadoLevanteFiltro}
                     onChange={e => { setEstadoLevanteFiltro(e.target.value); setPage(1); }}
                     className="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-slate-200 text-[10px]"
                   >
@@ -450,8 +450,8 @@ const Logistica = () => {
                 </div>
                 <div>
                   <label className="block text-slate-500 uppercase font-bold text-[9px] mb-0.5">Llegada</label>
-                  <select 
-                    value={statusLlegadaFiltro} 
+                  <select
+                    value={statusLlegadaFiltro}
                     onChange={e => { setStatusLlegadaFiltro(e.target.value); setPage(1); }}
                     className="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-slate-200 text-[10px]"
                   >
@@ -465,8 +465,8 @@ const Logistica = () => {
                 </div>
                 <div>
                   <label className="block text-slate-500 uppercase font-bold text-[9px] mb-0.5">Importador</label>
-                  <select 
-                    value={importadorFiltro} 
+                  <select
+                    value={importadorFiltro}
                     onChange={e => { setImportadorFiltro(e.target.value); setPage(1); }}
                     className="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-slate-200 text-[10px] truncate"
                   >
@@ -478,8 +478,8 @@ const Logistica = () => {
                 </div>
                 <div>
                   <label className="block text-slate-500 uppercase font-bold text-[9px] mb-0.5">Tipo Valor</label>
-                  <select 
-                    value={tipoValorFiltro} 
+                  <select
+                    value={tipoValorFiltro}
                     onChange={e => { setTipoValorFiltro(e.target.value); setPage(1); }}
                     className="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-slate-200 text-[10px]"
                   >
@@ -518,12 +518,11 @@ const Logistica = () => {
                     <span className={`text-sm font-bold font-mono tracking-tight ${isActive ? 'text-teal-300' : 'text-slate-200'}`}>FAC: {m.numero_factura}</span>
                   </div>
                   <div className="flex items-center gap-1">
-                    <span className={`px-1.5 py-0.5 text-[9px] font-bold uppercase rounded border ${
-                      m.estado_documentario?.includes('ATE. TOTAL') || m.estado_documentario?.includes('CON LEVANTE') ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300' :
-                      m.estado_documentario?.includes('ATE. PARCIAL') ? 'bg-amber-500/15 border-amber-500/30 text-amber-300' :
-                      m.estado_documentario === 'EN PROCESO' ? 'bg-blue-500/15 border-blue-500/30 text-blue-300' :
-                      'bg-slate-700/40 border-slate-600 text-slate-400'
-                    }`}>
+                    <span className={`px-1.5 py-0.5 text-[9px] font-bold uppercase rounded border ${m.estado_documentario?.includes('ATE. TOTAL') || m.estado_documentario?.includes('CON LEVANTE') ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300' :
+                        m.estado_documentario?.includes('ATE. PARCIAL') ? 'bg-amber-500/15 border-amber-500/30 text-amber-300' :
+                          m.estado_documentario === 'EN PROCESO' ? 'bg-blue-500/15 border-blue-500/30 text-blue-300' :
+                            'bg-slate-700/40 border-slate-600 text-slate-400'
+                      }`}>
                       {m.estado_documentario || 'SIN NUMERAR'}
                     </span>
                   </div>
@@ -740,11 +739,10 @@ const Logistica = () => {
                               key={key}
                               type="button"
                               onClick={() => setKpiViewIndex(idx)}
-                              className={`px-2 py-0.5 rounded transition cursor-pointer ${
-                                kpiViewIndex === idx
+                              className={`px-2 py-0.5 rounded transition cursor-pointer ${kpiViewIndex === idx
                                   ? 'bg-teal-600 text-white font-bold shadow'
                                   : 'text-slate-400 hover:text-slate-200'
-                              }`}
+                                }`}
                             >
                               {key === 'FIJO_DESPACHO' && 'Fijos'}
                               {key === 'POST_LEVANTE' && 'Post-Lev.'}
@@ -837,13 +835,12 @@ const Logistica = () => {
                               return (
                                 <div
                                   key={idx}
-                                  className={`p-2 rounded border text-xs flex items-center justify-between gap-2 font-mono ${
-                                    isPagado
+                                  className={`p-2 rounded border text-xs flex items-center justify-between gap-2 font-mono ${isPagado
                                       ? 'bg-emerald-950/20 border-emerald-800/40 text-slate-200'
                                       : isPendiente
-                                      ? 'bg-amber-950/20 border-amber-800/40 text-slate-200'
-                                      : 'bg-rose-950/20 border-rose-800/40 text-slate-300'
-                                  }`}
+                                        ? 'bg-amber-950/20 border-amber-800/40 text-slate-200'
+                                        : 'bg-rose-950/20 border-rose-800/40 text-slate-300'
+                                    }`}
                                 >
                                   <div className="flex items-center gap-1.5 truncate">
                                     <span className="text-sm">
@@ -903,10 +900,10 @@ const Logistica = () => {
                     <div><label className="block text-[10px] font-bold text-slate-400 mb-1">Contenedor Físico</label><input type="text" value={formData.n_cont_fisico} onChange={e => handleFormChange('n_cont_fisico', e.target.value)} disabled={isReadOnly} className="w-full bg-slate-900 border border-slate-600 focus:border-teal-500 text-slate-100 font-mono text-xs rounded px-2.5 py-2 disabled:opacity-60" /></div>
                     <div>
                       <label className="block text-[10px] font-bold text-slate-400 mb-1">Estado Llegada (Físico)</label>
-                      <select 
-                        value={formData.status_llegada} 
-                        onChange={e => handleFormChange('status_llegada', e.target.value)} 
-                        disabled={isReadOnly} 
+                      <select
+                        value={formData.status_llegada}
+                        onChange={e => handleFormChange('status_llegada', e.target.value)}
+                        disabled={isReadOnly}
                         className="w-full bg-slate-900 border border-slate-600 text-amber-300 font-bold text-xs rounded px-2.5 py-2 disabled:opacity-60"
                       >
                         <option value="EN TRÁNSITO">EN TRÁNSITO</option>
@@ -928,12 +925,12 @@ const Logistica = () => {
                       <div><label className="block text-[10px] font-bold text-slate-400 mb-1">F. Arribo</label><input type="date" value={formData.fecha_arribo} onChange={e => handleFormChange('fecha_arribo', e.target.value)} disabled={isReadOnly} className="w-full bg-slate-900 border border-slate-600 text-slate-100 text-xs rounded px-2.5 py-2 disabled:opacity-60" /></div>
                       <div>
                         <label className="block text-[10px] font-bold text-slate-400 mb-1">F. Rec. Almacén</label>
-                        <input 
-                          type="date" 
-                          value={formData.fecha_recepcion_almacen} 
-                          onChange={e => handleFormChange('fecha_recepcion_almacen', e.target.value)} 
-                          disabled={isReadOnly || formData.status_llegada !== 'EN ALMACÉN'} 
-                          className="w-full bg-slate-900 border border-slate-600 focus:border-teal-500 text-slate-100 text-xs rounded px-2.5 py-2 disabled:opacity-60" 
+                        <input
+                          type="date"
+                          value={formData.fecha_recepcion_almacen}
+                          onChange={e => handleFormChange('fecha_recepcion_almacen', e.target.value)}
+                          disabled={isReadOnly || formData.status_llegada !== 'EN ALMACÉN'}
+                          className="w-full bg-slate-900 border border-slate-600 focus:border-teal-500 text-slate-100 text-xs rounded px-2.5 py-2 disabled:opacity-60"
                         />
                       </div>
                     </div>
@@ -1054,11 +1051,10 @@ const Logistica = () => {
                                       </span>
                                     </td>
                                     <td className="px-3 py-2 text-center">
-                                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
-                                        d.estado_dam?.includes('LEVANTE') || d.estado_dam?.includes('LIQUIDADA') ? 'bg-emerald-900/40 text-emerald-300 border-emerald-700' :
-                                        d.estado_dam?.includes('OBSERVADA') ? 'bg-rose-900/40 text-rose-300 border-rose-700' :
-                                        'bg-amber-900/40 text-amber-300 border-amber-700'
-                                      }`}>
+                                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${d.estado_dam?.includes('LEVANTE') || d.estado_dam?.includes('LIQUIDADA') ? 'bg-emerald-900/40 text-emerald-300 border-emerald-700' :
+                                          d.estado_dam?.includes('OBSERVADA') ? 'bg-rose-900/40 text-rose-300 border-rose-700' :
+                                            'bg-amber-900/40 text-amber-300 border-amber-700'
+                                        }`}>
                                         {d.estado_dam || 'NUMERADA / EN EVALUACIÓN'}
                                       </span>
                                     </td>
@@ -1095,7 +1091,12 @@ const Logistica = () => {
                                 <tr key={g.id_gasto} className="hover:bg-slate-800/50 transition-colors group">
                                   <td className="px-3 py-2 font-mono text-slate-500 group-hover:text-teal-400">#{g.id_gasto}</td>
                                   <td className="px-3 py-2 font-bold text-slate-200 truncate max-w-[140px]" title={g.proveedor_nombre}>{g.proveedor_nombre || 'N/A'}</td>
-                                  <td className="px-3 py-2 font-bold text-teal-300 truncate max-w-[140px]" title={g.concepto_nombre}>{g.concepto_nombre || 'N/A'}</td>
+                                  <td className="px-3 py-2 font-bold text-teal-300 max-w-[180px]" title={g.observaciones ? `${g.concepto_nombre} — Obs: ${g.observaciones}` : g.concepto_nombre}>
+                                    <div className="truncate">{g.concepto_nombre || 'N/A'}</div>
+                                    {g.observaciones && (
+                                      <div className="text-[10px] text-amber-400/90 font-normal italic truncate">💬 {g.observaciones}</div>
+                                    )}
+                                  </td>
                                   <td className="px-3 py-2 font-mono text-slate-300">{g.numero_documento || 'S/N'}</td>
                                   <td className="px-3 py-2 text-right font-mono font-bold text-slate-200">{parseFloat(g.monto_original || 0).toFixed(2)}</td>
                                   <td className="px-3 py-2 text-center font-bold text-slate-400">{g.moneda}</td>
@@ -1261,6 +1262,16 @@ const Logistica = () => {
                     ))}
                   </select>
                 </div>
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold uppercase text-amber-400 mb-1">💬 Observación / Detalle del Gasto (Opcional)</label>
+                <input
+                  type="text"
+                  value={modalNuevoGasto.observaciones || ''}
+                  onChange={e => setModalNuevoGasto({ ...modalNuevoGasto, observaciones: e.target.value })}
+                  placeholder='Ej: "Sobrecosto 4 días extra por demora en aforo físico"'
+                  className="w-full bg-slate-950 border border-slate-700 text-slate-100 text-xs rounded p-2 focus:border-teal-500"
+                />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>

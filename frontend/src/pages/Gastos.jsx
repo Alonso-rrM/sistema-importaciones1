@@ -102,6 +102,7 @@ const Gastos = () => {
     fecha_vencimiento: '',
     monto_original: '',
     moneda: 'USD',
+    observaciones: '',
     dam_numero: ''
   };
   const [form, setForm] = useState(estadoInicialForm);
@@ -290,6 +291,7 @@ const Gastos = () => {
         fecha_vencimiento: gasto.fecha_vencimiento ? String(gasto.fecha_vencimiento).slice(0, 10) : '',
         monto_original: gasto.monto_original !== undefined && gasto.monto_original !== null ? String(gasto.monto_original) : '',
         moneda: gasto.moneda || 'USD',
+        observaciones: gasto.observaciones || '',
         dam_numero: gasto.dam_numero || ''
       });
     } else if (open && !gasto) {
@@ -342,7 +344,8 @@ const Gastos = () => {
         numero_documento: form.numero_documento?.trim() || null,
         fecha_vencimiento: form.fecha_vencimiento || null,
         monto_original: monto,
-        moneda: form.moneda || 'USD'
+        moneda: form.moneda || 'USD',
+        observaciones: form.observaciones?.trim() || null
       };
 
       if (viewMode === 'NUEVO') {
@@ -529,7 +532,7 @@ const Gastos = () => {
                   type="text"
                   value={searchTerm}
                   onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
-                  placeholder="Buscar Documento, DAM, Concepto o Factura..."
+                  placeholder="Buscar Documento, DAM, Concepto, Observación o Factura..."
                   className="w-full pl-8 pr-7 py-1.5 text-xs bg-slate-950 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500 transition-all"
                 />
                 <span className="absolute inset-y-0 left-2.5 flex items-center text-slate-400 text-xs"><Search size={13} className="inline-block shrink-0" /></span>
@@ -707,6 +710,11 @@ const Gastos = () => {
                       <div className="font-semibold text-slate-200 truncate">
                         {g.concepto_nombre || 'Gasto General'}
                       </div>
+                      {g.observaciones && (
+                        <div className="text-[11px] text-amber-400/90 italic truncate mt-0.5" title={g.observaciones}>
+                          💬 {g.observaciones}
+                        </div>
+                      )}
                       <div className="text-[11px] text-slate-400 truncate flex items-center gap-1.5 mt-0.5">
                         <Building2 size={12} className="inline-block shrink-0" />
                         <span className="truncate">{g.proveedor_nombre || 'Sin Proveedor'}</span>
@@ -909,6 +917,32 @@ const Gastos = () => {
                     </div>
                   </div>
                 </div>
+
+                {/* OBSERVACIÓN / DETALLE ESPECÍFICO DEL CONCEPTO DE GASTO */}
+                <div className="bg-slate-900/90 border border-amber-500/30 p-3.5 rounded-lg space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] uppercase font-bold text-amber-400 flex items-center gap-1.5">
+                      <span>💬 Observación / Detalle Específico del Gasto</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => toggleDrawer(true, selectedGasto)}
+                      className="text-[11px] font-semibold text-teal-400 hover:text-teal-300 flex items-center gap-1 cursor-pointer transition-colors"
+                    >
+                      <Pencil size={11} className="inline-block shrink-0" />
+                      <span>{selectedGasto.observaciones ? 'Editar observación' : '+ Agregar observación'}</span>
+                    </button>
+                  </div>
+                  {selectedGasto.observaciones ? (
+                    <p className="text-xs text-slate-200 leading-relaxed whitespace-pre-wrap">
+                      {selectedGasto.observaciones}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-slate-500 italic">
+                      Sin observaciones registradas para este concepto de gasto. Haga clic en "+ Agregar observación" para detallar sobrecostos, demoras o notas de tesorería.
+                    </p>
+                  )}
+                </div>
               </div>
 
               {/* HISTORIAL DE AMORTIZACIONES Y PAGOS APLICADOS */}
@@ -1026,6 +1060,15 @@ const Gastos = () => {
             
             <form onSubmit={handleGuardar} className="flex-1 overflow-y-auto p-6 space-y-5">
               
+              {viewMode === 'MODIFICAR' && selectedGasto?.estado_pago === 'PAGADO' && (
+                <div className="p-3 rounded-lg bg-amber-950/40 border border-amber-500/40 text-xs text-amber-200 space-y-1">
+                  <div className="font-bold text-amber-400">🔒 Gasto con Estado PAGADO (Auditoría Financiera)</div>
+                  <p className="text-[11px] leading-relaxed">
+                    Los importes y comprobantes están protegidos porque ya cuentan con pagos aplicados. Sin embargo, puede agregar o modificar libremente la <strong>Observación / Detalle Específico del Gasto</strong>.
+                  </p>
+                </div>
+              )}
+
               <div>
                 <label className="block text-xs font-bold text-slate-300 uppercase tracking-wide mb-1.5">
                   Maestro (Opcional - Filtro de DAMs)
@@ -1095,6 +1138,22 @@ const Gastos = () => {
                   isClearable 
                   styles={selectDarkStyles}
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-amber-400 uppercase tracking-wide mb-1.5">
+                  💬 Observación / Detalle Específico del Gasto (Opcional)
+                </label>
+                <textarea
+                  rows={2}
+                  value={form.observaciones}
+                  onChange={(e) => setForm({ ...form, observaciones: e.target.value })}
+                  placeholder='Ej: "Sobrecosto 4 días extra por demora en aforo físico"...'
+                  className="w-full px-3.5 py-2 text-xs bg-slate-950 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500 resize-y"
+                />
+                <span className="text-[10px] text-slate-500 mt-1 block">
+                  Este comentario diferencia el concepto de gasto específico y es indexado en el buscador general.
+                </span>
               </div>
 
               <div>

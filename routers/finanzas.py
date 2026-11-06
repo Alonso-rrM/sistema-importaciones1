@@ -97,14 +97,32 @@ def actualizar_gasto(id_gasto: int, gasto_editado: schemas.RegistroGastoUpdate, 
     if not db_gasto:
         raise HTTPException(status_code=404, detail="Gasto no encontrado")
         
-    # Candado de Auditoría Financiera
-    if db_gasto.estado_pago == "PAGADO":
-        raise HTTPException(
-            status_code=403, 
-            detail="Acción rechazada por Auditoría: No se permite modificar un gasto que ya ha sido PAGADO."
-        )
-        
     update_data = gasto_editado.model_dump(exclude_unset=True)
+
+    # Candado de Auditoría Financiera: si está PAGADO, solo se permite actualizar observaciones
+    if db_gasto.estado_pago == "PAGADO":
+        campos_protegidos = ["id_dam", "id_concepto", "id_proveedor", "id_tipo_doc", "numero_documento", "fecha_vencimiento", "monto_original", "moneda"]
+        cambio_protegido = False
+        for campo in campos_protegidos:
+            if campo in update_data:
+                val_nuevo = update_data[campo]
+                val_actual = getattr(db_gasto, campo)
+                if campo == "monto_original" and val_nuevo is not None and val_actual is not None:
+                    if Decimal(str(val_nuevo)).quantize(Decimal("0.01")) != Decimal(str(val_actual)).quantize(Decimal("0.01")):
+                        cambio_protegido = True
+                elif val_nuevo != val_actual:
+                    cambio_protegido = True
+        if cambio_protegido:
+            raise HTTPException(
+                status_code=403, 
+                detail="Acción rechazada por Auditoría: No se permite modificar montos ni documentos de un gasto que ya ha sido PAGADO (solo se permite editar Observaciones)."
+            )
+        if "observaciones" in update_data:
+            db_gasto.observaciones = update_data["observaciones"]
+            db.commit()
+            db.refresh(db_gasto)
+        return db_gasto
+        
     for key, value in update_data.items():
         setattr(db_gasto, key, value)
         
@@ -174,6 +192,7 @@ def listar_gastos(
         termino = f"%{search.strip()}%"
         filtros.append(
             models.RegistroGasto.numero_documento.ilike(termino) |
+            models.RegistroGasto.observaciones.ilike(termino) |
             models.RegistroGasto.estado_pago.ilike(termino) |
             models.DetalleDam.numero_de_dam.ilike(termino) |
             models.MaestroImportacion.numero_factura.ilike(termino) |
@@ -254,6 +273,7 @@ def listar_gastos(
             fecha_vencimiento=g.fecha_vencimiento,
             monto_original=g.monto_original,
             moneda=g.moneda,
+            observaciones=g.observaciones,
             estado_pago=g.estado_pago,
             estado_registro=g.estado_registro,
             created_at=g.created_at,
@@ -338,6 +358,7 @@ def exportar_gastos_excel(
         termino = f"%{search.strip()}%"
         filtros.append(
             models.RegistroGasto.numero_documento.ilike(termino) |
+            models.RegistroGasto.observaciones.ilike(termino) |
             models.RegistroGasto.estado_pago.ilike(termino) |
             models.DetalleDam.numero_de_dam.ilike(termino) |
             models.MaestroImportacion.numero_factura.ilike(termino) |
@@ -483,7 +504,8 @@ def eliminar_gasto(
     snapshot = {
         "Proveedor": gasto.proveedor_rel.nombre if gasto.proveedor_rel else "N/A",
         "Concepto": gasto.concepto_rel.nombre if gasto.concepto_rel else "N/A",
-        "Tipo Documento": gasto.tipo_doc_rel.nombre_documento if hasattr(gasto, 'tipo_doc_rel') and gasto.tipo_doc_rel else "N/A"
+        "Tipo Documento": gasto.tipo_doc_rel.nombre_documento if hasattr(gasto, 'tipo_doc_rel') and gasto.tipo_doc_rel else "N/A",
+        "Observaciones": gasto.observaciones or "Sin observaciones"
     }
     respaldo = models.GastoEliminado(
         **datos, 
@@ -917,7 +939,8 @@ def obtener_pagos_de_voucher(
             gasto_documento=p.gasto_rel.numero_documento if (p.gasto_rel and p.gasto_rel.numero_documento) else (f"Gasto #{p.id_gasto}" if p.id_gasto else "N/A"),
             proveedor_nombre=p.gasto_rel.proveedor_rel.nombre if (p.gasto_rel and p.gasto_rel.proveedor_rel) else None,
             gasto_moneda=p.gasto_rel.moneda if p.gasto_rel else None,
-            gasto_monto=p.gasto_rel.monto_original if p.gasto_rel else None
+            gasto_monto=p.gasto_rel.monto_original if p.gasto_rel else None,
+            gasto_observaciones=p.gasto_rel.observaciones if p.gasto_rel else None
         ))
     return resultado
 
@@ -948,7 +971,8 @@ def listar_pagos(
             models.CatImportador.nombre.ilike(termino) |
             models.CatConceptoPago.nombre.ilike(termino) |
             models.VoucherBancario.numero_operacion.ilike(termino) |
-            models.RegistroGasto.numero_documento.ilike(termino)
+            models.RegistroGasto.numero_documento.ilike(termino) |
+            models.RegistroGasto.observaciones.ilike(termino)
         )
 
     total_registros = query.filter(*filtros).with_entities(func.count(models.RegistroPago.id_pago)).scalar() or 0
@@ -998,7 +1022,8 @@ def listar_pagos(
             gasto_documento=p.gasto_rel.numero_documento if (p.gasto_rel and p.gasto_rel.numero_documento) else (f"Gasto #{p.id_gasto}" if p.id_gasto else "N/A"),
             proveedor_nombre=p.gasto_rel.proveedor_rel.nombre if (p.gasto_rel and p.gasto_rel.proveedor_rel) else None,
             gasto_moneda=p.gasto_rel.moneda if p.gasto_rel else None,
-            gasto_monto=p.gasto_rel.monto_original if p.gasto_rel else None
+            gasto_monto=p.gasto_rel.monto_original if p.gasto_rel else None,
+            gasto_observaciones=p.gasto_rel.observaciones if p.gasto_rel else None
         ))
 
     return {

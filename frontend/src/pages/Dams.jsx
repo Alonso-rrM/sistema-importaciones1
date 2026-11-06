@@ -671,7 +671,12 @@ const Dams = () => {
                             <tr key={g.id_gasto} className="hover:bg-slate-800/50 transition-colors cursor-pointer group">
                               <td className="px-3 py-2 font-mono text-slate-500 group-hover:text-teal-400">#{g.id_gasto}</td>
                               <td className="px-3 py-2 font-bold text-slate-200 truncate max-w-[140px]" title={g.proveedor_nombre}>{g.proveedor_nombre || 'N/A'}</td>
-                              <td className="px-3 py-2 font-bold text-teal-300 truncate max-w-[140px]" title={g.concepto_nombre}>{g.concepto_nombre || 'N/A'}</td>
+                              <td className="px-3 py-2 font-bold text-teal-300 max-w-[180px]" title={g.observaciones ? `${g.concepto_nombre} — Obs: ${g.observaciones}` : g.concepto_nombre}>
+                                <div className="truncate">{g.concepto_nombre || 'N/A'}</div>
+                                {g.observaciones && (
+                                  <div className="text-[10px] text-amber-400/90 font-normal italic truncate">💬 {g.observaciones}</div>
+                                )}
+                              </td>
                               <td className="px-3 py-2 font-mono text-slate-300">{g.numero_documento || 'S/N'}</td>
                               <td className="px-3 py-2 text-right font-mono font-bold text-slate-200">{parseFloat(g.monto_original || 0).toFixed(2)}</td>
                               <td className="px-3 py-2 text-center font-bold text-slate-400">{g.moneda}</td>

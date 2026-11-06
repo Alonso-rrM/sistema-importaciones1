@@ -15,6 +15,15 @@ const Conceptos = () => {
   const [isGuardando, setIsGuardando] = useState(false);
   const [mensaje, setMensaje] = useState({ texto: '', tipo: '' });
 
+  // Gastos y Observaciones específicas asociadas al Concepto seleccionado
+  const [gastosConcepto, setGastosConcepto] = useState([]);
+  const [isLoadingGastos, setIsLoadingGastos] = useState(false);
+  const [busquedaGastoObs, setBusquedaGastoObs] = useState('');
+  const debouncedGastoObs = useDebounce(busquedaGastoObs, 300);
+  const [editandoObsId, setEditandoObsId] = useState(null);
+  const [textoObsTemp, setTextoObsTemp] = useState('');
+  const [isGuardandoObs, setIsGuardandoObs] = useState(false);
+
   const estadoInicial = {
     nombre: '',
     descripcion: '',
@@ -25,6 +34,46 @@ const Conceptos = () => {
   useEffect(() => {
     cargarConceptos();
   }, [filtroEstado]);
+
+  useEffect(() => {
+    if (selectedId && viewMode === 'DETALLE') {
+      cargarGastosDelConcepto(selectedId, debouncedGastoObs);
+    } else {
+      setGastosConcepto([]);
+    }
+  }, [selectedId, viewMode, debouncedGastoObs]);
+
+  const cargarGastosDelConcepto = async (idConcepto, searchTexto = '') => {
+    setIsLoadingGastos(true);
+    try {
+      const params = { id_concepto: idConcepto, limit: 50 };
+      if (searchTexto.trim()) params.search = searchTexto.trim();
+      const res = await api.get('/gastos/', { params });
+      setGastosConcepto(res.data?.data || []);
+    } catch (err) {
+      console.error('Error al cargar gastos del concepto:', err);
+    } finally {
+      setIsLoadingGastos(false);
+    }
+  };
+
+  const handleGuardarObservacionGasto = async (idGasto) => {
+    setIsGuardandoObs(true);
+    try {
+      await api.put(`/gastos/${idGasto}`, {
+        observaciones: textoObsTemp.trim() || null
+      });
+      mostrarAlerta('✅ Observación específica del gasto actualizada correctamente.', 'exito');
+      setEditandoObsId(null);
+      setTextoObsTemp('');
+      if (selectedId) cargarGastosDelConcepto(selectedId, debouncedGastoObs);
+    } catch (error) {
+      const msg = error.response?.data?.detail || 'No se pudo guardar la observación del gasto.';
+      mostrarAlerta(`❌ ${msg}`, 'error');
+    } finally {
+      setIsGuardandoObs(false);
+    }
+  };
 
   const cargarConceptos = async () => {
     try {
@@ -499,6 +548,154 @@ const Conceptos = () => {
                       <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Descripción / Justificación</span>
                       <span className="text-slate-200 text-xs">{selectedConcepto?.descripcion || 'Sin descripción detallada'}</span>
                     </div>
+                  </div>
+
+                  {/* SECCIÓN DE OBSERVACIONES ESPECÍFICAS DE GASTOS DE ESTE CONCEPTO */}
+                  <div className="pt-4 border-t border-slate-800 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                          <span>💬 Observaciones en Gastos Específicos de "{selectedConcepto?.nombre}"</span>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-slate-800 text-slate-300 border border-slate-700">
+                            {gastosConcepto.length}
+                          </span>
+                        </h4>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          Registre o busque comentarios específicos de Tesorería para cada gasto de este concepto (ej. sobrecostos, días extra, aforo).
+                        </p>
+                      </div>
+
+                      <div className="relative w-full sm:w-72">
+                        <input
+                          type="text"
+                          value={busquedaGastoObs}
+                          onChange={(e) => setBusquedaGastoObs(e.target.value)}
+                          placeholder="Buscar en observaciones, DAM, Factura..."
+                          className="w-full pl-8 pr-7 py-1.5 text-xs bg-slate-900 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:border-teal-500"
+                        />
+                        <span className="absolute inset-y-0 left-2.5 flex items-center text-slate-400 text-xs">
+                          <Search size={12} className="inline-block shrink-0" />
+                        </span>
+                        {busquedaGastoObs && (
+                          <button
+                            type="button"
+                            onClick={() => setBusquedaGastoObs('')}
+                            className="absolute inset-y-0 right-2.5 flex items-center text-slate-400 hover:text-white text-xs"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {isLoadingGastos ? (
+                      <div className="p-6 text-center text-slate-400 text-xs">
+                        Cargando gastos registrados con este concepto...
+                      </div>
+                    ) : gastosConcepto.length === 0 ? (
+                      <div className="p-6 text-center text-slate-500 text-xs bg-slate-900/50 border border-slate-800/80 rounded-lg">
+                        No se encontraron gastos registrados para este concepto{busquedaGastoObs ? ` con el filtro "${busquedaGastoObs}"` : ''}.
+                      </div>
+                    ) : (
+                      <div className="space-y-2 max-h-[340px] overflow-y-auto pr-1">
+                        {gastosConcepto.map((g) => {
+                          const isEditingThis = editandoObsId === g.id_gasto;
+                          const simbolo = g.moneda === 'PEN' ? 'S/' : '$';
+                          return (
+                            <div
+                              key={g.id_gasto}
+                              className="bg-slate-900/90 border border-slate-800 rounded-lg p-3 text-xs space-y-2 hover:border-slate-700 transition-colors"
+                            >
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-mono font-bold text-teal-400">Gasto #{g.id_gasto}</span>
+                                  <span className="bg-slate-800 px-1.5 py-0.5 rounded font-mono text-[10px] text-slate-300">
+                                    DAM: {g.dam_numero || 'N/A'}
+                                  </span>
+                                  {g.maestro_factura && (
+                                    <span className="bg-slate-800 px-1.5 py-0.5 rounded font-mono text-[10px] text-slate-300">
+                                      Fact: {g.maestro_factura}
+                                    </span>
+                                  )}
+                                  <span className="text-slate-400 truncate max-w-[180px]">
+                                    {g.proveedor_nombre || 'Sin Proveedor'}
+                                  </span>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  <span className="font-mono font-bold text-slate-200">
+                                    {simbolo} {parseFloat(g.monto_original || 0).toFixed(2)}
+                                  </span>
+                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                                    g.estado_pago === 'PENDIENTE'
+                                      ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                                      : g.estado_pago === 'PARCIAL'
+                                      ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                                      : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                                  }`}>
+                                    {g.estado_pago}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {isEditingThis ? (
+                                <div className="pt-1 space-y-2">
+                                  <textarea
+                                    rows={2}
+                                    value={textoObsTemp}
+                                    onChange={(e) => setTextoObsTemp(e.target.value)}
+                                    placeholder='Ej: "Sobrecosto 4 días extra por demora en aforo físico"...'
+                                    className="w-full px-3 py-1.5 text-xs bg-slate-950 border border-amber-500/50 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:border-teal-500 resize-y"
+                                  />
+                                  <div className="flex items-center justify-end gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => { setEditandoObsId(null); setTextoObsTemp(''); }}
+                                      className="px-2.5 py-1 text-[11px] font-semibold text-slate-400 hover:text-slate-200"
+                                    >
+                                      Cancelar
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={isGuardandoObs}
+                                      onClick={() => handleGuardarObservacionGasto(g.id_gasto)}
+                                      className="px-3 py-1 bg-teal-600 hover:bg-teal-500 text-white rounded text-[11px] font-bold transition-colors disabled:opacity-50 cursor-pointer"
+                                    >
+                                      {isGuardandoObs ? 'Guardando...' : 'Guardar Observación'}
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="flex items-start justify-between gap-3 pt-1 border-t border-slate-800/70">
+                                  <div className="flex-1">
+                                    {g.observaciones ? (
+                                      <p className="text-[11px] text-amber-300/95 italic">
+                                        💬 <strong className="not-italic text-amber-400">Observación:</strong> "{g.observaciones}"
+                                      </p>
+                                    ) : (
+                                      <p className="text-[11px] text-slate-500 italic">
+                                        Sin observación específica registrada en este gasto.
+                                      </p>
+                                    )}
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditandoObsId(g.id_gasto);
+                                      setTextoObsTemp(g.observaciones || '');
+                                    }}
+                                    className="text-[11px] font-semibold text-teal-400 hover:text-teal-300 shrink-0 flex items-center gap-1 cursor-pointer"
+                                  >
+                                    <Pencil size={11} className="inline-block shrink-0" />
+                                    <span>{g.observaciones ? 'Editar' : '+ Agregar observación'}</span>
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : (

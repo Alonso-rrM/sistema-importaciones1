@@ -183,6 +183,7 @@ class RegistroGasto(Base):
     id_tipo_doc = Column(Integer, ForeignKey("catalogo_documentos_pago.id_tipo_doc"))
     numero_documento = Column(String(50))
     fecha_vencimiento = Column(Date)
+    observaciones = Column(Text, nullable=True)
 
     dam = relationship("DetalleDam", back_populates="gastos")
     concepto_rel = relationship("CatConceptoPago", back_populates="gastos")
@@ -326,6 +327,7 @@ class GastoEliminado(AuditoriaMixin, Base):
     id_tipo_doc = Column(Integer)
     numero_documento = Column(String(50))
     fecha_vencimiento = Column(Date)
+    observaciones = Column(Text, nullable=True)
 
 class PagoEliminado(AuditoriaMixin, Base):
     __tablename__ = "pagos_eliminados"

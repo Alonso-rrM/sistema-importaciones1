@@ -574,6 +574,11 @@ const Pagos = () => {
                         <div className="font-semibold text-slate-200 truncate">
                           {g.concepto_nombre || 'Gasto General'}
                         </div>
+                        {g.observaciones && (
+                          <div className="text-[11px] text-amber-400/90 italic truncate mt-0.5" title={g.observaciones}>
+                            💬 {g.observaciones}
+                          </div>
+                        )}
                         <div className="text-[11px] text-slate-400 truncate flex items-center gap-1.5 mt-0.5">
                           <span>🏢</span>
                           <span className="truncate">{g.proveedor_nombre || 'Proveedor Sin Especificar'}</span>
@@ -694,6 +699,12 @@ const Pagos = () => {
                       <span className="text-slate-200 truncate block">{selectedGasto.proveedor_nombre || 'N/A'}</span>
                     </div>
                   </div>
+                  {selectedGasto.observaciones && (
+                    <div className="pt-2 border-t border-slate-800/80 text-xs flex items-start gap-2">
+                      <span className="text-amber-400 font-bold uppercase text-[10px] shrink-0 mt-0.5">💬 Observación del Gasto:</span>
+                      <span className="text-slate-200 italic">{selectedGasto.observaciones}</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* DECK DE KPIS FINANCIEROS */}
@@ -932,7 +943,7 @@ const Pagos = () => {
                   setSearchHistorial(e.target.value);
                   setPageHistorial(1);
                 }}
-                placeholder="Buscar por DAM, Voucher, Importador, Concepto, Comprobante..."
+                placeholder="Buscar por DAM, Voucher, Importador, Concepto, Observación, Comprobante..."
                 className="w-full pl-8 pr-8 py-2 bg-slate-950 border border-slate-700 rounded-lg text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-purple-500 transition-all"
               />
               {searchHistorial && (
@@ -1013,6 +1024,11 @@ const Pagos = () => {
                         </td>
                         <td className="py-3 px-4">
                           <div className="font-medium text-slate-200">{pago.concepto_nombre || 'N/A'}</div>
+                          {pago.gasto_observaciones && (
+                            <div className="text-[10px] text-amber-400/90 italic truncate max-w-[180px]" title={pago.gasto_observaciones}>
+                              💬 {pago.gasto_observaciones}
+                            </div>
+                          )}
                           <div className="text-[10px] text-slate-400 truncate max-w-[150px]">{pago.proveedor_nombre || ''}</div>
                         </td>
                         <td className="py-3 px-4">
