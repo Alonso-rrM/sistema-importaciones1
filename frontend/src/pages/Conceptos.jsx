@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import api from '../services/api';
 import useDebounce from '../hooks/useDebounce';
+import { Tags, Search, Plus, Pencil, Trash2, RotateCcw, Ban, FileText } from 'lucide-react';
 
 const Conceptos = () => {
   const [conceptos, setConceptos] = useState([]);
@@ -207,7 +208,7 @@ const Conceptos = () => {
       <header className="px-6 py-4 bg-slate-900/90 border-b border-slate-800 flex flex-wrap items-center justify-between gap-4 shrink-0">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-center text-xl shadow-inner">
-            🏷️
+            <Tags size={20} className="inline-block shrink-0 text-teal-400" />
           </div>
           <div>
             <div className="flex items-center gap-2">
@@ -227,7 +228,7 @@ const Conceptos = () => {
             onClick={handleNuevo}
             className="px-3.5 py-1.5 bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold rounded-lg transition-colors shadow-lg shadow-teal-600/20 flex items-center gap-1.5 cursor-pointer"
           >
-            <span>+</span>
+            <Plus size={14} className="shrink-0" />
             <span>Nuevo Concepto</span>
           </button>
         </div>
@@ -248,7 +249,9 @@ const Conceptos = () => {
                 placeholder="Buscar por Nombre o Descripción..."
                 className="w-full pl-9 pr-4 py-2 text-xs bg-slate-950 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500 transition-all"
               />
-              <span className="absolute inset-y-0 left-3 flex items-center text-slate-400 text-xs">🔍</span>
+              <span className="absolute inset-y-0 left-3 flex items-center text-slate-400 text-xs">
+                <Search size={14} className="inline-block shrink-0" />
+              </span>
               {busqueda && (
                 <button onClick={() => setBusqueda('')} className="absolute inset-y-0 right-3 flex items-center text-slate-400 hover:text-white text-xs">✕</button>
               )}
@@ -307,8 +310,8 @@ const Conceptos = () => {
                     onClick={() => handleSelect(c)}
                     className={`p-3 rounded-lg cursor-pointer transition-all border ${
                       isSelected
-                        ? 'bg-teal-950/30 border-teal-500/80 shadow-md ring-1 ring-teal-500/20'
-                        : 'bg-slate-900/60 hover:bg-slate-800/70 border-slate-800/80'
+                        ? 'row-selected'
+                        : 'bg-white dark:bg-slate-900/60 hover:bg-slate-50 dark:hover:bg-slate-800/70 border-slate-200 dark:border-slate-800/80'
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
@@ -367,7 +370,7 @@ const Conceptos = () => {
           {!selectedConcepto && viewMode !== 'NUEVO' ? (
             <div className="flex-1 flex flex-col items-center justify-center p-12 text-center text-slate-500">
               <div className="w-16 h-16 rounded-2xl bg-teal-500/10 border border-teal-500/20 flex items-center justify-center text-3xl mb-4 shadow-inner">
-                🏷️
+                <Tags size={32} className="inline-block shrink-0 text-teal-400" />
               </div>
               <h3 className="text-base font-bold text-slate-300">Ficha de Concepto de Gasto</h3>
               <p className="text-xs text-slate-500 max-w-sm mt-1.5">
@@ -375,9 +378,10 @@ const Conceptos = () => {
               </p>
               <button
                 onClick={handleNuevo}
-                className="mt-4 px-4 py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-xs font-bold transition-all shadow-md shadow-teal-600/20"
+                className="mt-4 px-4 py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-xs font-bold transition-all shadow-md shadow-teal-600/20 flex items-center gap-1.5"
               >
-                + Registrar Nuevo Concepto
+                <Plus size={14} className="shrink-0" />
+                <span>Registrar Nuevo Concepto</span>
               </button>
             </div>
           ) : (
@@ -387,7 +391,7 @@ const Conceptos = () => {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2.5">
                     <h2 className="text-base font-bold text-white tracking-tight">
-                      {viewMode === 'NUEVO' ? '✨ Nuevo Concepto de Pago' : selectedConcepto?.nombre}
+                      {viewMode === 'NUEVO' ? 'Nuevo Concepto de Pago' : selectedConcepto?.nombre}
                     </h2>
                     {viewMode !== 'NUEVO' && (
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
@@ -408,14 +412,14 @@ const Conceptos = () => {
                             onClick={handleModificar}
                             className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/30 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 cursor-pointer"
                           >
-                            <span>✏️</span>
+                            <Pencil size={13} className="shrink-0" />
                             <span>Modificar</span>
                           </button>
                           <button
                             onClick={handleEliminar}
                             className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-rose-300 border border-rose-500/30 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 cursor-pointer"
                           >
-                            <span>🗑️</span>
+                            <Trash2 size={13} className="shrink-0" />
                             <span>Desactivar</span>
                           </button>
                         </>
@@ -425,14 +429,14 @@ const Conceptos = () => {
                             onClick={handleRestaurar}
                             className="px-2.5 py-1.5 bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 cursor-pointer"
                           >
-                            <span>♻️</span>
+                            <RotateCcw size={13} className="shrink-0" />
                             <span>Restaurar</span>
                           </button>
                           <button
                             onClick={handleEliminarFisico}
                             className="px-2.5 py-1.5 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 cursor-pointer"
                           >
-                            <span>🚫</span>
+                            <Ban size={13} className="shrink-0" />
                             <span>Eliminar Definitivo</span>
                           </button>
                         </>
@@ -462,7 +466,7 @@ const Conceptos = () => {
               {viewMode === 'DETALLE' ? (
                 <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-5 space-y-4">
                   <div className="flex items-center gap-2 pb-3 border-b border-slate-800">
-                    <span className="text-teal-400 text-sm">📋</span>
+                    <FileText size={15} className="text-teal-400 shrink-0" />
                     <h3 className="text-sm font-bold text-white uppercase tracking-wider">
                       Datos del Concepto
                     </h3>
@@ -501,7 +505,7 @@ const Conceptos = () => {
                 <form onSubmit={handleGuardar} className="bg-slate-950/80 border border-slate-800 rounded-xl p-5 space-y-4">
                   <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                     <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                      <span className="text-teal-400">✏️</span>
+                      <Pencil size={15} className="text-teal-400 shrink-0" />
                       <span>{viewMode === 'NUEVO' ? 'Registro de Concepto' : 'Edición de Concepto'}</span>
                     </h3>
                   </div>

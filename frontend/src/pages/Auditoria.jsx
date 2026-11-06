@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
+import { ShieldCheck, Package, FileText, Banknote, Scale, Eye } from 'lucide-react';
 
 const Auditoria = () => {
   const [registros, setRegistros] = useState([]);
@@ -8,10 +9,10 @@ const Auditoria = () => {
   const [activeTab, setActiveTab] = useState("maestros");
 
   const tabs = [
-    { id: "maestros", label: "Maestros (Contenedores)", icon: "📦" },
-    { id: "dams", label: "Declaraciones (DAMs)", icon: "📄" },
-    { id: "gastos", label: "Gastos Logísticos", icon: "💸" },
-    { id: "pagos", label: "Liquidación de Pagos", icon: "⚖️" }
+    { id: "maestros", label: "Maestros (Contenedores)", icon: Package },
+    { id: "dams", label: "Declaraciones (DAMs)", icon: FileText },
+    { id: "gastos", label: "Gastos Logísticos", icon: Banknote },
+    { id: "pagos", label: "Liquidación de Pagos", icon: Scale }
   ];
 
   useEffect(() => {
@@ -46,7 +47,7 @@ const Auditoria = () => {
       <header className="px-6 py-4 bg-slate-900/90 border-b border-slate-800 flex flex-wrap items-center justify-between gap-4 shrink-0">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-center text-xl shadow-inner">
-            🛡️
+            <ShieldCheck size={20} className="inline-block shrink-0 text-teal-400" />
           </div>
           <div>
             <div className="flex items-center gap-2">
@@ -72,20 +73,23 @@ const Auditoria = () => {
         
         {/* PESTAÑAS MODERNAS */}
         <div className="flex items-center gap-2 p-1.5 bg-slate-900/80 border border-slate-800 rounded-xl shrink-0">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-                activeTab === tab.id
-                  ? 'bg-teal-600 text-white shadow-md shadow-teal-600/20'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-              }`}
-            >
-              <span>{tab.icon}</span>
-              <span>{tab.label}</span>
-            </button>
-          ))}
+          {tabs.map((tab) => {
+            const IconComponent = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                  activeTab === tab.id
+                    ? 'bg-teal-600 text-white shadow-md shadow-teal-600/20'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                }`}
+              >
+                <IconComponent size={14} className="shrink-0" />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
         </div>
 
         {/* TABLA DE AUDITORÍA */}
@@ -145,9 +149,10 @@ const Auditoria = () => {
                       <td className="px-4 py-3 text-center">
                         <button
                           onClick={() => setModalData(row)}
-                          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-teal-300 border border-teal-500/30 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-teal-300 border border-teal-500/30 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 mx-auto cursor-pointer"
                         >
-                          🔍 Ficha
+                          <Eye size={13} className="shrink-0" />
+                          <span>Ficha</span>
                         </button>
                       </td>
                     </tr>
@@ -166,7 +171,7 @@ const Auditoria = () => {
           <div className="bg-slate-900 border border-slate-800 rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col text-slate-100" onClick={e => e.stopPropagation()}>
             <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950">
               <div className="flex items-center gap-2.5">
-                <span className="text-teal-400 text-lg">🛡️</span>
+                <ShieldCheck size={18} className="text-teal-400 shrink-0" />
                 <h3 className="font-bold text-sm text-white">
                   Pista Forense #{modalData.id_eliminacion} · {activeTab.toUpperCase()}
                 </h3>

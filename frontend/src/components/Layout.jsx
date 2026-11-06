@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { Outlet, NavLink, useNavigate, Navigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
+import { BarChart3, Package, FileText, Building2, Users, Briefcase, Factory, Tags, FileDigit, Landmark, Ticket, Banknote, Scale, ShieldCheck, Settings, Sun, Moon, LogOut } from 'lucide-react';
 
 function Layout() {
   const navigate = useNavigate();
@@ -25,8 +26,8 @@ function Layout() {
 
   const navClass = ({ isActive }) => 
     isActive 
-      ? "relative group flex items-center justify-center h-10 w-10 mx-auto rounded-md bg-teal-500/15 text-teal-300 font-medium border border-teal-500/30 transition-all"
-      : "group flex items-center justify-center h-10 w-10 mx-auto rounded-md text-slate-400 hover:text-slate-100 hover:bg-slate-700/60 transition-colors";
+      ? "relative group flex items-center justify-center h-10 w-10 mx-auto rounded-md bg-teal-500/15 text-teal-600 dark:text-teal-300 font-medium border border-teal-500/30 transition-all"
+      : "group flex items-center justify-center h-10 w-10 mx-auto rounded-md text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors";
 
   return (
     <div className="h-screen w-full flex overflow-hidden font-sans text-slate-200 bg-slate-900 antialiased selection:bg-teal-500 selection:text-white">
@@ -36,28 +37,28 @@ function Layout() {
           <div className="h-9 w-9 bg-teal-500/10 border border-teal-500/30 rounded-lg flex items-center justify-center text-teal-400 font-bold text-xs" title="ERP Admin">ER</div>
           <div className="w-6 h-px bg-slate-700 my-0.5"></div>
           <nav className="flex flex-col gap-2 w-full px-2">
-            <NavLink to="/app/reportes" className={navClass} title="Centro de Reportes & Analítica">📊</NavLink>
+            <NavLink to="/app/reportes" className={navClass} title="Centro de Reportes & Analítica"><BarChart3 size={18} className="shrink-0" /></NavLink>
             <div className="w-6 h-px bg-slate-700 my-0.5 mx-auto"></div>
-            <NavLink to="/app/logistica" className={navClass} title="Logística y Maestros">📦<span className="active-indicator absolute left-[-8px] top-2 bottom-2 w-0.5 bg-teal-400 rounded-r hidden"></span></NavLink>
-            <NavLink to="/app/dams" className={navClass} title="Declaraciones (DAMs)">📄</NavLink>
+            <NavLink to="/app/logistica" className={navClass} title="Logística y Maestros"><Package size={18} className="shrink-0" /><span className="active-indicator absolute left-[-8px] top-2 bottom-2 w-0.5 bg-teal-400 rounded-r hidden"></span></NavLink>
+            <NavLink to="/app/dams" className={navClass} title="Declaraciones (DAMs)"><FileText size={18} className="shrink-0" /></NavLink>
             <div className="w-6 h-px bg-slate-700 my-1 mx-auto"></div>
-            <NavLink to="/app/importadores" className={navClass} title="Importadores">🏢</NavLink>
-            <NavLink to="/app/proveedores" className={navClass} title="Proveedores">🤝</NavLink>
-            <NavLink to="/app/agentes" className={navClass} title="Agentes Aduanas">🛂</NavLink>
-            <NavLink to="/app/almacenes" className={navClass} title="Almacenes">🏭</NavLink>
-            <NavLink to="/app/conceptos" className={navClass} title="Conceptos">🏷️</NavLink>
-            <NavLink to="/app/comprobantes" className={navClass} title="Tipos Comprobante">📑</NavLink>
-            <NavLink to="/app/bancos" className={navClass} title="Bancos">🏦</NavLink>
+            <NavLink to="/app/importadores" className={navClass} title="Importadores"><Building2 size={18} className="shrink-0" /></NavLink>
+            <NavLink to="/app/proveedores" className={navClass} title="Proveedores"><Users size={18} className="shrink-0" /></NavLink>
+            <NavLink to="/app/agentes" className={navClass} title="Agentes Aduanas"><Briefcase size={18} className="shrink-0" /></NavLink>
+            <NavLink to="/app/almacenes" className={navClass} title="Almacenes"><Factory size={18} className="shrink-0" /></NavLink>
+            <NavLink to="/app/conceptos" className={navClass} title="Conceptos"><Tags size={18} className="shrink-0" /></NavLink>
+            <NavLink to="/app/comprobantes" className={navClass} title="Tipos Comprobante"><FileDigit size={18} className="shrink-0" /></NavLink>
+            <NavLink to="/app/bancos" className={navClass} title="Bancos"><Landmark size={18} className="shrink-0" /></NavLink>
             <div className="w-6 h-px bg-slate-700 my-1 mx-auto"></div>
-            <NavLink to="/app/vouchers" className={navClass} title="Vouchers">🎟️</NavLink>
-            <NavLink to="/app/gastos" className={navClass} title="Registro Gastos">💸</NavLink>
-            <NavLink to="/app/pagos" className={navClass} title="Liquidación Pagos">⚖️</NavLink>
+            <NavLink to="/app/vouchers" className={navClass} title="Vouchers"><Ticket size={18} className="shrink-0" /></NavLink>
+            <NavLink to="/app/gastos" className={navClass} title="Registro Gastos"><Banknote size={18} className="shrink-0" /></NavLink>
+            <NavLink to="/app/pagos" className={navClass} title="Liquidación Pagos"><Scale size={18} className="shrink-0" /></NavLink>
             <div className="w-6 h-px bg-slate-700 my-1 mx-auto"></div>
-            <NavLink to="/app/auditoria" className={navClass} title="Auditoría">🛡️</NavLink>
+            <NavLink to="/app/auditoria" className={navClass} title="Auditoría"><ShieldCheck size={18} className="shrink-0" /></NavLink>
             {userRole === 1 && (
               <>
                 <div className="w-6 h-px bg-slate-700 my-1 mx-auto"></div>
-                <NavLink to="/app/admin" className={navClass} title="Administración & Carga Masiva">⚙️</NavLink>
+                <NavLink to="/app/admin" className={navClass} title="Administración & Carga Masiva"><Settings size={18} className="shrink-0" /></NavLink>
               </>
             )}
           </nav>
@@ -66,13 +67,13 @@ function Layout() {
           <button
             type="button"
             onClick={toggleTheme}
-            className="theme-toggle-btn relative h-8 w-8 rounded-full bg-slate-700 border border-slate-600 flex items-center justify-center text-sm hover:scale-105 transition-all cursor-pointer shadow-sm"
+            className="theme-toggle-btn relative h-8 w-8 rounded-full bg-slate-700 border border-slate-600 flex items-center justify-center text-sm hover:scale-105 transition-all cursor-pointer shadow-sm text-slate-200"
             title={isDark ? "Cambiar a Modo Claro" : "Cambiar a Modo Oscuro"}
           >
-            {isDark ? '☀️' : '🌙'}
+            {isDark ? <Sun size={15} className="shrink-0" /> : <Moon size={15} className="shrink-0" />}
           </button>
           <button onClick={cerrarSesion} className="relative h-8 w-8 rounded-full bg-slate-700 border border-slate-600 flex items-center justify-center font-semibold text-slate-300 hover:ring-2 hover:ring-rose-500 transition-all cursor-pointer" title="Cerrar Sesión">
-            <span className="text-[10px] font-mono">X</span>
+            <LogOut size={15} className="shrink-0" />
           </button>
         </div>
       </aside>
@@ -91,7 +92,7 @@ function Layout() {
               className="theme-toggle-btn flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer shadow-sm bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
               title={isDark ? "Cambiar a Modo Claro" : "Cambiar a Modo Oscuro"}
             >
-              <span>{isDark ? '☀️' : '🌙'}</span>
+              <span>{isDark ? <Sun size={15} className="shrink-0 inline" /> : <Moon size={15} className="shrink-0 inline" />}</span>
               <span className="hidden sm:inline font-medium">{isDark ? 'Modo Claro' : 'Modo Oscuro'}</span>
             </button>
             <div className="flex items-center gap-1.5 text-[11px] text-slate-400"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span><span>BD Conectada</span></div>

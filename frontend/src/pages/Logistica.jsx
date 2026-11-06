@@ -7,6 +7,7 @@ import Paginador from '../components/Paginador';
 import { descargarExcel } from '../utils/exportUtils';
 import ModalLiquidacionContenedor from '../components/ModalLiquidacionContenedor';
 import ModalCrearProveedorRapido from '../components/ModalCrearProveedorRapido';
+import { Download, Clock, Search, Settings, FileText, Banknote, Trash2, Zap, CheckCircle2, AlertTriangle, Unlock, CreditCard, Receipt, FolderOpen } from 'lucide-react';
 
 const KPI_KEYS = ['FIJO_DESPACHO', 'POST_LEVANTE', 'EXTRAORDINARIO', 'GLOBAL'];
 
@@ -396,10 +397,10 @@ const Logistica = () => {
                 type="button" 
                 onClick={handleExportarExcel} 
                 disabled={isExportando}
-                className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded bg-emerald-700/80 hover:bg-emerald-600 text-white shadow-sm transition-all disabled:opacity-50 cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold rounded bg-emerald-700/80 hover:bg-emerald-600 text-white shadow-sm transition-all disabled:opacity-50 cursor-pointer"
                 title="Descargar todos los expedientes filtrados a Excel"
               >
-                <span>{isExportando ? '⏳' : '📥'}</span>
+                <span>{isExportando ? <Clock size={13} className="inline-block shrink-0 animate-spin" /> : <Download size={13} className="inline-block shrink-0" />}</span>
                 <span>{isExportando ? 'Exportando...' : 'Excel'}</span>
               </button>
               <button onClick={handleNuevo} className="inline-flex items-center px-2.5 py-1 text-[11px] font-bold rounded bg-teal-600 hover:bg-teal-500 text-white shadow-sm transition-all">+ Nuevo</button>
@@ -407,7 +408,7 @@ const Logistica = () => {
           </div>
           <div className="flex items-center gap-1.5">
             <div className="relative flex-1">
-              <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center text-slate-500 text-xs">🔍</span>
+              <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center text-slate-500 text-xs"><Search size={13} className="inline-block shrink-0" /></span>
               <input 
                 type="text" 
                 value={searchTerm} 
@@ -426,7 +427,7 @@ const Logistica = () => {
               }`}
               title="Alternar filtros avanzados"
             >
-              <span>⚙️</span>
+              <Settings size={13} className="inline-block shrink-0" />
               {hayFiltrosActivos && <span className="w-1.5 h-1.5 rounded-full bg-teal-400"></span>}
             </button>
           </div>
@@ -510,7 +511,7 @@ const Logistica = () => {
             const impNombre = importadoresMap[m.id_importador];
 
             return (
-              <article key={m.id_maestro} onClick={() => handleSelect(m)} className={`p-3 border-l-2 cursor-pointer transition-colors group ${isActive ? 'bg-teal-900/20 border-teal-500' : 'border-transparent hover:bg-slate-800/40'}`}>
+              <article key={m.id_maestro} onClick={() => handleSelect(m)} className={`p-3 cursor-pointer transition-all group ${isActive ? 'row-selected' : 'border-l-4 border-transparent hover:bg-slate-50 dark:hover:bg-slate-800/40'}`}>
                 <div className="flex items-start justify-between gap-2 mb-1.5">
                   <div className="flex items-center gap-2">
                     <span className={`font-mono text-[10px] font-medium px-1 rounded border ${isActive ? 'text-teal-400 bg-teal-500/10 border-teal-500/20' : 'text-slate-400 bg-slate-700 border-slate-600'}`}>#{m.id_maestro}</span>
@@ -558,7 +559,7 @@ const Logistica = () => {
       <section className={`flex-1 flex-col h-full bg-slate-900 overflow-hidden ${!viewMode ? 'hidden lg:flex' : 'flex'}`}>
         {!viewMode ? (
           <div className="flex-1 flex items-center justify-center text-slate-600">
-            <div className="text-center"><span className="text-4xl">📂</span><p className="mt-3 text-sm font-medium">Seleccione un expediente de la bandeja para auditar o pulse "+ Nuevo".</p></div>
+            <div className="text-center"><FolderOpen size={40} className="mx-auto text-slate-600 mb-2" /><p className="mt-3 text-sm font-medium">Seleccione un expediente de la bandeja para auditar o pulse "+ Nuevo".</p></div>
           </div>
         ) : (
           <>
@@ -582,14 +583,14 @@ const Logistica = () => {
                       className="px-2.5 py-1.5 rounded bg-indigo-600/30 border border-indigo-500/50 hover:bg-indigo-600/50 text-indigo-200 font-bold text-xs transition-colors flex items-center gap-1.5 shadow-sm cursor-pointer"
                       title="Ver e imprimir liquidación de caja de este contenedor o exportar a Excel"
                     >
-                      <span>🧾</span>
+                      <Receipt size={14} className="inline-block shrink-0" />
                       <span>Liquidación Caja</span>
                     </button>
                     {userRole === 1 && (formData.estado_documentario === 'ATE. TOTAL' || formData.estado_documentario?.includes('CON LEVANTE')) && (
-                      <button onClick={handleDesbloquearLevante} className="px-2.5 py-1.5 rounded bg-amber-600/20 border border-amber-500/40 hover:bg-amber-600/30 text-amber-300 font-bold text-xs transition-colors">🔓 Desbloquear Levante</button>
+                      <button onClick={handleDesbloquearLevante} className="px-2.5 py-1.5 rounded bg-amber-600/20 border border-amber-500/40 hover:bg-amber-600/30 text-amber-300 font-bold text-xs transition-colors flex items-center gap-1.5"><Unlock size={14} className="inline-block shrink-0" /> Desbloquear Levante</button>
                     )}
-                    <button onClick={() => setModalNuevaDam(prev => ({ ...prev, open: true }))} className="px-2.5 py-1.5 rounded bg-teal-600/20 border border-teal-500/40 hover:bg-teal-600/30 text-teal-300 font-bold text-xs transition-colors">📑 + DAM Rápida</button>
-                    <button onClick={() => setModalEliminar({ open: true, id: selectedId, motivo: '' })} className="px-2 py-1.5 rounded text-rose-400 hover:bg-rose-500/10 transition-colors">🗑️</button>
+                    <button onClick={() => setModalNuevaDam(prev => ({ ...prev, open: true }))} className="px-2.5 py-1.5 rounded bg-teal-600/20 border border-teal-500/40 hover:bg-teal-600/30 text-teal-300 font-bold text-xs transition-colors flex items-center gap-1.5"><FileText size={14} className="inline-block shrink-0" /> + DAM Rápida</button>
+                    <button onClick={() => setModalEliminar({ open: true, id: selectedId, motivo: '' })} className="px-2 py-1.5 rounded text-rose-400 hover:bg-rose-500/10 transition-colors flex items-center justify-center" title="Eliminar Expediente"><Trash2 size={15} className="inline-block shrink-0" /></button>
                   </>
                 )}
               </div>
@@ -1104,10 +1105,10 @@ const Logistica = () => {
                                     {g.estado_pago !== 'PAGADO' ? (
                                       <button
                                         onClick={(e) => { e.stopPropagation(); navigate(`/app/pagos?gasto_id=${g.id_gasto}`); }}
-                                        className="px-2 py-0.5 rounded bg-purple-600/30 hover:bg-purple-600 text-purple-300 hover:text-white text-[10px] font-bold border border-purple-500/40 transition-all flex items-center gap-1 mx-auto shadow-sm"
+                                        className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded border transition-all duration-150 shadow-sm bg-purple-50 text-purple-700 border-purple-300 hover:bg-purple-700 hover:text-white hover:border-purple-700 dark:bg-purple-600/30 dark:text-purple-300 dark:border-purple-500/40 dark:hover:bg-purple-600 dark:hover:text-white cursor-pointer"
                                         title="Registrar pago de este gasto"
                                       >
-                                        <span>💸</span> Pagar
+                                        <CreditCard className="shrink-0" size={14} /> Pagar
                                       </button>
                                     ) : (
                                       <span className="text-[10px] text-emerald-400 font-bold">Liquidado</span>
@@ -1203,7 +1204,7 @@ const Logistica = () => {
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4">
           <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95">
             <div className="bg-teal-950/40 border-b border-teal-800/50 p-4 flex items-center justify-between">
-              <h3 className="text-teal-300 font-bold text-sm flex items-center gap-2"><span>💸</span> Registrar Gasto Operativo para {formData.numero_factura}</h3>
+              <h3 className="text-teal-300 font-bold text-sm flex items-center gap-2"><Banknote size={16} className="inline-block shrink-0" /> Registrar Gasto Operativo para {formData.numero_factura}</h3>
               <button onClick={() => setModalNuevoGasto(prev => ({ ...prev, open: false }))} className="text-slate-400 hover:text-white">✕</button>
             </div>
             <form onSubmit={handleCrearGastoInline} className="p-5 space-y-3">

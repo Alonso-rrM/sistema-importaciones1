@@ -1,14 +1,15 @@
 import React, { useState, useMemo, useRef } from 'react';
 import api from '../services/api';
+import { Settings, Upload, ShieldCheck, Landmark, Tags, Users, Briefcase, Building2, Factory, FileSpreadsheet, FolderUp, AlertTriangle } from 'lucide-react';
 
 const CATALOGOS = [
-  { key: 'roles',        label: 'Roles',        icono: '🎭', cols: 'nombre_rol, descripcion' },
-  { key: 'bancos',       label: 'Bancos',        icono: '🏦', cols: 'nombre_banco' },
-  { key: 'conceptos',    label: 'Conceptos',     icono: '🏷️', cols: 'nombre_concepto, descripcion, tipo_gasto' },
-  { key: 'proveedores',  label: 'Proveedores',   icono: '🤝', cols: 'nombre, ruc' },
-  { key: 'agentes',      label: 'Agentes',       icono: '🛂', cols: 'nombre, ruc' },
-  { key: 'importadores', label: 'Importadores',  icono: '🏢', cols: 'nombre, ruc' },
-  { key: 'almacenes',    label: 'Almacenes',     icono: '🏭', cols: 'nombre' },
+  { key: 'roles',        label: 'Roles',        icono: ShieldCheck, cols: 'nombre_rol, descripcion' },
+  { key: 'bancos',       label: 'Bancos',        icono: Landmark,    cols: 'nombre_banco' },
+  { key: 'conceptos',    label: 'Conceptos',     icono: Tags,        cols: 'nombre_concepto, descripcion, tipo_gasto' },
+  { key: 'proveedores',  label: 'Proveedores',   icono: Users,       cols: 'nombre, ruc' },
+  { key: 'agentes',      label: 'Agentes',       icono: Briefcase,   cols: 'nombre, ruc' },
+  { key: 'importadores', label: 'Importadores',  icono: Building2,   cols: 'nombre, ruc' },
+  { key: 'almacenes',    label: 'Almacenes',     icono: Factory,     cols: 'nombre' },
 ];
 
 export default function AdminPanel() {
@@ -73,7 +74,7 @@ export default function AdminPanel() {
     <div className="h-full flex flex-col bg-slate-950 overflow-hidden">
       {/* HEADER */}
       <header className="bg-slate-900/80 border-b border-slate-800 px-6 py-3 flex items-center gap-3 shrink-0">
-        <span className="text-lg">⚙️</span>
+        <Settings size={18} className="text-teal-400 shrink-0" />
         <div>
           <h1 className="text-sm font-bold text-slate-100">Panel de Administración del Sistema</h1>
           <p className="text-[10px] text-slate-400">Carga masiva de catálogos · Solo SuperAdmin</p>
@@ -85,7 +86,7 @@ export default function AdminPanel() {
         {/* SECCIÓN: CARGA MASIVA */}
         <div className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden">
           <div className="bg-slate-800/60 border-b border-slate-700 px-5 py-3 flex items-center gap-2">
-            <span className="text-base">📤</span>
+            <Upload size={16} className="text-teal-400 shrink-0" />
             <h2 className="text-sm font-bold text-slate-100">Carga Masiva desde Excel</h2>
             <span className="ml-auto text-[10px] text-slate-500 font-mono">Formato: .xlsx</span>
           </div>
@@ -97,21 +98,24 @@ export default function AdminPanel() {
                 1. Selecciona el catálogo a cargar
               </label>
               <div className="grid grid-cols-4 gap-2">
-                {CATALOGOS.map(cat => (
-                  <button
-                    key={cat.key}
-                    type="button"
-                    onClick={() => { setCatalogoSeleccionado(cat.key); setResultado(null); setArchivo(null); if (fileInputRef.current) fileInputRef.current.value = ''; }}
-                    className={`p-2.5 rounded-lg border text-xs font-medium transition-all cursor-pointer flex flex-col items-center gap-1 ${
-                      catalogoSeleccionado === cat.key
-                        ? 'bg-teal-600/20 border-teal-500 text-teal-300'
-                        : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:border-slate-500 hover:text-slate-200'
-                    }`}
-                  >
-                    <span className="text-base">{cat.icono}</span>
-                    <span>{cat.label}</span>
-                  </button>
-                ))}
+                {CATALOGOS.map(cat => {
+                  const IconComp = cat.icono;
+                  return (
+                    <button
+                      key={cat.key}
+                      type="button"
+                      onClick={() => { setCatalogoSeleccionado(cat.key); setResultado(null); setArchivo(null); if (fileInputRef.current) fileInputRef.current.value = ''; }}
+                      className={`p-2.5 rounded-lg border text-xs font-medium transition-all cursor-pointer flex flex-col items-center gap-1.5 ${
+                        catalogoSeleccionado === cat.key
+                          ? 'bg-teal-600/20 border-teal-500 text-teal-300'
+                          : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:border-slate-500 hover:text-slate-200'
+                      }`}
+                    >
+                      <IconComp size={18} className="shrink-0" />
+                      <span>{cat.label}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -150,14 +154,14 @@ export default function AdminPanel() {
                   className="hidden"
                 />
                 {archivo ? (
-                  <div className="space-y-1">
-                    <span className="text-2xl">📗</span>
+                  <div className="space-y-1 flex flex-col items-center">
+                    <FileSpreadsheet size={32} className="text-emerald-400" />
                     <p className="text-sm font-bold text-teal-300">{archivo.name}</p>
                     <p className="text-[10px] text-slate-400">{(archivo.size / 1024).toFixed(1)} KB · Listo para cargar</p>
                   </div>
                 ) : (
-                  <div className="space-y-1">
-                    <span className="text-3xl">📁</span>
+                  <div className="space-y-1 flex flex-col items-center">
+                    <FolderUp size={32} className="text-slate-500" />
                     <p className="text-xs text-slate-400">Haz clic para seleccionar un archivo <span className="text-slate-200 font-bold">.xlsx</span></p>
                     <p className="text-[10px] text-slate-500">O arrastra el archivo aquí</p>
                   </div>
@@ -170,9 +174,10 @@ export default function AdminPanel() {
               type="button"
               onClick={handleCargar}
               disabled={!archivo || cargando}
-              className="w-full bg-teal-600 hover:bg-teal-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 rounded-xl text-sm transition-all shadow-lg cursor-pointer"
+              className="w-full bg-teal-600 hover:bg-teal-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 rounded-xl text-sm transition-all shadow-lg cursor-pointer flex items-center justify-center gap-2"
             >
-              {cargando ? '⏳ Procesando archivo...' : `📤 Cargar ${catActual?.label} desde Excel`}
+              <Upload size={16} className="shrink-0" />
+              <span>{cargando ? 'Procesando archivo...' : `Cargar ${catActual?.label} desde Excel`}</span>
             </button>
 
             {/* Resultado */}
@@ -223,7 +228,7 @@ export default function AdminPanel() {
 
         {/* AVISO DE SEGURIDAD */}
         <div className="bg-amber-950/20 border border-amber-700/30 rounded-xl px-5 py-3 text-xs text-amber-300/80 flex items-start gap-2">
-          <span className="shrink-0 mt-0.5">⚠️</span>
+          <AlertTriangle size={16} className="shrink-0 mt-0.5 text-amber-400" />
           <span>
             Este módulo es exclusivo del SuperAdministrador. Las inserciones son permanentes.
             Los registros duplicados serán rechazados automáticamente por el sistema.

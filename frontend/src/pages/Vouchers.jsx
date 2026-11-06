@@ -4,6 +4,7 @@ import api from '../services/api';
 import Select from 'react-select';
 import Paginador from '../components/Paginador';
 import useDebounce from '../hooks/useDebounce';
+import { Ticket, Scale, Search, Building2, Pencil, Trash2, Banknote, CreditCard, Lock, RotateCcw, Plus, FileText, AlertTriangle, Ban } from 'lucide-react';
 
 const selectDarkStyles = {
   control: (base, state) => ({
@@ -333,7 +334,7 @@ const Vouchers = () => {
       <header className="px-6 py-4 bg-slate-900/90 border-b border-slate-800 flex flex-wrap items-center justify-between gap-4 shrink-0">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-center text-xl shadow-inner">
-            🎟️
+            <Ticket size={20} className="inline-block shrink-0 text-teal-400" />
           </div>
           <div>
             <div className="flex items-center gap-2">
@@ -353,14 +354,14 @@ const Vouchers = () => {
             onClick={handleNuevo}
             className="px-3.5 py-1.5 bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold rounded-lg transition-colors shadow-lg shadow-teal-600/20 flex items-center gap-1.5 cursor-pointer"
           >
-            <span>+</span>
+            <Plus size={14} className="shrink-0" />
             <span>Nuevo Voucher</span>
           </button>
           <button
             onClick={() => navigate('/app/pagos')}
-            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-purple-300 text-xs font-semibold rounded-lg border border-purple-500/30 transition-colors flex items-center gap-1.5"
+            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-purple-300 text-xs font-semibold rounded-lg border border-purple-500/30 transition-colors flex items-center gap-1.5 cursor-pointer"
           >
-            <span>⚖️</span>
+            <Scale size={14} className="shrink-0" />
             <span>Ir a Pagos</span>
           </button>
         </div>
@@ -381,7 +382,9 @@ const Vouchers = () => {
                 placeholder="Buscar por Nº de Operación..."
                 className="w-full pl-9 pr-4 py-2 text-xs bg-slate-950 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500 transition-all"
               />
-              <span className="absolute inset-y-0 left-3 flex items-center text-slate-400 text-xs">🔍</span>
+              <span className="absolute inset-y-0 left-3 flex items-center text-slate-400 text-xs">
+                <Search size={14} className="inline-block shrink-0" />
+              </span>
               {searchTerm && (
                 <button onClick={() => setSearchTerm('')} className="absolute inset-y-0 right-3 flex items-center text-slate-400 hover:text-white text-xs">✕</button>
               )}
@@ -451,8 +454,8 @@ const Vouchers = () => {
                     onClick={() => handleSelect(v)}
                     className={`p-3 rounded-lg cursor-pointer transition-all border ${
                       isSelected
-                        ? 'bg-teal-950/30 border-teal-500/80 shadow-md ring-1 ring-teal-500/20'
-                        : 'bg-slate-900/60 hover:bg-slate-800/70 border-slate-800/80'
+                        ? 'row-selected'
+                        : 'bg-white dark:bg-slate-900/60 hover:bg-slate-50 dark:hover:bg-slate-800/70 border-slate-200 dark:border-slate-800/80'
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
@@ -482,8 +485,9 @@ const Vouchers = () => {
                       <div className="font-semibold text-slate-200 truncate">
                         {bName} · Op: {v.numero_operacion}
                       </div>
-                      <div className="text-[11px] text-slate-400 truncate mt-0.5">
-                        🏢 {iName}
+                      <div className="text-[11px] text-slate-400 truncate mt-0.5 flex items-center">
+                        <Building2 size={12} className="inline-block shrink-0 mr-1 text-slate-400" />
+                        <span>{iName}</span>
                       </div>
                     </div>
 
@@ -532,7 +536,7 @@ const Vouchers = () => {
           {!selectedVoucher && viewMode !== 'NUEVO' ? (
             <div className="flex-1 flex flex-col items-center justify-center p-12 text-center text-slate-500">
               <div className="w-16 h-16 rounded-2xl bg-teal-500/10 border border-teal-500/20 flex items-center justify-center text-3xl mb-4 shadow-inner">
-                🎟️
+                <Ticket size={32} className="inline-block shrink-0 text-teal-400" />
               </div>
               <h3 className="text-base font-bold text-slate-300">Estación de Gestión de Vouchers</h3>
               <p className="text-xs text-slate-500 max-w-sm mt-1.5">
@@ -540,9 +544,10 @@ const Vouchers = () => {
               </p>
               <button
                 onClick={handleNuevo}
-                className="mt-4 px-4 py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-xs font-bold transition-all shadow-md shadow-teal-600/20"
+                className="mt-4 px-4 py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-xs font-bold transition-all shadow-md shadow-teal-600/20 flex items-center gap-1.5"
               >
-                + Registrar Nuevo Voucher
+                <Plus size={14} className="shrink-0" />
+                <span>Registrar Nuevo Voucher</span>
               </button>
             </div>
           ) : (
@@ -553,7 +558,7 @@ const Vouchers = () => {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2.5">
                     <h2 className="text-base font-bold text-white tracking-tight">
-                      {viewMode === 'NUEVO' ? '✨ Nuevo Depósito Bancario' : `Voucher #${selectedVoucher?.id_voucher} · ${bancoSeleccionadoNombre}`}
+                      {viewMode === 'NUEVO' ? 'Nuevo Depósito Bancario' : `Voucher #${selectedVoucher?.id_voucher} · ${bancoSeleccionadoNombre}`}
                     </h2>
                     {viewMode !== 'NUEVO' && (
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
@@ -570,23 +575,23 @@ const Vouchers = () => {
                     <div className="flex items-center gap-2">
                       <button
                         onClick={handleModificar}
-                        className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/30 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 cursor-pointer"
+                        className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/30 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer"
                       >
-                        <span>✏️</span>
+                        <Pencil size={13} className="shrink-0" />
                         <span>Modificar</span>
                       </button>
                       <button
                         onClick={() => setModalEliminar({ open: true, voucher: selectedVoucher, motivo: '' })}
-                        className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-rose-300 border border-rose-500/30 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 cursor-pointer"
+                        className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-rose-300 border border-rose-500/30 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer"
                       >
-                        <span>🗑️</span>
+                        <Trash2 size={13} className="shrink-0" />
                         <span>Eliminar</span>
                       </button>
                       <button
                         onClick={() => navigate('/app/pagos')}
                         className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-bold transition-all shadow-md shadow-purple-600/20 flex items-center gap-1.5"
                       >
-                        <span>💸</span>
+                        <Banknote size={14} className="shrink-0" />
                         <span>Liquidar</span>
                       </button>
                     </div>
@@ -656,7 +661,7 @@ const Vouchers = () => {
               {viewMode === 'DETALLE' ? (
                 <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-5 space-y-4">
                   <div className="flex items-center gap-2 pb-3 border-b border-slate-800">
-                    <span className="text-teal-400 text-sm">📋</span>
+                    <FileText size={15} className="text-teal-400 shrink-0" />
                     <h3 className="text-sm font-bold text-white uppercase tracking-wider">
                       Detalles del Comprobante Bancario
                     </h3>
@@ -678,7 +683,7 @@ const Vouchers = () => {
 
                   {voucherTieneUso && (
                     <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-200 text-xs flex items-center gap-3">
-                      <span className="text-amber-400 text-base">⚠️</span>
+                      <AlertTriangle size={16} className="text-amber-400 shrink-0" />
                       <div>
                         <strong className="text-amber-300">Voucher en uso activo:</strong> Tiene consumidos <strong>{selectedVoucher.moneda} {(parseFloat(selectedVoucher.monto_total) - parseFloat(selectedVoucher.saldo_disponible)).toFixed(2)}</strong>.
                         Para eliminar este voucher, primero reverse los pagos vinculados abajo.
@@ -690,7 +695,7 @@ const Vouchers = () => {
                   <div className="pt-3 border-t border-slate-800 space-y-3">
                     <div className="flex items-center justify-between">
                       <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                        <span>💳</span>
+                        <CreditCard size={14} className="shrink-0 text-purple-400" />
                         <span>Pagos Financiados por este Voucher</span>
                       </h4>
                       <span className="text-[10px] font-mono text-slate-400">
@@ -744,10 +749,10 @@ const Vouchers = () => {
                               <button
                                 type="button"
                                 onClick={() => setModalReversarPagoVoucher({ open: true, pago, motivo: '' })}
-                                className="px-2.5 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 cursor-pointer"
+                                className="px-2.5 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer"
                                 title="Anular este pago y restituir el saldo al voucher"
                               >
-                                <span>🗑️</span>
+                                <Trash2 size={13} className="shrink-0" />
                                 <span>Reversar</span>
                               </button>
                             </div>
@@ -761,14 +766,14 @@ const Vouchers = () => {
                 <form onSubmit={handleGuardar} className="bg-slate-950/80 border border-slate-800 rounded-xl p-5 space-y-4">
                   <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                     <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                      <span className="text-teal-400">✏️</span>
+                      <Pencil size={15} className="text-teal-400 shrink-0" />
                       <span>{viewMode === 'NUEVO' ? 'Registro de Depósito Bancario' : 'Modificación de Voucher'}</span>
                     </h3>
                   </div>
 
                   {viewMode === 'MODIFICAR' && tienePagos && (
                     <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs flex items-center gap-2">
-                      <span>🔒</span>
+                      <Lock size={14} className="shrink-0 text-amber-400" />
                       <span><strong>Protección Contable Activa:</strong> Este voucher ya tiene pagos amortizados. El Monto, la Moneda y el Importador están bloqueados por integridad de libros.</span>
                     </div>
                   )}
@@ -903,7 +908,7 @@ const Vouchers = () => {
           <div className="bg-slate-900 border border-slate-800 rounded-xl shadow-2xl w-full max-w-md overflow-hidden text-slate-100">
             <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950">
               <div className="flex items-center gap-2 text-rose-400 font-bold text-sm">
-                <span>⚠️</span>
+                <AlertTriangle size={16} className="shrink-0" />
                 <h3>Eliminar Voucher #{modalEliminar.voucher?.id_voucher}</h3>
               </div>
               <button onClick={() => setModalEliminar({ open: false, voucher: null, motivo: '' })} className="text-slate-400 hover:text-white text-xs">✕</button>
@@ -913,7 +918,7 @@ const Vouchers = () => {
               {voucherTieneUso ? (
                 <div className="p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-lg text-rose-300 text-xs space-y-2">
                   <div className="font-bold flex items-center gap-1.5 text-rose-400 text-sm">
-                    <span>⛔</span>
+                    <Ban size={15} className="shrink-0" />
                     <span>Eliminación Bloqueada</span>
                   </div>
                   <p>
@@ -979,7 +984,7 @@ const Vouchers = () => {
           <div className="bg-slate-900 border border-slate-800 rounded-xl shadow-2xl w-full max-w-md overflow-hidden text-slate-100">
             <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950">
               <div className="flex items-center gap-2 text-rose-400 font-bold text-sm">
-                <span>🔄</span>
+                <RotateCcw size={16} className="shrink-0" />
                 <h3>Reversar Pago #{modalReversarPagoVoucher.pago?.id_pago}</h3>
               </div>
               <button 

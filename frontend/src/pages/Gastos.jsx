@@ -6,6 +6,7 @@ import Paginador from '../components/Paginador';
 import ModalCrearProveedorRapido from '../components/ModalCrearProveedorRapido';
 import useDebounce from '../hooks/useDebounce';
 import { descargarExcel } from '../utils/exportUtils';
+import { Download, Clock, Search, Settings, FileText, Banknote, Trash2, Pencil, Zap, CheckCircle2, AlertTriangle, Building2, Scale, Package, BarChart3, CreditCard } from 'lucide-react';
 
 const selectDarkStyles = {
   control: (base, state) => ({
@@ -425,7 +426,7 @@ const Gastos = () => {
       <header className="px-6 py-4 bg-slate-900/90 border-b border-slate-800 flex flex-wrap items-center justify-between gap-4 shrink-0">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-center text-xl shadow-inner">
-            💸
+            <Banknote size={20} className="inline-block shrink-0 text-teal-400" />
           </div>
           <div>
             <div className="flex items-center gap-2">
@@ -448,7 +449,7 @@ const Gastos = () => {
             className="px-3.5 py-1.5 bg-emerald-700/80 hover:bg-emerald-600 text-white text-xs font-semibold rounded-lg border border-emerald-500/40 transition-colors flex items-center gap-1.5 shadow-sm disabled:opacity-50 cursor-pointer"
             title="Descargar todos los gastos filtrados a Excel"
           >
-            <span>{isExportando ? '⏳' : '📥'}</span>
+            <span>{isExportando ? <Clock size={13} className="inline-block shrink-0 animate-spin" /> : <Download size={13} className="inline-block shrink-0" />}</span>
             <span>{isExportando ? 'Exportando...' : 'Exportar Excel'}</span>
           </button>
           <button
@@ -462,14 +463,14 @@ const Gastos = () => {
             onClick={() => navigate('/app/pagos')}
             className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-purple-300 text-xs font-semibold rounded-lg border border-purple-500/30 transition-colors flex items-center gap-1.5"
           >
-            <span>⚖️</span>
+            <Scale size={14} className="inline-block shrink-0" />
             <span>Ir a Tesorería</span>
           </button>
           <button
             onClick={() => navigate('/app/logistica')}
             className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg border border-slate-700 transition-colors flex items-center gap-1.5"
           >
-            <span>📦</span>
+            <Package size={14} className="inline-block shrink-0" />
             <span>Logística</span>
           </button>
         </div>
@@ -483,7 +484,7 @@ const Gastos = () => {
               <span className="text-[10px] font-semibold uppercase text-slate-400 block tracking-wider">Cargados en Vista</span>
               <span className="text-xs font-mono font-bold text-slate-200">{gastos.length} de {totalRegistros}</span>
             </div>
-            <span className="text-base text-slate-500">📊</span>
+            <BarChart3 size={16} className="inline-block shrink-0 text-slate-500" />
           </div>
 
           <div className="bg-emerald-950/20 p-2.5 rounded-lg border border-emerald-500/30 flex items-center justify-between">
@@ -491,7 +492,7 @@ const Gastos = () => {
               <span className="text-[10px] font-semibold uppercase text-emerald-400 block tracking-wider">Liquidado (Vista)</span>
               <span className="text-xs font-mono font-bold text-emerald-400 tabular-nums">{formatMultiMoneda('liquidado')}</span>
             </div>
-            <span className="text-base text-emerald-400">✅</span>
+            <CheckCircle2 size={16} className="inline-block shrink-0 text-emerald-400" />
           </div>
 
           <div className="bg-rose-950/20 p-2.5 rounded-lg border border-rose-500/30 flex items-center justify-between">
@@ -499,7 +500,7 @@ const Gastos = () => {
               <span className="text-[10px] font-semibold uppercase text-rose-400 block tracking-wider">Pendiente (Vista)</span>
               <span className="text-xs font-mono font-bold text-rose-400 tabular-nums">{formatMultiMoneda('pendiente')}</span>
             </div>
-            <span className="text-base text-rose-400">⚠️</span>
+            <AlertTriangle size={16} className="inline-block shrink-0 text-rose-400" />
           </div>
 
           <div className="bg-amber-950/20 p-2.5 rounded-lg border border-amber-500/30 flex items-center justify-between">
@@ -507,7 +508,7 @@ const Gastos = () => {
               <span className="text-[10px] font-semibold uppercase text-amber-400 block tracking-wider">Parcial (Vista)</span>
               <span className="text-xs font-mono font-bold text-amber-400 tabular-nums">{formatMultiMoneda('parcial')}</span>
             </div>
-            <span className="text-base text-amber-400">⏳</span>
+            <Clock size={16} className="inline-block shrink-0 text-amber-400" />
           </div>
         </div>
       </section>
@@ -531,7 +532,7 @@ const Gastos = () => {
                   placeholder="Buscar Documento, DAM, Concepto o Factura..."
                   className="w-full pl-8 pr-7 py-1.5 text-xs bg-slate-950 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500 transition-all"
                 />
-                <span className="absolute inset-y-0 left-2.5 flex items-center text-slate-400 text-xs">🔍</span>
+                <span className="absolute inset-y-0 left-2.5 flex items-center text-slate-400 text-xs"><Search size={13} className="inline-block shrink-0" /></span>
                 {searchTerm && (
                   <button onClick={() => { setSearchTerm(''); setPage(1); }} className="absolute inset-y-0 right-2.5 flex items-center text-slate-400 hover:text-white text-xs">✕</button>
                 )}
@@ -546,7 +547,7 @@ const Gastos = () => {
                 }`}
                 title="Alternar filtros contables"
               >
-                <span>⚙️</span>
+                <Settings size={13} className="inline-block shrink-0" />
                 {hayFiltrosActivos && <span className="w-1.5 h-1.5 rounded-full bg-teal-400"></span>}
               </button>
             </div>
@@ -673,8 +674,8 @@ const Gastos = () => {
                     }}
                     className={`p-3 rounded-lg cursor-pointer transition-all border ${
                       isSelected
-                        ? 'bg-teal-950/30 border-teal-500/80 shadow-md ring-1 ring-teal-500/20'
-                        : 'bg-slate-900/60 hover:bg-slate-800/70 border-slate-800/80'
+                        ? 'row-selected'
+                        : 'bg-white dark:bg-slate-900/60 hover:bg-slate-50 dark:hover:bg-slate-800/70 border-slate-200 dark:border-slate-800/80'
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
@@ -707,7 +708,7 @@ const Gastos = () => {
                         {g.concepto_nombre || 'Gasto General'}
                       </div>
                       <div className="text-[11px] text-slate-400 truncate flex items-center gap-1.5 mt-0.5">
-                        <span>🏢</span>
+                        <Building2 size={12} className="inline-block shrink-0" />
                         <span className="truncate">{g.proveedor_nombre || 'Sin Proveedor'}</span>
                       </div>
                     </div>
@@ -751,7 +752,7 @@ const Gastos = () => {
           {!selectedGasto ? (
             <div className="flex-1 flex flex-col items-center justify-center p-12 text-center text-slate-500">
               <div className="w-16 h-16 rounded-2xl bg-teal-500/10 border border-teal-500/20 flex items-center justify-center text-3xl mb-4 shadow-inner">
-                💸
+                <Banknote size={36} className="inline-block shrink-0 text-teal-400" />
               </div>
               <h3 className="text-base font-bold text-slate-300">Estación de Detalle Contable</h3>
               <p className="text-xs text-slate-500 max-w-sm mt-1.5">
@@ -789,23 +790,23 @@ const Gastos = () => {
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => toggleDrawer(true, selectedGasto)}
-                      className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/30 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1"
+                      className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/30 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5"
                     >
-                      <span>✏️</span>
+                      <Pencil size={13} className="inline-block shrink-0" />
                       <span>Modificar</span>
                     </button>
                     <button
                       onClick={() => setModalEliminar({ open: true, id: selectedGasto.id_gasto, motivo: '' })}
-                      className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-rose-300 border border-rose-500/30 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1"
+                      className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-rose-300 border border-rose-500/30 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5"
                     >
-                      <span>🗑️</span>
+                      <Trash2 size={13} className="inline-block shrink-0" />
                       <span>Eliminar</span>
                     </button>
                     <button
                       onClick={() => navigate(`/app/pagos?gasto_id=${selectedGasto.id_gasto}`)}
                       className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-bold transition-all shadow-md shadow-purple-600/20 flex items-center gap-1.5"
                     >
-                      <span>💸</span>
+                      <CreditCard size={13} className="inline-block shrink-0" />
                       <span>Pagar</span>
                     </button>
                   </div>
@@ -869,7 +870,7 @@ const Gastos = () => {
               {/* FICHA TÉCNICA Y AUDITORÍA DEL GASTO */}
               <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-5 space-y-4">
                 <div className="flex items-center gap-2 pb-3 border-b border-slate-800">
-                  <span className="text-teal-400 text-sm">📑</span>
+                  <FileText size={16} className="inline-block shrink-0 text-teal-400" />
                   <h3 className="text-sm font-bold text-white uppercase tracking-wider">
                     Información Documentaria y Fiscal
                   </h3>
@@ -914,7 +915,7 @@ const Gastos = () => {
               <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-5 space-y-3">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                   <div className="flex items-center gap-2">
-                    <span className="text-purple-400 text-sm">💳</span>
+                    <CreditCard size={16} className="inline-block shrink-0 text-purple-400" />
                     <h3 className="text-sm font-bold text-white uppercase tracking-wider">
                       Amortizaciones y Pagos Aplicados
                     </h3>

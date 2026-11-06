@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
 import { descargarExcel } from '../utils/exportUtils';
+import { BarChart3, RefreshCw, Zap, Ship, Scale, Tags, FolderOpen, Download, TrendingUp, Building2 } from 'lucide-react';
 
 const Reportes = () => {
   const [loading, setLoading] = useState(true);
@@ -110,7 +111,7 @@ const Reportes = () => {
       <header className="flex flex-wrap items-center justify-between gap-4 pb-5 border-b border-slate-800">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-center text-2xl shadow-inner">
-            📊
+            <BarChart3 size={24} className="text-teal-400 shrink-0" />
           </div>
           <div>
             <div className="flex items-center gap-2">
@@ -178,10 +179,10 @@ const Reportes = () => {
           <button
             type="button"
             onClick={cargarCockpit}
-            className="p-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-300 text-xs transition"
+            className="p-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-300 text-xs transition cursor-pointer"
             title="Refrescar métricas"
           >
-            🔄
+            <RefreshCw size={14} className="shrink-0" />
           </button>
         </div>
       </header>
@@ -190,7 +191,7 @@ const Reportes = () => {
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-            <span>⚡</span>
+            <Zap size={14} className="text-teal-400 shrink-0" />
             <span>Cockpit Ejecutivo en Tiempo Real</span>
           </h2>
           {loading && <span className="text-xs text-teal-400 font-mono animate-pulse">Actualizando indicadores...</span>}
@@ -203,7 +204,7 @@ const Reportes = () => {
             <div>
               <div className="flex items-center justify-between mb-3 border-b border-slate-800 pb-2">
                 <div className="flex items-center gap-2">
-                  <span className="text-base">🚢</span>
+                  <Ship size={16} className="text-sky-400 shrink-0" />
                   <h3 className="text-xs font-bold text-white uppercase tracking-wider">Pipeline de Carga</h3>
                 </div>
                 <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-800 text-teal-300 border border-teal-500/30">
@@ -266,7 +267,7 @@ const Reportes = () => {
             <div>
               <div className="flex items-center justify-between mb-3 border-b border-slate-800 pb-2">
                 <div className="flex items-center gap-2">
-                  <span className="text-base">⚖️</span>
+                  <Scale size={16} className="text-purple-400 shrink-0" />
                   <h3 className="text-xs font-bold text-white uppercase tracking-wider">Semáforo de Tesorería</h3>
                 </div>
                 <span className="text-[10px] font-mono text-slate-400 uppercase">Cuentas por Pagar</span>
@@ -323,7 +324,7 @@ const Reportes = () => {
             <div>
               <div className="flex items-center justify-between mb-3 border-b border-slate-800 pb-2">
                 <div className="flex items-center gap-2">
-                  <span className="text-base">🏷️</span>
+                  <Tags size={16} className="text-teal-400 shrink-0" />
                   <h3 className="text-xs font-bold text-white uppercase tracking-wider">Estructura por Etapa</h3>
                 </div>
                 <span className="text-[10px] font-mono text-teal-400 font-bold">
@@ -388,7 +389,7 @@ const Reportes = () => {
       {/* 3. CENTRO DE EXPORTACIÓN Y GENERADOR DE REPORTES */}
       <section className="space-y-4 pt-2">
         <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-          <span>📁</span>
+          <FolderOpen size={14} className="text-teal-400 shrink-0" />
           <span>Biblioteca Central de Reportes & Datasets para Tablas Dinámicas</span>
         </h2>
 
@@ -421,7 +422,11 @@ const Reportes = () => {
             disabled={isExportandoSabana}
             className="px-5 py-3 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-emerald-600/30 transition-all flex items-center gap-2.5 shrink-0 disabled:opacity-50 cursor-pointer"
           >
-            <span className="text-base">{isExportandoSabana ? '⏳' : '📥'}</span>
+            {isExportandoSabana ? (
+              <RefreshCw size={15} className="shrink-0 animate-spin" />
+            ) : (
+              <Download size={15} className="shrink-0" />
+            )}
             <span>{isExportandoSabana ? 'Generando Sábana Global...' : 'Descargar Sábana Global (.xlsx)'}</span>
           </button>
         </div>
@@ -429,7 +434,7 @@ const Reportes = () => {
         {/* ESPACIO RESERVADO PARA REPORTES FUTUROS CON GERENCIA */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
           <div className="bg-slate-900/50 border border-slate-800 border-dashed rounded-xl p-4 flex items-center gap-3 text-slate-500">
-            <span className="text-2xl">📈</span>
+            <TrendingUp size={28} className="text-slate-600 shrink-0" />
             <div>
               <h4 className="text-xs font-bold text-slate-400">Reporte Ejecutivo de Landed Cost (Costo Unitario Puesto)</h4>
               <p className="text-[11px] text-slate-500 mt-0.5">Espacio reservado para las fórmulas de costeo que se definan con Gerencia General.</p>
@@ -437,7 +442,7 @@ const Reportes = () => {
           </div>
 
           <div className="bg-slate-900/50 border border-slate-800 border-dashed rounded-xl p-4 flex items-center gap-3 text-slate-500">
-            <span className="text-2xl">🏢</span>
+            <Building2 size={28} className="text-slate-600 shrink-0" />
             <div>
               <h4 className="text-xs font-bold text-slate-400">Ranking & Exposición de Proveedores Logísticos</h4>
               <p className="text-[11px] text-slate-500 mt-0.5">Módulo de auditoría de tarifas de navieras y almacenes en preparación.</p>

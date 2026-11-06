@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import api from '../services/api';
 import useDebounce from '../hooks/useDebounce';
+import { Landmark, Search, Pencil, Trash2 } from 'lucide-react';
 
 const Bancos = () => {
   const [bancos, setBancos] = useState([]);
@@ -187,7 +188,7 @@ const Bancos = () => {
       <header className="px-6 py-4 bg-slate-900/90 border-b border-slate-800 flex flex-wrap items-center justify-between gap-4 shrink-0">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-center text-xl shadow-inner">
-            🏦
+            <Landmark size={20} className="inline-block shrink-0 text-teal-400" />
           </div>
           <div>
             <div className="flex items-center gap-2">
@@ -228,7 +229,7 @@ const Bancos = () => {
                 placeholder="Buscar por Nombre del Banco..."
                 className="w-full pl-9 pr-4 py-2 text-xs bg-slate-950 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500 transition-all"
               />
-              <span className="absolute inset-y-0 left-3 flex items-center text-slate-400 text-xs">🔍</span>
+              <span className="absolute inset-y-0 left-3 flex items-center text-slate-400 text-xs"><Search size={14} className="inline-block shrink-0" /></span>
               {busqueda && (
                 <button onClick={() => setBusqueda('')} className="absolute inset-y-0 right-3 flex items-center text-slate-400 hover:text-white text-xs">✕</button>
               )}
@@ -287,8 +288,8 @@ const Bancos = () => {
                     onClick={() => handleSelect(b)}
                     className={`p-3 rounded-lg cursor-pointer transition-all border ${
                       isSelected
-                        ? 'bg-teal-950/30 border-teal-500/80 shadow-md ring-1 ring-teal-500/20'
-                        : 'bg-slate-900/60 hover:bg-slate-800/70 border-slate-800/80'
+                        ? 'row-selected'
+                        : 'bg-white dark:bg-slate-900/60 hover:bg-slate-50 dark:hover:bg-slate-800/70 border-slate-200 dark:border-slate-800/80'
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
@@ -333,7 +334,7 @@ const Bancos = () => {
           {!selectedBanco && viewMode !== 'NUEVO' ? (
             <div className="flex-1 flex flex-col items-center justify-center p-12 text-center text-slate-500">
               <div className="w-16 h-16 rounded-2xl bg-teal-500/10 border border-teal-500/20 flex items-center justify-center text-3xl mb-4 shadow-inner">
-                🏦
+                <Landmark size={36} className="inline-block shrink-0 text-teal-400" />
               </div>
               <h3 className="text-base font-bold text-slate-300">Ficha de Entidad Bancaria</h3>
               <p className="text-xs text-slate-500 max-w-sm mt-1.5">

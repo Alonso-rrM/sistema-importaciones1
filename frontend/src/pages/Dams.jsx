@@ -4,6 +4,7 @@ import api from '../services/api';
 import useDebounce from '../hooks/useDebounce';
 import Paginador from '../components/Paginador';
 import { descargarExcel } from '../utils/exportUtils';
+import { Download, Clock, Search, Settings, FileText, Banknote, Trash2, Zap, CheckCircle2, AlertTriangle, Unlock, CreditCard } from 'lucide-react';
 
 const Dams = () => {
   const location = useLocation();
@@ -272,10 +273,10 @@ const Dams = () => {
                 type="button" 
                 onClick={handleExportarExcel} 
                 disabled={isExportando}
-                className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded bg-emerald-700/80 hover:bg-emerald-600 text-white shadow-sm transition-all disabled:opacity-50 cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold rounded bg-emerald-700/80 hover:bg-emerald-600 text-white shadow-sm transition-all disabled:opacity-50 cursor-pointer"
                 title="Descargar todas las DAMs filtradas a Excel"
               >
-                <span>{isExportando ? '⏳' : '📥'}</span>
+                <span>{isExportando ? <Clock size={13} className="inline-block shrink-0 animate-spin" /> : <Download size={13} className="inline-block shrink-0" />}</span>
                 <span>{isExportando ? 'Exportando...' : 'Excel'}</span>
               </button>
               <button onClick={handleNuevo} className="inline-flex items-center px-2.5 py-1 text-[11px] font-bold rounded bg-teal-600 hover:bg-teal-500 text-white shadow-sm transition-all">+ Nueva DAM</button>
@@ -283,7 +284,7 @@ const Dams = () => {
           </div>
           <div className="flex items-center gap-1.5">
             <div className="relative flex-1">
-              <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center text-slate-500 text-xs">🔍</span>
+              <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center text-slate-500 text-xs"><Search size={13} className="inline-block shrink-0" /></span>
               <input 
                 type="text" 
                 value={searchTerm} 
@@ -302,7 +303,7 @@ const Dams = () => {
               }`}
               title="Alternar filtros avanzados"
             >
-              <span>⚙️</span>
+              <Settings size={13} className="inline-block shrink-0" />
               {hayFiltrosActivos && <span className="w-1.5 h-1.5 rounded-full bg-teal-400"></span>}
             </button>
           </div>
@@ -371,7 +372,7 @@ const Dams = () => {
             const pendienteAforo = d.estado_dam === 'PENDIENTE DE AFORO';
 
             return (
-              <article key={d.id_dam} onClick={() => handleSelect(d)} className={`p-3 border-l-2 cursor-pointer transition-colors group ${isActive ? 'bg-teal-900/20 border-teal-500' : 'border-transparent hover:bg-slate-800/40'}`}>
+              <article key={d.id_dam} onClick={() => handleSelect(d)} className={`p-3 cursor-pointer transition-all group ${isActive ? 'row-selected' : 'border-l-4 border-transparent hover:bg-slate-50 dark:hover:bg-slate-800/40'}`}>
                 <div className="flex items-start justify-between gap-2 mb-1.5">
                   <div className="flex items-center gap-2">
                     <span className={`font-mono text-[10px] font-medium px-1 rounded border ${isActive ? 'text-teal-400 bg-teal-500/10 border-teal-500/20' : 'text-slate-400 bg-slate-700 border-slate-600'}`}>#{d.id_dam}</span>
@@ -415,7 +416,7 @@ const Dams = () => {
         {!viewMode ? (
           <div className="flex-1 flex items-center justify-center text-slate-600">
             <div className="text-center">
-              <span className="text-4xl">📑</span>
+              <FileText size={40} className="mx-auto text-slate-600 mb-2" />
               <p className="mt-3 text-sm font-medium">Seleccione una declaración DAM de la bandeja o pulse "+ Nueva DAM".</p>
             </div>
           </div>
@@ -441,10 +442,12 @@ const Dams = () => {
               <div className="flex items-center gap-2">
                 {viewMode === 'MODIFICAR' && (
                   <>
-                    <button onClick={() => navigate('/app/gastos', { state: { fromDam: formData } })} className="px-3 py-1.5 rounded bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs shadow-sm transition-all flex items-center gap-1">
-                      <span>💸</span> + Registrar Gasto
+                    <button onClick={() => navigate('/app/gastos', { state: { fromDam: formData } })} className="px-3 py-1.5 rounded bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs shadow-sm transition-all flex items-center gap-1.5">
+                      <Banknote size={15} className="inline-block shrink-0" /> <span>+ Registrar Gasto</span>
                     </button>
-                    <button onClick={() => setModalEliminar({ open: true, id: selectedId, motivo: '' })} className="px-2 py-1.5 rounded text-rose-400 hover:bg-rose-500/10 transition-colors" title="Eliminar DAM">🗑️</button>
+                    <button onClick={() => setModalEliminar({ open: true, id: selectedId, motivo: '' })} className="px-2 py-1.5 rounded text-rose-400 hover:bg-rose-500/10 transition-colors" title="Eliminar DAM">
+                      <Trash2 size={15} className="inline-block shrink-0" />
+                    </button>
                   </>
                 )}
               </div>
@@ -483,7 +486,7 @@ const Dams = () => {
               <form onSubmit={handleGuardar} className="space-y-4">
                 <div className="bg-slate-800/30 border border-slate-700 rounded-lg p-4 space-y-3">
                   <h3 className="text-xs font-bold uppercase tracking-wider text-teal-400 border-b border-slate-700/80 pb-1.5 flex items-center gap-1.5">
-                    <span>📑</span> Datos Oficiales de la DAM
+                    <FileText size={15} className="inline-block shrink-0" /> <span>Datos Oficiales de la DAM</span>
                   </h3>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -570,18 +573,18 @@ const Dams = () => {
                 <div className="bg-slate-800/60 border border-teal-500/30 rounded-lg p-3.5 space-y-2 mt-4">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold uppercase tracking-wider text-teal-300 flex items-center gap-1.5">
-                      ⚡ Panel de Operaciones Aduaneras
+                      <Zap size={15} className="inline-block shrink-0 text-amber-400" /> Panel de Operaciones Aduaneras
                     </span>
                     <span className="text-[10px] font-mono text-slate-400">Estado Actual: <strong className="text-white">{formData.estado_dam}</strong></span>
                   </div>
                   <div className="flex flex-wrap gap-2 pt-1">
                     {formData.estado_dam === 'PENDIENTE DE AFORO' && (
                       <>
-                        <button type="button" onClick={() => handleCambiarEstadoDam('CON LEVANTE')} className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded text-xs font-bold transition-all shadow-sm">
-                          ✅ Aforo Conforme (Otorgar Levante)
+                        <button type="button" onClick={() => handleCambiarEstadoDam('CON LEVANTE')} className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded text-xs font-bold transition-all shadow-sm flex items-center gap-1.5">
+                          <CheckCircle2 size={14} className="inline-block shrink-0" /> Aforo Conforme (Otorgar Levante)
                         </button>
-                        <button type="button" onClick={() => handleCambiarEstadoDam('OBSERVADA / NOTIFICADA')} className="px-3 py-1.5 bg-rose-700 hover:bg-rose-600 text-white rounded text-xs font-bold transition-all shadow-sm">
-                          ⚠️ Reportar Observación SUNAT
+                        <button type="button" onClick={() => handleCambiarEstadoDam('OBSERVADA / NOTIFICADA')} className="px-3 py-1.5 bg-rose-700 hover:bg-rose-600 text-white rounded text-xs font-bold transition-all shadow-sm flex items-center gap-1.5">
+                          <AlertTriangle size={14} className="inline-block shrink-0" /> Reportar Observación SUNAT
                         </button>
                       </>
                     )}
@@ -589,42 +592,42 @@ const Dams = () => {
                     {formData.estado_dam === 'OBSERVADA / NOTIFICADA' && (
                       <>
                         {maestroActual?.tipo_valor === 'GARANTIZADO' ? (
-                          <button type="button" onClick={() => handleCambiarEstadoDam('CON LEVANTE (GARANTÍA ACTIVA)')} className="px-3 py-1.5 bg-cyan-700 hover:bg-cyan-600 text-white rounded text-xs font-bold transition-all shadow-sm">
-                            🔓 Otorgar Levante con Garantía (Art. 160)
+                          <button type="button" onClick={() => handleCambiarEstadoDam('CON LEVANTE (GARANTÍA ACTIVA)')} className="px-3 py-1.5 bg-cyan-700 hover:bg-cyan-600 text-white rounded text-xs font-bold transition-all shadow-sm flex items-center gap-1.5">
+                            <Unlock size={14} className="inline-block shrink-0" /> Otorgar Levante con Garantía (Art. 160)
                           </button>
                         ) : (
-                          <button type="button" onClick={() => handleCambiarEstadoDam('EN REVISIÓN')} className="px-3 py-1.5 bg-amber-700 hover:bg-amber-600 text-white rounded text-xs font-bold transition-all shadow-sm">
-                            ⏳ Subir Sustento (Pasar a En Revisión)
+                          <button type="button" onClick={() => handleCambiarEstadoDam('EN REVISIÓN')} className="px-3 py-1.5 bg-amber-700 hover:bg-amber-600 text-white rounded text-xs font-bold transition-all shadow-sm flex items-center gap-1.5">
+                            <Clock size={14} className="inline-block shrink-0" /> Subir Sustento (Pasar a En Revisión)
                           </button>
                         )}
                       </>
                     )}
 
                     {formData.estado_dam === 'EN REVISIÓN' && (
-                      <button type="button" onClick={() => handleCambiarEstadoDam('CON LEVANTE')} className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded text-xs font-bold transition-all shadow-sm">
-                        ✅ Diligencia Conforme (Otorgar Levante)
+                      <button type="button" onClick={() => handleCambiarEstadoDam('CON LEVANTE')} className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded text-xs font-bold transition-all shadow-sm flex items-center gap-1.5">
+                        <CheckCircle2 size={14} className="inline-block shrink-0" /> Diligencia Conforme (Otorgar Levante)
                       </button>
                     )}
 
                     {formData.estado_dam === 'CON LEVANTE (GARANTÍA ACTIVA)' && (
                       <>
-                        <button type="button" onClick={() => handleCambiarEstadoDam('EN REVISIÓN OMC (POST-LEVANTE)')} className="px-3 py-1.5 bg-orange-700 hover:bg-orange-600 text-white rounded text-xs font-bold transition-all shadow-sm">
-                          🔍 Iniciar Revisión OMC SUNAT
+                        <button type="button" onClick={() => handleCambiarEstadoDam('EN REVISIÓN OMC (POST-LEVANTE)')} className="px-3 py-1.5 bg-orange-700 hover:bg-orange-600 text-white rounded text-xs font-bold transition-all shadow-sm flex items-center gap-1.5">
+                          <Search size={14} className="inline-block shrink-0" /> Iniciar Revisión OMC SUNAT
                         </button>
-                        <button type="button" onClick={() => handleCambiarEstadoDam('GARANTÍA CERRADA / LIQUIDADA')} className="px-3 py-1.5 bg-emerald-800 hover:bg-emerald-700 text-white rounded text-xs font-bold transition-all shadow-sm">
-                          ✅ Cerrar Garantía (Sin Observación)
+                        <button type="button" onClick={() => handleCambiarEstadoDam('GARANTÍA CERRADA / LIQUIDADA')} className="px-3 py-1.5 bg-emerald-800 hover:bg-emerald-700 text-white rounded text-xs font-bold transition-all shadow-sm flex items-center gap-1.5">
+                          <CheckCircle2 size={14} className="inline-block shrink-0" /> Cerrar Garantía (Sin Observación)
                         </button>
                       </>
                     )}
 
                     {formData.estado_dam === 'EN REVISIÓN OMC (POST-LEVANTE)' && (
-                      <button type="button" onClick={() => handleCambiarEstadoDam('GARANTÍA CERRADA / LIQUIDADA')} className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded text-xs font-bold transition-all shadow-sm">
-                        ✅ Descarte OMC / Garantía Liberada
+                      <button type="button" onClick={() => handleCambiarEstadoDam('GARANTÍA CERRADA / LIQUIDADA')} className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded text-xs font-bold transition-all shadow-sm flex items-center gap-1.5">
+                        <CheckCircle2 size={14} className="inline-block shrink-0" /> Descarte OMC / Garantía Liberada
                       </button>
                     )}
 
                     {!['PENDIENTE DE AFORO', 'OBSERVADA / NOTIFICADA', 'EN REVISIÓN', 'CON LEVANTE (GARANTÍA ACTIVA)', 'EN REVISIÓN OMC (POST-LEVANTE)'].includes(formData.estado_dam) && (
-                      <p className="text-xs text-slate-400 italic">⏳ No se requieren acciones aduaneras manuales para este estado (Esperando pagos o procesos automáticos).</p>
+                      <p className="text-xs text-slate-400 italic">No se requieren acciones aduaneras manuales para este estado (Esperando pagos o procesos automáticos).</p>
                     )}
                   </div>
                 </div>
@@ -681,9 +684,10 @@ const Dams = () => {
                                 {g.estado_pago !== 'PAGADO' ? (
                                   <button 
                                     onClick={(e) => { e.stopPropagation(); navigate(`/app/pagos?gasto_id=${g.id_gasto}`); }}
-                                    className="px-2 py-0.5 rounded bg-purple-600/30 hover:bg-purple-600 text-purple-300 hover:text-white text-[10px] font-bold border border-purple-500/40 transition-all shadow-sm"
+                                    className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded border transition-all duration-150 shadow-sm bg-purple-50 text-purple-700 border-purple-300 hover:bg-purple-700 hover:text-white hover:border-purple-700 dark:bg-purple-600/30 dark:text-purple-300 dark:border-purple-500/40 dark:hover:bg-purple-600 dark:hover:text-white cursor-pointer"
+                                    title="Registrar pago de este gasto"
                                   >
-                                    💸 Pagar
+                                    <CreditCard className="shrink-0" size={14}/> Pagar
                                   </button>
                                 ) : (
                                   <span className="text-[10px] text-emerald-400 font-bold">Liquidado</span>
@@ -707,7 +711,7 @@ const Dams = () => {
       {modalEliminar.open && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4">
           <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
-            <div className="bg-rose-950/30 border-b border-rose-900/50 p-4"><h3 className="text-rose-400 font-bold">⚠️ Confirmar Eliminación</h3></div>
+            <div className="bg-rose-950/30 border-b border-rose-900/50 p-4"><h3 className="text-rose-400 font-bold flex items-center gap-1.5"><AlertTriangle size={16} className="inline-block shrink-0" /> Confirmar Eliminación</h3></div>
             <div className="p-5">
               <textarea autoFocus value={modalEliminar.motivo} onChange={(e) => setModalEliminar({...modalEliminar, motivo: e.target.value})} rows="3" className="w-full text-sm bg-slate-950 border border-slate-700 text-slate-200 rounded p-2 focus:border-rose-500" placeholder="Motivo de auditoría (mín 10 caracteres)..."></textarea>
             </div>
