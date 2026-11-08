@@ -2,6 +2,7 @@ from typing import List, Optional
 from datetime import date, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 import json
+import os
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from fastapi.encoders import jsonable_encoder
@@ -13,12 +14,55 @@ from sqlalchemy import func, case
 import models
 import schemas
 from dependencies import get_db, get_current_user, RoleChecker
-from services.audit import registrar_auditoria
+from services.audit import registrar_auditoria, registrar_auditoria_sync
 from services.state_machine import evaluar_gatillos_gastos_dam
 from services.excel_exporter import generar_excel_gastos
 from domain.finanzas import calcular_amortizacion_cruzada
 
 router = APIRouter(tags=["Finanzas"])
+
+# ==========================================
+# 0. REGLAS FINANCIERAS DEL SERVIDOR
+# ==========================================
+TOLERANCIA_CENTAVOS = Decimal("0.05")
+# Spread máximo que un banco puede cobrar sobre el débito teórico en pagos con moneda cruzada
+MARGEN_SPREAD_BANCARIO = Decimal(os.getenv("MARGEN_SPREAD_BANCARIO", "0.05"))
+# Banda del TC respecto al oficial SUNAT registrado para la fecha
+MARGEN_TC_OFICIAL = Decimal(os.getenv("MARGEN_TC_OFICIAL", "0.05"))
+# Banda de cordura USD/PEN cuando no hay TC oficial registrado para la fecha
+TC_MINIMO = Decimal(os.getenv("TC_MINIMO", "2.50"))
+TC_MAXIMO = Decimal(os.getenv("TC_MAXIMO", "5.50"))
+
+
+def convertir_moneda(monto: Decimal, de: str, a: str, tc: Decimal) -> Decimal:
+    """Convierte un monto entre USD y PEN con redondeo SUNAT (ROUND_HALF_UP)."""
+    if de == a:
+        resultado = monto
+    elif de == "USD" and a == "PEN":
+        resultado = monto * tc
+    elif de == "PEN" and a == "USD":
+        resultado = monto / tc
+    else:
+        raise HTTPException(status_code=400, detail=f"Conversión de moneda no soportada: {de} → {a}.")
+    return resultado.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def validar_tipo_cambio(db: Session, tc: Decimal, fecha: date):
+    """Rechaza tipos de cambio fuera de la banda del TC oficial (o de la banda de cordura si no hay oficial)."""
+    oficial = db.query(models.HistorialTipoCambio).filter(models.HistorialTipoCambio.fecha == fecha).first()
+    if oficial and oficial.precio_venta:
+        ref = Decimal(str(oficial.precio_venta))
+        minimo = (ref * (Decimal("1") - MARGEN_TC_OFICIAL)).quantize(Decimal("0.0001"))
+        maximo = (ref * (Decimal("1") + MARGEN_TC_OFICIAL)).quantize(Decimal("0.0001"))
+        origen = f"TC oficial SUNAT {ref} del {fecha}"
+    else:
+        minimo, maximo = TC_MINIMO, TC_MAXIMO
+        origen = "banda de control USD/PEN"
+    if not (minimo <= tc <= maximo):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Tipo de cambio {tc} fuera de rango. Según {origen}, debe estar entre {minimo} y {maximo}."
+        )
 
 # ==========================================
 # 1. GASTOS
@@ -92,15 +136,23 @@ async def crear_gasto(
         raise HTTPException(status_code=400, detail=f"Error al crear gasto: {str(e)}")
 
 @router.put("/gastos/{id_gasto}", response_model=schemas.RegistroGasto)
-def actualizar_gasto(id_gasto: int, gasto_editado: schemas.RegistroGastoUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def actualizar_gasto(id_gasto: int, gasto_editado: schemas.RegistroGastoUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1, 2, 3]))):  # 1: Admin, 2: Logística, 3: Tesorería (solo observaciones)
     db_gasto = db.query(models.RegistroGasto).filter(models.RegistroGasto.id_gasto == id_gasto).first()
     if not db_gasto:
         raise HTTPException(status_code=404, detail="Gasto no encontrado")
-        
+
     update_data = gasto_editado.model_dump(exclude_unset=True)
 
-    # Candado de Auditoría Financiera: si está PAGADO, solo se permite actualizar observaciones
-    if db_gasto.estado_pago == "PAGADO":
+    if current_user.id_rol == 3 and set(update_data) - {"observaciones"}:
+        raise HTTPException(status_code=403, detail="Tesorería solo puede editar las observaciones de un gasto.")
+
+    # Candado ATE. TOTAL
+    maestro_gasto = db_gasto.dam.maestro if db_gasto.dam else None
+    if maestro_gasto and maestro_gasto.estado_documentario == "ATE. TOTAL" and current_user.id_rol != 1:
+        raise HTTPException(status_code=403, detail="Operación Denegada: El expediente se encuentra en ATENCIÓN TOTAL.")
+
+    # Candado de Auditoría Financiera: con pagos aplicados (PARCIAL o PAGADO), solo se permite actualizar observaciones
+    if db_gasto.estado_pago in ("PAGADO", "PARCIAL"):
         campos_protegidos = ["id_dam", "id_concepto", "id_proveedor", "id_tipo_doc", "numero_documento", "fecha_vencimiento", "monto_original", "moneda"]
         cambio_protegido = False
         for campo in campos_protegidos:
@@ -115,7 +167,7 @@ def actualizar_gasto(id_gasto: int, gasto_editado: schemas.RegistroGastoUpdate, 
         if cambio_protegido:
             raise HTTPException(
                 status_code=403, 
-                detail="Acción rechazada por Auditoría: No se permite modificar montos ni documentos de un gasto que ya ha sido PAGADO (solo se permite editar Observaciones)."
+                detail="Acción rechazada por Auditoría: No se permite modificar montos ni documentos de un gasto con pagos aplicados (solo se permite editar Observaciones). Anule primero los pagos."
             )
         if "observaciones" in update_data:
             db_gasto.observaciones = update_data["observaciones"]
@@ -590,9 +642,9 @@ def listar_vouchers(
 @router.put("/vouchers/{id_voucher}", response_model=schemas.VoucherBancarioResponse)
 def actualizar_voucher(
     id_voucher: int, 
-    voucher_editado: schemas.VoucherBancarioUpdate, 
-    db: Session = Depends(get_db), 
-    current_user: models.Usuario = Depends(get_current_user)
+    voucher_editado: schemas.VoucherBancarioUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(RoleChecker([1, 3]))  # 1: Admin, 3: Tesorería
 ):
     voucher = db.query(models.VoucherBancario).filter(models.VoucherBancario.id_voucher == id_voucher).first()
     if not voucher:
@@ -680,73 +732,107 @@ async def registrar_pago(
     db: Session = Depends(get_db), 
     current_user: models.Usuario = Depends(RoleChecker([1, 3])) # 1: Admin, 3: Tesorería
 ):
-    # 0. Verificación de Idempotencia (Evita cobros dobles)
-    clave_idempotencia = request.headers.get("Idempotency-Key") or request.headers.get("idempotency-key")
-    if clave_idempotencia:
+    # 0. Verificación de Idempotencia (Evita cobros dobles).
+    # La clave se aísla por usuario: un tercero no puede "secuestrar" ni anular el pago de otro reutilizando su clave.
+    clave_cliente = request.headers.get("Idempotency-Key") or request.headers.get("idempotency-key")
+    clave_idempotencia = None
+    if clave_cliente:
+        if len(clave_cliente) > 80:
+            raise HTTPException(status_code=400, detail="Idempotency-Key demasiado larga (máx. 80 caracteres).")
+        clave_idempotencia = f"u{current_user.id_usuario}:{clave_cliente}"
         registro_previo = db.query(models.RegistroIdempotencia).filter(
             models.RegistroIdempotencia.clave_idempotencia == clave_idempotencia
         ).first()
         if registro_previo:
             return json.loads(registro_previo.respuesta_json)
 
-    if pago.id_gasto is None:
-        raise HTTPException(status_code=400, detail="Debe proporcionar un id_gasto válido.")
-
-    # 1. Búsqueda y Bloqueo de Pagados
+    # 1. Búsqueda y Bloqueo del Gasto
     try:
         gasto = db.query(models.RegistroGasto).filter(models.RegistroGasto.id_gasto == pago.id_gasto).with_for_update(nowait=True).first()
     except OperationalError:
         raise HTTPException(status_code=409, detail="El registro está siendo modificado por otro usuario.")
 
-    if not gasto:
+    if not gasto or gasto.estado_registro != "ACTIVO":
         raise HTTPException(status_code=404, detail="El gasto asociado no existe.")
-    
+
     if gasto.estado_pago == "PAGADO":
         raise HTTPException(status_code=400, detail="Operación rechazada: El gasto ya se encuentra totalmente PAGADO.")
-    
-    # Bloqueo de Voucher:
-    voucher = None
-    if pago.voucher_id:
-        try:
-            voucher = db.query(models.VoucherBancario).filter(models.VoucherBancario.id_voucher == pago.voucher_id).with_for_update(nowait=True).first()
-        except OperationalError:
-            raise HTTPException(status_code=409, detail="El voucher está siendo modificado por otro usuario.")
-        
-        if not voucher:
-            raise HTTPException(status_code=404, detail="El voucher especificado no existe.")
-            
-        if voucher.id_importador != gasto.dam.maestro.id_importador:
-            raise HTTPException(status_code=400, detail="Violación de integridad transaccional: El voucher no pertenece a la entidad importadora del gasto.")
 
-        # Matemática y Validación de Saldos
-        if voucher.saldo_disponible < pago.monto_moneda_origen:
-            raise HTTPException(status_code=400, detail="Saldo insuficiente en el voucher.")
-            
-        # Resta el dinero del voucher
-        voucher.saldo_disponible -= pago.monto_moneda_origen
+    id_importador_gasto = gasto.dam.maestro.id_importador if (gasto.dam and gasto.dam.maestro) else None
+    if id_importador_gasto is None:
+        raise HTTPException(status_code=400, detail="El gasto no está vinculado a un contenedor con importador; no puede liquidarse.")
 
-    pago_dict = pago.model_dump()
-    # Heredar datos operativos del gasto
-    pago_dict["id_dam"] = gasto.id_dam
-    pago_dict["id_concepto"] = gasto.id_concepto
+    # 2. Bloqueo y validación del Voucher (obligatorio: no existe pago sin respaldo bancario)
+    try:
+        voucher = db.query(models.VoucherBancario).filter(models.VoucherBancario.id_voucher == pago.voucher_id).with_for_update(nowait=True).first()
+    except OperationalError:
+        raise HTTPException(status_code=409, detail="El voucher está siendo modificado por otro usuario.")
+
+    if not voucher or voucher.estado_registro != "ACTIVO":
+        raise HTTPException(status_code=404, detail="El voucher especificado no existe.")
+
+    if voucher.id_importador != id_importador_gasto:
+        raise HTTPException(status_code=400, detail="Violación de integridad transaccional: El voucher no pertenece a la entidad importadora del gasto.")
+
+    # 3. Validación del Tipo de Cambio (no se confía ciegamente en el cliente)
+    fecha_pago = pago.fecha_pago or date.today()
+    monedas_involucradas = {pago.moneda, gasto.moneda, voucher.moneda}
+    if len(monedas_involucradas) == 1:
+        tc_aplicado = Decimal("1.0000")  # Misma divisa en todo el flujo: el TC no interviene
+    else:
+        tc_aplicado = Decimal(str(pago.tipo_cambio)).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+        validar_tipo_cambio(db, tc_aplicado, fecha_pago)
+
+    # 4. Débito del voucher: lo calcula el SERVIDOR en la moneda del voucher.
+    debito_teorico = convertir_moneda(Decimal(str(pago.importe)), pago.moneda, voucher.moneda, tc_aplicado)
+    gasto_financiero_tc = Decimal("0.00")
+    if pago.pago_moneda_cruzada:
+        # El banco puede debitar algo más que el teórico por su spread cambiario, dentro de un margen acotado.
+        if pago.monto_moneda_origen is None:
+            raise HTTPException(status_code=400, detail="En pago con moneda cruzada debe indicar el débito real del banco (monto_moneda_origen).")
+        monto_moneda_origen = Decimal(str(pago.monto_moneda_origen)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        minimo = debito_teorico - TOLERANCIA_CENTAVOS
+        maximo = (debito_teorico * (Decimal("1") + MARGEN_SPREAD_BANCARIO)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        if not (minimo <= monto_moneda_origen <= maximo):
+            raise HTTPException(
+                status_code=400,
+                detail=(f"Débito bancario inconsistente: para {pago.moneda} {pago.importe} al TC {tc_aplicado} el débito en el voucher "
+                        f"debe estar entre {voucher.moneda} {minimo} y {maximo}.")
+            )
+        gasto_financiero_tc = max(Decimal("0.00"), monto_moneda_origen - debito_teorico)
+    else:
+        monto_moneda_origen = debito_teorico
+
+    if voucher.saldo_disponible < monto_moneda_origen:
+        raise HTTPException(status_code=400, detail=f"Saldo insuficiente en el voucher. Disponible: {voucher.moneda} {voucher.saldo_disponible}, requerido: {voucher.moneda} {monto_moneda_origen}.")
+
+    # Resta el dinero del voucher
+    voucher.saldo_disponible -= monto_moneda_origen
+
+    # Construcción del pago SOLO con datos validados o derivados por el servidor
+    pago_dict = {
+        "id_gasto": gasto.id_gasto,
+        "id_dam": gasto.id_dam,
+        "id_concepto": gasto.id_concepto,
+        "id_importador": id_importador_gasto,
+        "voucher_id": voucher.id_voucher,
+        "moneda": pago.moneda,
+        "importe": Decimal(str(pago.importe)),
+        "tipo_cambio": tc_aplicado,
+        "tipo_cambio_aplicado": tc_aplicado,  # Numeric(15,4): conserva los 4 decimales para los recálculos
+        "estado_pago": "PAGADO",
+        "fecha_pago": fecha_pago,
+        "es_ajuste_sistema": False,
+        "pago_moneda_cruzada": pago.pago_moneda_cruzada,
+        "gasto_financiero_tc": gasto_financiero_tc,
+        "monto_moneda_origen": monto_moneda_origen,
+    }
 
     # Validar que el concepto exista
     concepto_existe = db.query(models.CatConceptoPago).filter(models.CatConceptoPago.id_concepto == pago_dict["id_concepto"]).first()
     if not concepto_existe:
         raise HTTPException(status_code=404, detail="El concepto de pago no existe en el catálogo.")
 
-    # 2. Lógica de Parche de Auditoría (Tipo de Cambio SUNAT)
-    tc_aplicado = pago_dict["tipo_cambio"]
-    if not tc_aplicado or tc_aplicado <= Decimal("0.00"):
-        tc_sunat = db.query(models.HistorialTipoCambio).filter(models.HistorialTipoCambio.fecha == date.today()).first()
-        if not tc_sunat:
-            raise HTTPException(
-                status_code=400, 
-                detail="No se proporcionó un tipo de cambio y no hay registro oficial de SUNAT para el día de hoy. Regístrelo en el sistema."
-            )
-        tc_aplicado = tc_sunat.precio_venta
-        pago_dict["tipo_cambio"] = tc_aplicado
-    
     # 3. Validación Financiera Estricta con Cuantización SUNAT (ROUND_HALF_UP - Dominio Puro)
     pagos_existentes = db.query(models.RegistroPago).filter(
         models.RegistroPago.id_gasto == pago_dict["id_gasto"],
@@ -868,23 +954,37 @@ async def registrar_pago(
         raise HTTPException(status_code=400, detail=f"Error en transacción: {str(e)}")
 
 @router.put("/pagos/{id_pago}", response_model=schemas.RegistroPago)
-def actualizar_pago(id_pago: int, pago_editado: schemas.RegistroPagoUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def actualizar_pago(
+    id_pago: int,
+    pago_editado: schemas.RegistroPagoUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(RoleChecker([1, 3]))  # 1: Admin, 3: Tesorería
+):
+    """
+    Candado de Auditoría Financiera: el schema solo admite 'fecha_pago' (extra='forbid').
+    Cualquier intento de tocar importe, moneda, TC, voucher, gasto o débito se rechaza con 422.
+    Para corregir montos se anula el pago (DELETE con motivo) y se registra de nuevo.
+    """
     db_pago = db.query(models.RegistroPago).filter(models.RegistroPago.id_pago == id_pago).first()
     if not db_pago:
         raise HTTPException(status_code=404, detail="Pago no encontrado")
-        
+    if db_pago.es_ajuste_sistema:
+        raise HTTPException(status_code=403, detail="Los Ajustes ZD del sistema no se pueden modificar.")
+
     update_data = pago_editado.model_dump(exclude_unset=True)
-    
-    # Candado de Auditoría Financiera
-    if "importe" in update_data or "moneda" in update_data:
-        raise HTTPException(
-            status_code=403,
-            detail="Acción rechazada por Auditoría: No se permite modificar el importe ni la moneda de un pago ya registrado. Si hubo un error, proceda a la anulación o extorno."
+    fecha_anterior = db_pago.fecha_pago
+    if update_data.get("fecha_pago") is not None:
+        db_pago.fecha_pago = update_data["fecha_pago"]
+        registrar_auditoria_sync(
+            db=db,
+            id_usuario=current_user.id_usuario,
+            endpoint=request.url.path,
+            accion="EDICION FECHA PAGO",
+            detalles=json.dumps({"id_pago": id_pago, "fecha_anterior": str(fecha_anterior), "fecha_nueva": str(db_pago.fecha_pago)}),
+            ip_address=request.client.host if request.client else "IP Desconocida"
         )
-        
-    for key, value in update_data.items():
-        setattr(db_pago, key, value)
-        
+
     db.commit()
     db.refresh(db_pago)
     return db_pago

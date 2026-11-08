@@ -1,5 +1,6 @@
 from typing import List, Optional
 from decimal import Decimal
+import json
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload
@@ -9,7 +10,7 @@ from sqlalchemy import func
 import models
 import schemas
 from dependencies import get_db, get_current_user, RoleChecker
-from services.audit import registrar_auditoria
+from services.audit import registrar_auditoria, registrar_auditoria_sync
 from services.state_machine import sincronizar_estado_maestro
 from services.excel_exporter import (
     generar_excel_maestros,
@@ -38,6 +39,49 @@ ESTRATEGIAS_VALIDACION_DAM = {
     "GARANTIZADO": validar_dam_garantizada,
     "PROVISIONAL": validar_dam_garantizada  # Retrocompatibilidad
 }
+
+# --- MÁQUINA DE ESTADOS DAM: TRANSICIONES MANUALES PERMITIDAS ---
+# Las demás transiciones (proforma, pago de tributos, OMC) son EXCLUSIVAS del motor reactivo
+# (services/state_machine.py) y nunca se aceptan desde el cliente.
+# Formato: estado_origen -> {estado_destino: tipos_valor permitidos (None = cualquiera)}
+TRANSICIONES_MANUALES_DAM = {
+    "PENDIENTE DE AFORO": {
+        "CON LEVANTE": None,                       # Aforo conforme
+        "OBSERVADA / NOTIFICADA": None,            # Reportar observación SUNAT
+    },
+    "OBSERVADA / NOTIFICADA": {
+        "EN REVISIÓN": {"DEFINITIVO"},             # Subir sustento (definitivo)
+        "CON LEVANTE (GARANTÍA ACTIVA)": {"GARANTIZADO", "PROVISIONAL"},  # Art. 160 LGA
+    },
+    "EN REVISIÓN": {
+        "CON LEVANTE": None,                       # Diligencia conforme
+    },
+    "CON LEVANTE (GARANTÍA ACTIVA)": {
+        "EN REVISIÓN OMC (POST-LEVANTE)": None,
+        "GARANTÍA CERRADA / LIQUIDADA": None,
+    },
+    "EN REVISIÓN OMC (POST-LEVANTE)": {
+        "GARANTÍA CERRADA / LIQUIDADA": None,
+    },
+}
+
+
+def validar_transicion_dam(estado_actual: str, estado_nuevo: str, tipo_valor: str, es_admin: bool):
+    """Lanza 400 si la transición manual no está permitida. El SuperAdmin puede forzarla (queda auditado)."""
+    if estado_nuevo == estado_actual:
+        return
+    destinos = TRANSICIONES_MANUALES_DAM.get(estado_actual or "", {})
+    if estado_nuevo in destinos:
+        tipos = destinos[estado_nuevo]
+        if tipos is None or (tipo_valor or "DEFINITIVO") in tipos:
+            return
+    if es_admin:
+        return
+    raise HTTPException(
+        status_code=400,
+        detail=(f"Transición no permitida: '{estado_actual}' → '{estado_nuevo}'. "
+                "Los estados de proforma, pago y levante automático los asigna el sistema según los pagos registrados.")
+    )
 
 # ==========================================
 # 1. MAESTRO IMPORTACIONES (OPERACIONES)
@@ -728,18 +772,26 @@ def exportar_dams_excel(
     )
 
 @router.post("/dams/", response_model=schemas.DetalleDam)
-def crear_dam(dam: schemas.DetalleDamCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def crear_dam(dam: schemas.DetalleDamCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1, 2]))):
     maestro = db.query(models.MaestroImportacion).filter(models.MaestroImportacion.id_maestro == dam.id_maestro).first()
     if not maestro:
         raise HTTPException(status_code=404, detail="El Maestro de Importación asociado no existe en la base de datos.")
     if maestro.estado_levante == "CON LEVANTE" and current_user.id_rol != 1:
         raise HTTPException(status_code=403, detail="Operación Denegada: No se pueden agregar DAMs a un contenedor que ya cuenta con LEVANTE autorizado.")
+    if maestro.estado_documentario == "ATE. TOTAL" and current_user.id_rol != 1:
+        raise HTTPException(status_code=403, detail="Operación Denegada: El contenedor está en ATENCIÓN TOTAL.")
 
     estrategia = ESTRATEGIAS_VALIDACION_DAM.get(maestro.tipo_valor)
     if estrategia:
         dam = estrategia(dam)
 
-    nueva_dam = models.DetalleDam(**dam.model_dump())
+    datos_dam = dam.model_dump()
+    # Toda DAM nace en el estado inicial: el levante/aforo NUNCA se declara desde el cliente
+    datos_dam["estado_dam"] = "NUMERADA / EN EVALUACIÓN"
+    datos_dam["aforo_realizado"] = False
+    datos_dam["fecha_levante"] = None
+
+    nueva_dam = models.DetalleDam(**datos_dam)
     db.add(nueva_dam)
     db.commit()
     db.refresh(nueva_dam)
@@ -750,20 +802,72 @@ def crear_dam(dam: schemas.DetalleDamCreate, db: Session = Depends(get_db), curr
     return nueva_dam
 
 @router.put("/dams/{id_dam}", response_model=schemas.DetalleDam)
-def actualizar_dam(id_dam: int, dam_editada: schemas.DetalleDamUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def actualizar_dam(
+    id_dam: int,
+    dam_editada: schemas.DetalleDamUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(RoleChecker([1, 2]))  # 1: Admin, 2: Logística
+):
     db_dam = db.query(models.DetalleDam).filter(models.DetalleDam.id_dam == id_dam).first()
-    
+
     if not db_dam:
         raise HTTPException(status_code=404, detail="DAM no encontrada")
-        
+
+    es_admin = current_user.id_rol == 1
     update_data = dam_editada.model_dump(exclude_unset=True)
-    
+    maestro_actual = db_dam.maestro
+
+    # Candado ATE. TOTAL (contenedor actual y, si se reasigna, el contenedor destino)
+    if not es_admin:
+        if maestro_actual and maestro_actual.estado_documentario == "ATE. TOTAL":
+            raise HTTPException(status_code=403, detail="Operación Denegada: El contenedor de esta DAM está en ATENCIÓN TOTAL. Solicita desbloqueo al Administrador.")
+        nuevo_id_maestro = update_data.get("id_maestro")
+        if nuevo_id_maestro and nuevo_id_maestro != db_dam.id_maestro:
+            destino = db.query(models.MaestroImportacion).filter(models.MaestroImportacion.id_maestro == nuevo_id_maestro).first()
+            if not destino:
+                raise HTTPException(status_code=404, detail="El contenedor destino no existe.")
+            if destino.estado_documentario == "ATE. TOTAL":
+                raise HTTPException(status_code=403, detail="Operación Denegada: El contenedor destino está en ATENCIÓN TOTAL.")
+        # La fecha de levante la sella el motor de estados, no el usuario
+        update_data.pop("fecha_levante", None)
+
+    estado_anterior = db_dam.estado_dam
+    aforo_anterior = db_dam.aforo_realizado
+
+    # Validación de la máquina de estados (solo transiciones manuales de diligencia aduanera)
+    if "estado_dam" in update_data:
+        nuevo_estado = update_data["estado_dam"]
+        if nuevo_estado is None:
+            update_data.pop("estado_dam")
+        else:
+            tipo_valor = maestro_actual.tipo_valor if maestro_actual else "DEFINITIVO"
+            validar_transicion_dam(estado_anterior, nuevo_estado, tipo_valor, es_admin)
+            # "Aforo conforme" certifica el aforo físico
+            if estado_anterior == "PENDIENTE DE AFORO" and nuevo_estado == "CON LEVANTE":
+                update_data["aforo_realizado"] = True
+
     for key, value in update_data.items():
         setattr(db_dam, key, value)
-        
+
     if db_dam.estado_dam and "LEVANTE" in db_dam.estado_dam and not db_dam.fecha_levante:
         import datetime
         db_dam.fecha_levante = datetime.date.today()
+
+    # Bitácora: todo cambio de estado o de aforo queda trazado con autor e IP
+    if db_dam.estado_dam != estado_anterior or db_dam.aforo_realizado != aforo_anterior:
+        registrar_auditoria_sync(
+            db=db,
+            id_usuario=current_user.id_usuario,
+            endpoint=request.url.path,
+            accion="CAMBIO ESTADO DAM",
+            detalles=json.dumps({
+                "id_dam": id_dam,
+                "estado_anterior": estado_anterior, "estado_nuevo": db_dam.estado_dam,
+                "aforo_anterior": aforo_anterior, "aforo_nuevo": db_dam.aforo_realizado,
+            }, ensure_ascii=False),
+            ip_address=request.client.host if request.client else "IP Desconocida"
+        )
 
     db.commit()
     db.refresh(db_dam)

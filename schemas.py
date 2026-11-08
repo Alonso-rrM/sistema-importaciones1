@@ -1,8 +1,13 @@
-from typing import List, Optional, Dict, Any, Generic, TypeVar
+from typing import List, Optional, Dict, Any, Generic, TypeVar, Literal, Annotated
 from pydantic import BaseModel, ConfigDict, Field
+
 from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
+
+# Tipos financieros validados (blindaje contra montos negativos/cero y divisas inválidas)
+Moneda = Literal["USD", "PEN"]
+MontoPositivo = Annotated[Decimal, Field(gt=0, max_digits=15, decimal_places=2)]
 
 # --- MODELO GENÉRICO DE PAGINACIÓN ---
 T = TypeVar('T')
@@ -151,15 +156,16 @@ class VoucherBancarioBase(BaseModel):
     fecha_transferencia: date
 
 class VoucherBancarioCreate(VoucherBancarioBase):
-    pass
+    monto_total: MontoPositivo
+    moneda: Moneda
 
 class VoucherBancarioUpdate(BaseModel):
     banco_id: int | None = None
     id_importador: int | None = None
     numero_operacion: str | None = None
-    monto_total: Decimal | None = None
+    monto_total: Decimal | None = Field(default=None, gt=0, max_digits=15, decimal_places=2)
     saldo_disponible: Decimal | None = None
-    moneda: str | None = None
+    moneda: Moneda | None = None
     fecha_transferencia: date | None = None
     version: int | None = None
 
@@ -279,8 +285,8 @@ class RegistroGastoCreate(BaseModel):
     id_tipo_doc: int
     numero_documento: Optional[str] = None
     fecha_vencimiento: Optional[date] = None
-    monto_original: Decimal
-    moneda: str = "USD"
+    monto_original: MontoPositivo
+    moneda: Moneda = "USD"
     observaciones: Optional[str] = None
 
 class PagoDetalleSimple(BaseModel):
@@ -297,6 +303,9 @@ class PagoDetalleSimple(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 class RegistroGasto(RegistroGastoCreate):
+    # La respuesta debe poder serializar registros históricos aunque no cumplan las validaciones nuevas
+    monto_original: Decimal
+    moneda: str = "USD"
     id_gasto: int
     estado_pago: str
     estado_registro: str
@@ -324,8 +333,8 @@ class RegistroGastoUpdate(BaseModel):
     id_tipo_doc: int | None = None
     numero_documento: str | None = None
     fecha_vencimiento: date | None = None
-    monto_original: Decimal | None = None
-    moneda: str | None = None
+    monto_original: Decimal | None = Field(default=None, gt=0, max_digits=15, decimal_places=2)
+    moneda: Moneda | None = None
     observaciones: str | None = None
 
 
@@ -336,9 +345,27 @@ class MonedaEnum(str, Enum):
     PEN = "PEN"
 
 class RegistroPagoCreate(BaseModel):
+    """
+    Entrada de un pago. Solo se confía en: gasto, voucher, moneda, importe, TC, fecha y
+    (si es moneda cruzada) el débito real reportado por el banco. El resto lo deriva el servidor.
+    """
+    model_config = ConfigDict(extra="ignore")
+
+    id_gasto: int
+    voucher_id: int  # Obligatorio: no existe pago sin respaldo bancario (los Ajustes ZD los crea solo el servidor)
+    moneda: Moneda
+    importe: MontoPositivo
+    tipo_cambio: Decimal = Field(gt=0, max_digits=15, decimal_places=4)
+    fecha_pago: Optional[date] = None
+    pago_moneda_cruzada: bool = False
+    # Solo se usa cuando pago_moneda_cruzada=True (débito real del banco). Si no, lo calcula el servidor.
+    monto_moneda_origen: Optional[Decimal] = Field(default=None, gt=0, max_digits=15, decimal_places=2)
+
+class RegistroPago(BaseModel):
+    """Respuesta de un pago (lectura)."""
     id_dam: int | None = None
     id_concepto: int | None = None
-    moneda: MonedaEnum
+    moneda: str
     importe: Decimal
     tipo_cambio: Decimal
     estado_pago: Optional[str] = "PAGADO"
@@ -347,13 +374,10 @@ class RegistroPagoCreate(BaseModel):
     id_gasto: Optional[int] = None
     es_ajuste_sistema: bool = False
     tipo_cambio_aplicado: Optional[Decimal] = None
-    # [SPRINT 1] Vinculación a Voucher
     voucher_id: Optional[int] = None
     pago_moneda_cruzada: bool = False
     gasto_financiero_tc: Decimal = Decimal("0.00")
     monto_moneda_origen: Decimal
-
-class RegistroPago(RegistroPagoCreate):
     id_pago: int
     created_at: Optional[datetime] = None
     
@@ -372,18 +396,12 @@ class RegistroPago(RegistroPagoCreate):
     model_config = ConfigDict(from_attributes=True)
 
 class RegistroPagoUpdate(BaseModel):
-    moneda: MonedaEnum | None = None
-    importe: Decimal | None = None
-    tipo_cambio: Decimal | None = None
-    id_importador: int | None = None
-    id_gasto: int | None = None
-    es_ajuste_sistema: bool | None = None
-    tipo_cambio_aplicado: Decimal | None = None
-    # [SPRINT 1] Vinculación a Voucher
-    voucher_id: int | None = None
-    pago_moneda_cruzada: bool | None = None
-    gasto_financiero_tc: Decimal | None = None
-    monto_moneda_origen: Decimal | None = None
+    """
+    Un pago registrado es inmutable en lo financiero (importe, moneda, TC, voucher, gasto, débito).
+    Si hubo error, se anula (DELETE con motivo) y se registra de nuevo. Solo se corrige la fecha.
+    """
+    model_config = ConfigDict(extra="forbid")
+    fecha_pago: date | None = None
 
 
 # --- 6. ESQUEMAS PARA REPORTES CONSOLIDADOS ---

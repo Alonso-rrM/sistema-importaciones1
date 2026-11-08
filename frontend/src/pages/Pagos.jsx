@@ -273,29 +273,23 @@ const Pagos = () => {
     setMensajeExito(null);
 
     try {
-      const tcVal = parseFloat(form.tipo_cambio) || 1.0;
-      let montoOrigenNum = parseFloat(form.importe);
-      let gastoFinancieroTc = 0;
-
-      if (form.pago_moneda_cruzada) {
-        montoOrigenNum = parseFloat(form.monto_moneda_origen) || 0;
-        const convertido = form.moneda === 'PEN' ? (parseFloat(form.importe) / tcVal) : parseFloat(form.importe);
-        gastoFinancieroTc = Math.max(0, montoOrigenNum - convertido);
-      } else {
-        montoOrigenNum = form.moneda === 'PEN' ? (parseFloat(form.importe) / tcVal) : parseFloat(form.importe);
+      // El servidor calcula el débito del voucher, el importador y la diferencia cambiaria.
+      // Solo en moneda cruzada se envía el débito real informado por el banco.
+      if (form.pago_moneda_cruzada && !(parseFloat(form.monto_moneda_origen) > 0)) {
+        setMensajeError("Ingrese el débito real del banco en la moneda del voucher.");
+        setIsSubmitting(false);
+        return;
       }
 
       await api.post('/pagos/', {
         id_gasto: selectedGasto.id_gasto,
-        id_importador: selectedGasto.id_importador,
         voucher_id: form.voucher_id,
         fecha_pago: form.fecha_pago || null,
         moneda: form.moneda,
         importe: parseFloat(form.importe),
-        tipo_cambio: parseFloat(form.tipo_cambio),
+        tipo_cambio: requiereTipoCambio ? parseFloat(form.tipo_cambio) : 1,
         pago_moneda_cruzada: form.pago_moneda_cruzada,
-        monto_moneda_origen: montoOrigenNum,
-        gasto_financiero_tc: gastoFinancieroTc
+        monto_moneda_origen: form.pago_moneda_cruzada ? parseFloat(form.monto_moneda_origen) : null
       }, {
         headers: { 'Idempotency-Key': idempotencyKey }
       });
@@ -371,8 +365,15 @@ const Pagos = () => {
   const tcNum = parseFloat(form.tipo_cambio) || 1.0;
   const importeNum = parseFloat(form.importe) || 0;
   const montoOrigenNum = parseFloat(form.monto_moneda_origen) || 0;
-  const montoConvertido = form.moneda === 'PEN' ? (importeNum / tcNum) : importeNum;
+  // Débito teórico en la MONEDA DEL VOUCHER (misma regla que aplica el servidor)
+  const voucherSeleccionado = opcionesVouchers.find(op => op.value === form.voucher_id)?.voucher || null;
+  const monedaVoucher = voucherSeleccionado?.moneda || form.moneda;
+  const convertirMoneda = (monto, de, a, tc) => (de === a ? monto : (de === 'USD' && a === 'PEN' ? monto * tc : monto / tc));
+  const montoConvertido = convertirMoneda(importeNum, form.moneda, monedaVoucher, tcNum);
   const diferenciaCambioCalculada = form.pago_moneda_cruzada ? Math.max(0, montoOrigenNum - montoConvertido) : 0;
+  const simboloVoucher = monedaVoucher === 'PEN' ? 'S/' : '$';
+  // El TC solo interviene si alguna de las tres monedas (pago, gasto, voucher) difiere
+  const requiereTipoCambio = new Set([form.moneda, selectedGasto?.moneda || form.moneda, monedaVoucher]).size > 1;
 
   return (
     <div className="flex-1 flex flex-col h-full bg-slate-950 text-slate-100 overflow-hidden font-sans">
@@ -800,7 +801,7 @@ const Pagos = () => {
                           onChange={e => setForm({
                             ...form,
                             moneda: e.target.value,
-                            tipo_cambio: e.target.value === 'USD' ? '1.00' : (form.tipo_cambio === '1.00' ? '3.75' : form.tipo_cambio)
+                            tipo_cambio: form.tipo_cambio === '1.00' ? '3.75' : form.tipo_cambio
                           })}
                           className="w-full text-xs bg-slate-900 border border-slate-700 rounded-lg p-2 font-bold text-white focus:outline-none focus:border-purple-500"
                         >
@@ -818,7 +819,7 @@ const Pagos = () => {
                           step="0.0001"
                           value={form.tipo_cambio}
                           onChange={e => setForm({ ...form, tipo_cambio: e.target.value })}
-                          disabled={form.moneda === 'USD'}
+                          disabled={!requiereTipoCambio}
                           className="w-full text-xs font-mono bg-slate-900 border border-slate-700 rounded-lg p-2 text-white disabled:bg-slate-950 disabled:text-slate-500 focus:outline-none focus:border-purple-500"
                         />
                       </div>
@@ -882,7 +883,7 @@ const Pagos = () => {
                           <div className="flex flex-col justify-center p-2 rounded-lg bg-purple-950/20 border border-purple-500/20 text-xs">
                             <span className="text-[10px] text-purple-300 uppercase font-semibold">Gasto Financiero TC Estimado</span>
                             <span className="font-mono font-bold text-purple-400 mt-0.5">
-                              {diferenciaCambioCalculada > 0 ? `$ ${diferenciaCambioCalculada.toFixed(2)}` : '$ 0.00 (Sin sobrecosto)'}
+                              {diferenciaCambioCalculada > 0 ? `${simboloVoucher} ${diferenciaCambioCalculada.toFixed(2)}` : `${simboloVoucher} 0.00 (Sin sobrecosto)`}
                             </span>
                           </div>
                         </div>
