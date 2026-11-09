@@ -177,29 +177,42 @@ const Logistica = () => {
     setHasUnsavedChanges(true);
   };
 
+  const mapearMaestroAForm = (m) => ({
+    numero_factura: m.numero_factura || '',
+    documento_transporte: m.documento_transporte || '',
+    n_cont_fisico: m.n_cont_fisico || '',
+    status_llegada: m.status_llegada || 'EN TRÁNSITO',
+    fecha_embarque: m.fecha_embarque ? m.fecha_embarque.split('T')[0] : '',
+    fecha_arribo: m.fecha_arribo ? m.fecha_arribo.split('T')[0] : '',
+    id_proveedor: m.id_proveedor != null ? String(m.id_proveedor) : '',
+    id_importador: m.id_importador != null ? String(m.id_importador) : '',
+    id_agente: m.id_agente != null ? String(m.id_agente) : '',
+    id_almacen: m.id_almacen != null ? String(m.id_almacen) : '',
+    fob_usd: m.fob_usd != null ? String(m.fob_usd) : '',
+    flete_usd: m.flete_usd != null ? String(m.flete_usd) : '',
+    tipo_valor: m.tipo_valor || 'DEFINITIVO',
+    venta_sucesiva: m.venta_sucesiva || 'NO',
+    estado_documentario: m.estado_documentario || 'SIN NUMERAR',
+    fecha_levante_maestro: m.fecha_levante_maestro ? m.fecha_levante_maestro.split('T')[0] : '',
+    fecha_recepcion_almacen: m.fecha_recepcion_almacen ? m.fecha_recepcion_almacen.split('T')[0] : '',
+    version: m.version
+  });
+
+  // Sincroniza el formulario con la versión más reciente del expediente tras recargar la lista
+  // (las acciones automáticas —DAMs, aforo, pagos— cambian su estado y su versión).
+  // Si hay cambios sin guardar NO se toca: al guardar, el backend devolverá 409 si hubo conflicto.
+  useEffect(() => {
+    if (!selectedId || viewMode !== 'MODIFICAR' || hasUnsavedChanges) return;
+    const fresco = maestros.find(x => x.id_maestro === selectedId);
+    if (fresco && fresco.version !== formData.version) setFormData(mapearMaestroAForm(fresco));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [maestros]);
+
   const handleSelect = (m) => {
     if (hasUnsavedChanges && !window.confirm("⚠️ Tienes cambios sin guardar. ¿Deseas descartarlos y cambiar de registro?")) return;
     setSelectedId(m.id_maestro);
     setViewMode('MODIFICAR');
-    setFormData({
-      numero_factura: m.numero_factura || '',
-      documento_transporte: m.documento_transporte || '',
-      n_cont_fisico: m.n_cont_fisico || '',
-      status_llegada: m.status_llegada || 'EN TRÁNSITO',
-      fecha_embarque: m.fecha_embarque ? m.fecha_embarque.split('T')[0] : '',
-      fecha_arribo: m.fecha_arribo ? m.fecha_arribo.split('T')[0] : '',
-      id_proveedor: m.id_proveedor != null ? String(m.id_proveedor) : '',
-      id_importador: m.id_importador != null ? String(m.id_importador) : '',
-      id_agente: m.id_agente != null ? String(m.id_agente) : '',
-      id_almacen: m.id_almacen != null ? String(m.id_almacen) : '',
-      fob_usd: m.fob_usd != null ? String(m.fob_usd) : '',
-      flete_usd: m.flete_usd != null ? String(m.flete_usd) : '',
-      tipo_valor: m.tipo_valor || 'DEFINITIVO',
-      venta_sucesiva: m.venta_sucesiva || 'NO',
-      estado_documentario: m.estado_documentario || 'SIN NUMERAR',
-      fecha_levante_maestro: m.fecha_levante_maestro ? m.fecha_levante_maestro.split('T')[0] : '',
-      fecha_recepcion_almacen: m.fecha_recepcion_almacen ? m.fecha_recepcion_almacen.split('T')[0] : ''
-    });
+    setFormData(mapearMaestroAForm(m));
     setHasUnsavedChanges(false);
     setActiveTab('DAMS');
     setEstadoCuenta(null);
@@ -260,7 +273,9 @@ const Logistica = () => {
         setViewMode('MODIFICAR');
         cargarSubRegistros(res.data.id_maestro, payload.numero_factura);
       } else {
-        await api.put(`/maestros/${selectedId}`, payload);
+        // Bloqueo optimista: se envía la versión leída; el backend responde 409 si otro usuario la cambió
+        const res = await api.put(`/maestros/${selectedId}`, { ...payload, version: formData.version });
+        setFormData(prev => ({ ...prev, version: res.data?.version }));
       }
       await cargarMaestros();
       setHasUnsavedChanges(false);

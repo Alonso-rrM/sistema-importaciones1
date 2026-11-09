@@ -2,7 +2,7 @@ from typing import List, Optional
 import os
 import re
 import requests
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from slowapi.errors import RateLimitExceeded
@@ -15,7 +15,15 @@ from security import get_password_hash
 from dependencies import get_db, get_current_user, RoleChecker, limiter
 from routers import auth, catalogos, operaciones, finanzas, reportes
 
-app = FastAPI(title="API de Importaciones y Pagos")
+# La documentación interactiva (/docs, /redoc, /openapi.json) expone el mapa completo de la API.
+# Desactivada por defecto; para desarrollo, definir ENABLE_DOCS=true en el .env
+_docs_habilitados = os.getenv("ENABLE_DOCS", "false").strip().lower() == "true"
+app = FastAPI(
+    title="API de Importaciones y Pagos",
+    docs_url="/docs" if _docs_habilitados else None,
+    redoc_url="/redoc" if _docs_habilitados else None,
+    openapi_url="/openapi.json" if _docs_habilitados else None,
+)
 
 # Configuración Global de Rate Limiting (SlowAPI)
 app.state.limiter = limiter
@@ -97,7 +105,8 @@ def acortar_razon_social(texto: str) -> str:
     return nombre
 
 @app.get("/sunat/ruc/{ruc}", tags=["Integraciones"])
-def consultar_ruc_sunat(ruc: str, current_user: models.Usuario = Depends(get_current_user)):
+@limiter.limit("30/minute")  # Protege la cuota del token de ApiPeru
+def consultar_ruc_sunat(request: Request, ruc: str, current_user: models.Usuario = Depends(get_current_user)):
     if len(ruc) != 11 or not ruc.isdigit():
         raise HTTPException(status_code=400, detail="El RUC debe tener 11 dígitos numéricos.")
         

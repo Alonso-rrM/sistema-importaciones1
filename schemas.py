@@ -1,5 +1,5 @@
 from typing import List, Optional, Dict, Any, Generic, TypeVar, Literal, Annotated
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, AfterValidator
 
 from datetime import date, datetime
 from decimal import Decimal
@@ -8,6 +8,35 @@ from enum import Enum
 # Tipos financieros validados (blindaje contra montos negativos/cero y divisas inválidas)
 Moneda = Literal["USD", "PEN"]
 MontoPositivo = Annotated[Decimal, Field(gt=0, max_digits=15, decimal_places=2)]
+
+# --- Tipos de seguridad para cuentas de usuario ---
+import re as _re
+
+def _validar_password(v: str) -> str:
+    """Política mínima: 10+ caracteres, con mayúscula, minúscula y número. Máx. 72 bytes (límite de bcrypt)."""
+    if len(v) < 10:
+        raise ValueError("La contraseña debe tener al menos 10 caracteres.")
+    if len(v.encode("utf-8")) > 72:
+        raise ValueError("La contraseña no puede superar 72 bytes.")
+    if not (_re.search(r"[a-z]", v) and _re.search(r"[A-Z]", v) and _re.search(r"\d", v)):
+        raise ValueError("La contraseña debe incluir mayúsculas, minúsculas y números.")
+    return v
+
+def _validar_email(v: str) -> str:
+    v = v.strip().lower()
+    if not _re.fullmatch(r"[^@\s]+@[^@\s]+\.[A-Za-z]{2,}", v):
+        raise ValueError("Correo electrónico inválido.")
+    return v
+
+def _validar_username(v: str) -> str:
+    v = v.strip()
+    if not _re.fullmatch(r"[A-Za-z0-9._-]{3,50}", v):
+        raise ValueError("El usuario debe tener 3 a 50 caracteres: letras, números, punto, guion o guion bajo.")
+    return v
+
+PasswordSegura = Annotated[str, AfterValidator(_validar_password)]
+Email = Annotated[str, AfterValidator(_validar_email)]
+Username = Annotated[str, AfterValidator(_validar_username)]
 
 # --- MODELO GENÉRICO DE PAGINACIÓN ---
 T = TypeVar('T')
@@ -455,7 +484,10 @@ class UsuarioBase(BaseModel):
     is_active: bool = True
 
 class UsuarioCreate(UsuarioBase):
-    password: str  # Recibido en texto plano, jamás devuelto
+    id_rol: Literal[1, 2, 3, 4]
+    username: Username
+    email: Email
+    password: PasswordSegura  # Recibido en texto plano, jamás devuelto
 
 class Usuario(UsuarioBase):
     id_usuario: int

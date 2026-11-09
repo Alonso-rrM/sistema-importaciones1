@@ -17,6 +17,22 @@ def generar_ticket_reporte(prefijo: str = "REP") -> str:
     sub = random.randint(10, 99)
     return f"{prefijo}-{semilla}{sub}"
 
+# En .xlsx, openpyxl solo convierte en fórmula el texto que empieza con '='. (Los prefijos +, -, @ son
+# peligrosos en CSV, pero aquí se guardan como texto; además "-" es el marcador de celda vacía del ERP.)
+_PREFIJOS_FORMULA = ("=",)
+
+
+def neutralizar_formula(valor):
+    """
+    Evita la inyección de fórmulas (CSV/Excel injection): openpyxl interpreta como fórmula todo texto
+    que empieza con '='. Un usuario podría guardar en 'observaciones' algo como =HYPERLINK(...) que se
+    ejecutaría al abrir la sábana. Se antepone un apóstrofo para que Excel lo trate como texto literal.
+    """
+    if isinstance(valor, str) and valor and valor[0] in _PREFIJOS_FORMULA:
+        return "'" + valor
+    return valor
+
+
 def aplicar_estilos_profesionales(ws, columnas, datos, formatos=None, alineaciones=None):
     """
     Aplica una plantilla visual moderna y corporativa a la hoja de cálculo:
@@ -58,8 +74,9 @@ def aplicar_estilos_profesionales(ws, columnas, datos, formatos=None, alineacion
         cell.border = header_border
         cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=False)
 
-    # 4. Escribir filas de datos
+    # 4. Escribir filas de datos (saneadas contra inyección de fórmulas)
     for row_idx, fila in enumerate(datos, start=2):
+        fila = [neutralizar_formula(v) for v in fila]
         ws.append(fila)
         ws.row_dimensions[row_idx].height = 20
         fill_actual = even_fill if row_idx % 2 == 0 else odd_fill

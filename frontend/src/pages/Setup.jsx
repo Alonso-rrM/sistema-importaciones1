@@ -25,8 +25,9 @@ export default function Setup() {
       setError('Las contraseñas no coinciden.');
       return;
     }
-    if (form.password.length < 8) {
-      setError('La contraseña debe tener al menos 8 caracteres.');
+    // Misma política que valida el backend
+    if (form.password.length < 10 || !/[a-z]/.test(form.password) || !/[A-Z]/.test(form.password) || !/\d/.test(form.password)) {
+      setError('La contraseña debe tener al menos 10 caracteres e incluir mayúsculas, minúsculas y números.');
       return;
     }
 
@@ -40,7 +41,11 @@ export default function Setup() {
       });
       setPaso(3);
     } catch (err) {
-      const msg = err.response?.data?.detail || 'Error al inicializar el sistema.';
+      const detail = err.response?.data?.detail;
+      // Los errores 422 de validación llegan como lista: se muestran como texto legible
+      const msg = Array.isArray(detail)
+        ? detail.map(d => (d.msg || '').replace(/^Value error, /, '')).join(' ')
+        : (detail || 'Error al inicializar el sistema.');
       setError(msg);
     } finally {
       setCargando(false);

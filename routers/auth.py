@@ -1,14 +1,20 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 from typing import Optional
+import secrets
 
 import models
+from schemas import Username, PasswordSegura, Email
+from services.errores import error_interno
 from security import verify_password, create_access_token, get_password_hash
 from dependencies import get_db, limiter
 
 router = APIRouter(tags=["Auth"])
+
+# Hash bcrypt de una clave aleatoria descartable: se usa para igualar tiempos cuando el usuario no existe
+HASH_SENUELO = get_password_hash(secrets.token_urlsafe(32))
 
 # --- ENDPOINT DE VERIFICACIÓN DEL ESTADO DEL SISTEMA ---
 @router.get("/setup/status", tags=["Setup"])
@@ -24,9 +30,9 @@ def verificar_estado_setup(db: Session = Depends(get_db)):
 
 # --- ESQUEMA PARA LA SOLICITUD DE SETUP ---
 class SetupInicialRequest(BaseModel):
-    username: str
-    password: str
-    email: str
+    username: Username
+    password: PasswordSegura
+    email: Email
     nombre_empresa: Optional[str] = "Mi Empresa"
 
 
@@ -76,7 +82,7 @@ def inicializar_sistema(payload: SetupInicialRequest, db: Session = Depends(get_
 
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Error durante la inicializacion: {str(e)}")
+        raise error_interno("Error durante la inicializacion", e, 500)
 
 
 @router.post("/login")
@@ -84,9 +90,13 @@ def inicializar_sistema(payload: SetupInicialRequest, db: Session = Depends(get_
 def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     # 1. Buscar al usuario por username
     user = db.query(models.Usuario).filter(models.Usuario.username == form_data.username).first()
-    
-    # 2. Verificar existencia y contraseña
-    if not user or not verify_password(form_data.password, user.hashed_password):
+
+    # 2. Verificar existencia y contraseña.
+    # Si el usuario no existe se verifica igual contra un hash señuelo: así el tiempo de respuesta
+    # es el mismo y no se puede averiguar qué usuarios existen midiendo la latencia.
+    hash_a_verificar = user.hashed_password if user else HASH_SENUELO
+    password_ok = verify_password(form_data.password, hash_a_verificar)
+    if not user or not password_ok:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Username o contraseña incorrectos",

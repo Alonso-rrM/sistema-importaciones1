@@ -8,6 +8,11 @@ import models
 import schemas
 from dependencies import get_db, get_current_user, RoleChecker
 
+# Matriz RBAC de escritura en catálogos (1: Admin, 2: Logística, 3: Tesorería, 4: Auditoría = solo lectura)
+ROLES_OPERATIVOS = [1, 2, 3]   # importadores, proveedores, agentes, almacenes
+ROLES_TESORERIA = [1, 3]       # bancos
+ROLES_CONFIG = [1, 2]          # conceptos y tipos de documento (alimentan la máquina de estados y el motor financiero)
+
 router = APIRouter(tags=["Catalogos"])
 
 # ==========================================
@@ -29,7 +34,7 @@ def crear_rol(
 # 2. BANCOS
 # ==========================================
 @router.post("/bancos/", response_model=schemas.CatBanco)
-def crear_banco(banco: schemas.CatBancoCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def crear_banco(banco: schemas.CatBancoCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_TESORERIA))):
     nuevo_banco = models.CatBanco(nombre=banco.nombre)
     db.add(nuevo_banco)
     db.commit()
@@ -44,7 +49,7 @@ def listar_bancos(mostrar_inactivos: bool = False, db: Session = Depends(get_db)
     return query.order_by(models.CatBanco.id_banco.asc()).all()
 
 @router.put("/bancos/{id_banco}", response_model=schemas.CatBanco)
-def actualizar_banco(id_banco: int, banco_editado: schemas.CatBancoUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def actualizar_banco(id_banco: int, banco_editado: schemas.CatBancoUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_TESORERIA))):
     db_banco = db.query(models.CatBanco).filter(models.CatBanco.id_banco == id_banco).first()
     if not db_banco:
         raise HTTPException(status_code=404, detail="Banco no encontrado")
@@ -58,7 +63,7 @@ def actualizar_banco(id_banco: int, banco_editado: schemas.CatBancoUpdate, db: S
     return db_banco
 
 @router.delete("/bancos/{id_banco}")
-def eliminar_banco(id_banco: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def eliminar_banco(id_banco: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_TESORERIA))):
     banco = db.query(models.CatBanco).filter(models.CatBanco.id_banco == id_banco).first()
     if not banco:
         raise HTTPException(status_code=404, detail="Banco no encontrado")
@@ -67,7 +72,7 @@ def eliminar_banco(id_banco: int, db: Session = Depends(get_db), current_user: m
     return {"mensaje": f"El banco '{banco.nombre}' ha sido desactivado correctamente."}
 
 @router.put("/bancos/{id_banco}/restaurar", response_model=schemas.CatBanco)
-def restaurar_bancos(id_banco: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def restaurar_bancos(id_banco: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_TESORERIA))):
     db_item = db.query(models.CatBanco).filter(models.CatBanco.id_banco == id_banco).first()
     if not db_item:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
@@ -93,7 +98,7 @@ def eliminar_bancos_fisico(id_banco: int, db: Session = Depends(get_db), current
 # 3. AGENTES
 # ==========================================
 @router.post("/agentes/", response_model=schemas.CatAgente)
-def crear_agente(agente: schemas.CatAgenteCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def crear_agente(agente: schemas.CatAgenteCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_OPERATIVOS))):
     nuevo_agente = models.CatAgente(**agente.model_dump())
     db.add(nuevo_agente)
     db.commit()
@@ -108,7 +113,7 @@ def listar_agentes(mostrar_inactivos: bool = False, db: Session = Depends(get_db
     return query.order_by(models.CatAgente.id_agente.asc()).all()
 
 @router.put("/agentes/{id_agente}", response_model=schemas.CatAgente)
-def actualizar_agente(id_agente: int, agente_editado: schemas.CatAgenteUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def actualizar_agente(id_agente: int, agente_editado: schemas.CatAgenteUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_OPERATIVOS))):
     db_agente = db.query(models.CatAgente).filter(models.CatAgente.id_agente == id_agente).first()
     if not db_agente:
         raise HTTPException(status_code=404, detail="Agente no encontrado")
@@ -126,7 +131,7 @@ def actualizar_agente(id_agente: int, agente_editado: schemas.CatAgenteUpdate, d
         raise HTTPException(status_code=400, detail="Error: El Nombre o RUC ya están registrados.")
 
 @router.delete("/agentes/{id_agente}")
-def eliminar_agente(id_agente: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def eliminar_agente(id_agente: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_OPERATIVOS))):
     agente = db.query(models.CatAgente).filter(models.CatAgente.id_agente == id_agente).first()
     if not agente:
         raise HTTPException(status_code=404, detail="Agente no encontrado")
@@ -135,7 +140,7 @@ def eliminar_agente(id_agente: int, db: Session = Depends(get_db), current_user:
     return {"mensaje": f"El agente '{agente.nombre}' ha sido desactivado correctamente."}
 
 @router.put("/agentes/{id_agente}/restaurar", response_model=schemas.CatAgente)
-def restaurar_agentes(id_agente: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def restaurar_agentes(id_agente: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_OPERATIVOS))):
     db_item = db.query(models.CatAgente).filter(models.CatAgente.id_agente == id_agente).first()
     if not db_item:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
@@ -161,7 +166,7 @@ def eliminar_agentes_fisico(id_agente: int, db: Session = Depends(get_db), curre
 # 4. PROVEEDORES
 # ==========================================
 @router.post("/proveedores/", response_model=schemas.CatProveedor)
-def crear_proveedor(proveedor: schemas.CatProveedorCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def crear_proveedor(proveedor: schemas.CatProveedorCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_OPERATIVOS))):
     data = proveedor.model_dump()
     if not data.get("ruc") or not str(data.get("ruc")).strip():
         data["ruc"] = None
@@ -186,7 +191,7 @@ def listar_proveedores(mostrar_inactivos: bool = False, db: Session = Depends(ge
     return query.order_by(models.CatProveedor.id_proveedor.asc()).all()
 
 @router.put("/proveedores/{id_proveedor}", response_model=schemas.CatProveedor)
-def actualizar_proveedor(id_proveedor: int, proveedor_editado: schemas.CatProveedorUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def actualizar_proveedor(id_proveedor: int, proveedor_editado: schemas.CatProveedorUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_OPERATIVOS))):
     db_proveedor = db.query(models.CatProveedor).filter(models.CatProveedor.id_proveedor == id_proveedor).first()
     if not db_proveedor:
         raise HTTPException(status_code=404, detail="Proveedor no encontrado")
@@ -204,7 +209,7 @@ def actualizar_proveedor(id_proveedor: int, proveedor_editado: schemas.CatProvee
         raise HTTPException(status_code=400, detail="Error: El Nombre o RUC ya están registrados.")
 
 @router.delete("/proveedores/{id_proveedor}")
-def eliminar_proveedor(id_proveedor: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def eliminar_proveedor(id_proveedor: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_OPERATIVOS))):
     proveedor = db.query(models.CatProveedor).filter(models.CatProveedor.id_proveedor == id_proveedor).first()
     if not proveedor:
         raise HTTPException(status_code=404, detail="Proveedor no encontrado")
@@ -213,7 +218,7 @@ def eliminar_proveedor(id_proveedor: int, db: Session = Depends(get_db), current
     return {"mensaje": f"El proveedor '{proveedor.nombre}' ha sido desactivado correctamente."}
 
 @router.put("/proveedores/{id_proveedor}/restaurar", response_model=schemas.CatProveedor)
-def restaurar_proveedores(id_proveedor: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def restaurar_proveedores(id_proveedor: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_OPERATIVOS))):
     db_item = db.query(models.CatProveedor).filter(models.CatProveedor.id_proveedor == id_proveedor).first()
     if not db_item:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
@@ -239,7 +244,7 @@ def eliminar_proveedores_fisico(id_proveedor: int, db: Session = Depends(get_db)
 # 5. ALMACENES
 # ==========================================
 @router.post("/almacenes/", response_model=schemas.CatAlmacen)
-def crear_almacen(almacen: schemas.CatAlmacenCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def crear_almacen(almacen: schemas.CatAlmacenCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_OPERATIVOS))):
     nuevo_almacen = models.CatAlmacen(**almacen.model_dump())
     db.add(nuevo_almacen)
     db.commit()
@@ -254,7 +259,7 @@ def listar_almacenes(mostrar_inactivos: bool = False, db: Session = Depends(get_
     return query.order_by(models.CatAlmacen.id_almacen.asc()).all()
 
 @router.put("/almacenes/{id_almacen}", response_model=schemas.CatAlmacen)
-def actualizar_almacen(id_almacen: int, almacen_editado: schemas.CatAlmacenUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def actualizar_almacen(id_almacen: int, almacen_editado: schemas.CatAlmacenUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_OPERATIVOS))):
     db_almacen = db.query(models.CatAlmacen).filter(models.CatAlmacen.id_almacen == id_almacen).first()
     if not db_almacen:
         raise HTTPException(status_code=404, detail="Almacén no encontrado")
@@ -268,7 +273,7 @@ def actualizar_almacen(id_almacen: int, almacen_editado: schemas.CatAlmacenUpdat
     return db_almacen
 
 @router.delete("/almacenes/{id_almacen}")
-def eliminar_almacen(id_almacen: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def eliminar_almacen(id_almacen: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_OPERATIVOS))):
     almacen = db.query(models.CatAlmacen).filter(models.CatAlmacen.id_almacen == id_almacen).first()
     if not almacen:
         raise HTTPException(status_code=404, detail="Almacén no encontrado")
@@ -277,7 +282,7 @@ def eliminar_almacen(id_almacen: int, db: Session = Depends(get_db), current_use
     return {"mensaje": f"El almacén '{almacen.nombre}' ha sido desactivado correctamente."}
 
 @router.put("/almacenes/{id_almacen}/restaurar", response_model=schemas.CatAlmacen)
-def restaurar_almacenes(id_almacen: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def restaurar_almacenes(id_almacen: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_OPERATIVOS))):
     db_item = db.query(models.CatAlmacen).filter(models.CatAlmacen.id_almacen == id_almacen).first()
     if not db_item:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
@@ -303,7 +308,7 @@ def eliminar_almacenes_fisico(id_almacen: int, db: Session = Depends(get_db), cu
 # 6. IMPORTADORES
 # ==========================================
 @router.post("/importadores/", response_model=schemas.CatImportador)
-def crear_importador(importador: schemas.CatImportadorCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def crear_importador(importador: schemas.CatImportadorCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_OPERATIVOS))):
     nuevo_importador = models.CatImportador(**importador.model_dump())
     db.add(nuevo_importador)
     db.commit()
@@ -318,7 +323,7 @@ def listar_importadores(mostrar_inactivos: bool = False, db: Session = Depends(g
     return query.order_by(models.CatImportador.id_importador.asc()).all()
 
 @router.put("/importadores/{id_importador}", response_model=schemas.CatImportador)
-def actualizar_importador(id_importador: int, importador_editado: schemas.CatImportadorUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def actualizar_importador(id_importador: int, importador_editado: schemas.CatImportadorUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_OPERATIVOS))):
     db_importador = db.query(models.CatImportador).filter(models.CatImportador.id_importador == id_importador).first()
     if not db_importador:
         raise HTTPException(status_code=404, detail="Importador no encontrado")
@@ -336,7 +341,7 @@ def actualizar_importador(id_importador: int, importador_editado: schemas.CatImp
         raise HTTPException(status_code=400, detail="Error: El Nombre o RUC ya están registrados.")
 
 @router.delete("/importadores/{id_importador}")
-def eliminar_importador(id_importador: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def eliminar_importador(id_importador: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_OPERATIVOS))):
     importador = db.query(models.CatImportador).filter(models.CatImportador.id_importador == id_importador).first()
     if not importador:
         raise HTTPException(status_code=404, detail="Importador no encontrado")
@@ -345,7 +350,7 @@ def eliminar_importador(id_importador: int, db: Session = Depends(get_db), curre
     return {"mensaje": f"El importador '{importador.nombre}' ha sido desactivado correctamente."}
 
 @router.put("/importadores/{id_importador}/restaurar", response_model=schemas.CatImportador)
-def restaurar_importadores(id_importador: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def restaurar_importadores(id_importador: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_OPERATIVOS))):
     db_item = db.query(models.CatImportador).filter(models.CatImportador.id_importador == id_importador).first()
     if not db_item:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
@@ -371,7 +376,7 @@ def eliminar_importadores_fisico(id_importador: int, db: Session = Depends(get_d
 # 7. CONCEPTOS DE PAGO
 # ==========================================
 @router.post("/conceptos/", response_model=schemas.CatConceptoPago)
-def crear_concepto(concepto: schemas.CatConceptoPagoCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def crear_concepto(concepto: schemas.CatConceptoPagoCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_CONFIG))):
     try:
         nuevo_concepto = models.CatConceptoPago(**concepto.model_dump())
         db.add(nuevo_concepto)
@@ -390,7 +395,7 @@ def listar_conceptos(mostrar_inactivos: bool = False, db: Session = Depends(get_
     return query.order_by(models.CatConceptoPago.id_concepto.asc()).all()
 
 @router.put("/conceptos/{id_concepto}", response_model=schemas.CatConceptoPago)
-def actualizar_concepto(id_concepto: int, concepto_editado: schemas.CatConceptoPagoUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def actualizar_concepto(id_concepto: int, concepto_editado: schemas.CatConceptoPagoUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_CONFIG))):
     db_concepto = db.query(models.CatConceptoPago).filter(models.CatConceptoPago.id_concepto == id_concepto).first()
     if not db_concepto:
         raise HTTPException(status_code=404, detail="Concepto no encontrado")
@@ -408,7 +413,7 @@ def actualizar_concepto(id_concepto: int, concepto_editado: schemas.CatConceptoP
         raise HTTPException(status_code=400, detail="Error: El nombre del concepto ya existe.")
 
 @router.delete("/conceptos/{id_concepto}")
-def eliminar_concepto(id_concepto: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def eliminar_concepto(id_concepto: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_CONFIG))):
     concepto = db.query(models.CatConceptoPago).filter(models.CatConceptoPago.id_concepto == id_concepto).first()
     if not concepto:
         raise HTTPException(status_code=404, detail="Concepto no encontrado")
@@ -418,7 +423,7 @@ def eliminar_concepto(id_concepto: int, db: Session = Depends(get_db), current_u
     return {"mensaje": f"El concepto '{concepto.nombre}' ha sido desactivado correctamente."}
 
 @router.put("/conceptos/{id_concepto}/restaurar", response_model=schemas.CatConceptoPago)
-def restaurar_conceptos(id_concepto: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def restaurar_conceptos(id_concepto: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_CONFIG))):
     db_item = db.query(models.CatConceptoPago).filter(models.CatConceptoPago.id_concepto == id_concepto).first()
     if not db_item:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
@@ -451,7 +456,7 @@ def listar_tipos_documento(mostrar_inactivos: bool = False, db: Session = Depend
     return query.order_by(models.CatalogoDocumentoPago.id_tipo_doc.asc()).all()
 
 @router.post("/tipos-documento/", response_model=schemas.CatalogoDocumentoPago)
-def crear_tipo_documento(tipo_doc: schemas.CatalogoDocumentoPagoCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def crear_tipo_documento(tipo_doc: schemas.CatalogoDocumentoPagoCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_CONFIG))):
     nuevo_tipo = models.CatalogoDocumentoPago(**tipo_doc.model_dump())
     db.add(nuevo_tipo)
     try:
@@ -463,7 +468,7 @@ def crear_tipo_documento(tipo_doc: schemas.CatalogoDocumentoPagoCreate, db: Sess
         raise HTTPException(status_code=400, detail="El nombre del documento ya existe.")
 
 @router.put("/tipos-documento/{id}", response_model=schemas.CatalogoDocumentoPago)
-def actualizar_tipo_documento(id: int, tipo_doc: schemas.CatalogoDocumentoPagoUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def actualizar_tipo_documento(id: int, tipo_doc: schemas.CatalogoDocumentoPagoUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_CONFIG))):
     doc_bd = db.query(models.CatalogoDocumentoPago).filter(models.CatalogoDocumentoPago.id_tipo_doc == id).first()
     if not doc_bd:
         raise HTTPException(status_code=404, detail="Documento no encontrado")
@@ -481,7 +486,7 @@ def actualizar_tipo_documento(id: int, tipo_doc: schemas.CatalogoDocumentoPagoUp
         raise HTTPException(status_code=400, detail="El nombre del documento ya existe.")
 
 @router.delete("/tipos-documento/{id}")
-def eliminar_tipo_documento_logico(id: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def eliminar_tipo_documento_logico(id: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_CONFIG))):
     doc_bd = db.query(models.CatalogoDocumentoPago).filter(models.CatalogoDocumentoPago.id_tipo_doc == id).first()
     if not doc_bd:
         raise HTTPException(status_code=404, detail="Documento no encontrado")
@@ -491,7 +496,7 @@ def eliminar_tipo_documento_logico(id: int, db: Session = Depends(get_db), curre
     return {"mensaje": "Documento desactivado lógicamente"}
 
 @router.put("/tipos-documento/{id}/restaurar")
-def restaurar_tipo_documento(id: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def restaurar_tipo_documento(id: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_CONFIG))):
     doc_bd = db.query(models.CatalogoDocumentoPago).filter(models.CatalogoDocumentoPago.id_tipo_doc == id).first()
     if not doc_bd:
         raise HTTPException(status_code=404, detail="Documento no encontrado")

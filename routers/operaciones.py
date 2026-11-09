@@ -8,6 +8,7 @@ from sqlalchemy.orm.exc import StaleDataError
 from sqlalchemy import func
 
 import models
+from services.errores import error_interno
 import schemas
 from dependencies import get_db, get_current_user, RoleChecker
 from services.audit import registrar_auditoria, registrar_auditoria_sync
@@ -88,8 +89,13 @@ def validar_transicion_dam(estado_actual: str, estado_nuevo: str, tipo_valor: st
 # ==========================================
 
 @router.post("/maestros/", response_model=schemas.MaestroImportacion)
-def crear_maestro(maestro: schemas.MaestroImportacionCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
-    nuevo_maestro = models.MaestroImportacion(**maestro.model_dump())
+def crear_maestro(maestro: schemas.MaestroImportacionCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1, 2]))):
+    datos = maestro.model_dump()
+    # Campos calculados por la máquina de estados: nunca se aceptan del cliente al crear
+    datos.update({"estado_documentario": "SIN NUMERAR", "estado_levante": "SIN LEVANTE", "fecha_levante_maestro": None, "version": 1})
+    if datos.get("status_llegada") == "EN ALMACÉN" and not datos.get("fecha_recepcion_almacen"):
+        raise HTTPException(status_code=400, detail="Para registrar el contenedor EN ALMACÉN debe indicar la fecha de recepción en almacén.")
+    nuevo_maestro = models.MaestroImportacion(**datos)
     
     # Automatización CFR
     fob = nuevo_maestro.fob_usd if nuevo_maestro.fob_usd is not None else Decimal('0.00')
@@ -107,7 +113,7 @@ def crear_maestro(maestro: schemas.MaestroImportacionCreate, db: Session = Depen
     return nuevo_maestro
 
 @router.put("/maestros/{id_maestro}", response_model=schemas.MaestroImportacion)
-def actualizar_maestro(id_maestro: int, maestro_editado: schemas.MaestroImportacionUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+def actualizar_maestro(id_maestro: int, maestro_editado: schemas.MaestroImportacionUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1, 2]))):
     db_maestro = db.query(models.MaestroImportacion).filter(models.MaestroImportacion.id_maestro == id_maestro).first()
     
     if not db_maestro:
@@ -127,7 +133,31 @@ def actualizar_maestro(id_maestro: int, maestro_editado: schemas.MaestroImportac
         del update_data["estado_documentario"]
     if "estado_levante" in update_data and current_user.id_rol != 1:
         del update_data["estado_levante"]
-    
+    if "fecha_levante_maestro" in update_data and current_user.id_rol != 1:
+        del update_data["fecha_levante_maestro"]  # La sella el cronómetro logístico de la máquina de estados
+
+    # Bloqueo optimista real: la versión que el cliente leyó debe coincidir con la actual.
+    # (Antes se asignaba con setattr y SQLAlchemy la tomaba como "nueva versión", sin detectar el conflicto.)
+    version_cliente = update_data.pop("version", None)
+    if version_cliente is not None and version_cliente != db_maestro.version:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="❌ CONFLICTO DE CONCURRENCIA: Otro usuario (o un proceso automático) modificó este expediente mientras lo editabas. Recarga el registro y vuelve a aplicar tus cambios."
+        )
+
+    # Integridad física: EN ALMACÉN exige fecha de recepción
+    status_final = update_data.get("status_llegada", db_maestro.status_llegada)
+    fecha_recepcion_final = update_data["fecha_recepcion_almacen"] if "fecha_recepcion_almacen" in update_data else db_maestro.fecha_recepcion_almacen
+    if status_final == "EN ALMACÉN" and not fecha_recepcion_final:
+        raise HTTPException(status_code=400, detail="Para pasar el contenedor a EN ALMACÉN debe indicar la fecha de recepción en almacén.")
+
+    # El tipo de valor (DEFINITIVO/GARANTIZADO) define qué levantes son legales: no puede cambiarse
+    # cuando alguna DAM ya avanzó en su trámite aduanero (salvo Administrador).
+    if "tipo_valor" in update_data and update_data["tipo_valor"] != db_maestro.tipo_valor and current_user.id_rol != 1:
+        dams_avanzadas = [d for d in db_maestro.dams if d.estado_dam not in (None, "NUMERADA / EN EVALUACIÓN")]
+        if dams_avanzadas:
+            raise HTTPException(status_code=400, detail="No se puede cambiar el tipo de valor: hay DAMs con trámite aduanero en curso. Solicítelo al Administrador.")
+
     for key, value in update_data.items():
         setattr(db_maestro, key, value)
         
@@ -189,7 +219,7 @@ async def desbloquear_maestro_con_levante(
         raise
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=400, detail=f"Error al desbloquear levante: {str(e)}")
+        raise error_interno("Error al desbloquear levante", e, 400)
 
 @router.put("/maestros/{id_maestro}/autorizar-levante", response_model=schemas.MaestroImportacion)
 async def autorizar_levante(
@@ -240,7 +270,7 @@ async def autorizar_levante(
         raise
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Error al autorizar levante: {str(e)}")
+        raise error_interno("Error al autorizar levante", e, 500)
 
 @router.get("/maestros/lookup", response_model=List[schemas.MaestroLookup])
 def lookup_maestros(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
@@ -882,7 +912,10 @@ def eliminar_dam(id_dam: int, req: schemas.EliminacionRequest, db: Session = Dep
     dam = db.query(models.DetalleDam).filter(models.DetalleDam.id_dam == id_dam).first()
     if not dam:
         raise HTTPException(status_code=404, detail="DAM no encontrada")
-        
+
+    if dam.maestro and dam.maestro.estado_documentario == "ATE. TOTAL" and current_user.id_rol != 1:
+        raise HTTPException(status_code=403, detail="Operación Denegada: El contenedor está en ATENCIÓN TOTAL.")
+
     tiene_gastos = db.query(models.RegistroGasto).filter(models.RegistroGasto.id_dam == id_dam).first()
     if tiene_gastos:
         raise HTTPException(

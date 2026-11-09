@@ -166,7 +166,8 @@ const Vouchers = () => {
       numero_operacion: v.numero_operacion || '',
       monto_total: v.monto_total !== undefined && v.monto_total !== null ? String(v.monto_total) : '',
       moneda: v.moneda || 'USD',
-      fecha_transferencia: v.fecha_transferencia ? String(v.fecha_transferencia).slice(0, 10) : ''
+      fecha_transferencia: v.fecha_transferencia ? String(v.fecha_transferencia).slice(0, 10) : '',
+      version: v.version
     });
   };
 
@@ -245,7 +246,7 @@ const Vouchers = () => {
         setSelectedId(res.data?.id_voucher || null);
         setViewMode('DETALLE');
       } else if (viewMode === 'MODIFICAR') {
-        await api.put(`/vouchers/${selectedId}`, payload);
+        await api.put(`/vouchers/${selectedId}`, { ...payload, version: formData.version });
         mostrarAlerta('✅ Voucher actualizado exitosamente.', 'exito');
         await cargarVouchers();
         setViewMode('DETALLE');

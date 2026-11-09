@@ -117,10 +117,41 @@ const Pagos = () => {
     }
   }, []);
 
-  const esUsuarioOperaciones = userRole === 3;
+  // Solo Admin (1) y Tesorería (3) liquidan pagos; Logística (2) y Auditoría (4) quedan en modo consulta
+  const esUsuarioOperaciones = ![1, 3].includes(userRole);
+
+  // TC oficial SUNAT del día (lo usa el backend para validar pagos en moneda cruzada)
+  const [tcOficial, setTcOficial] = useState(null);
+  const hoyISO = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  const cargarTcOficial = async () => {
+    try {
+      const res = await api.get(`/tipo-cambio/${hoyISO()}`);
+      setTcOficial(res.data);
+    } catch {
+      setTcOficial(null);
+    }
+  };
+  const registrarTcOficial = async () => {
+    const venta = window.prompt('TC oficial SUNAT de HOY — precio de VENTA (ej. 3.7520):', tcOficial?.precio_venta ?? '');
+    if (!venta) return;
+    const compra = window.prompt('TC oficial SUNAT de HOY — precio de COMPRA (ej. 3.7450):', tcOficial?.precio_compra ?? '');
+    if (!compra) return;
+    try {
+      const res = await api.put('/tipo-cambio/', { fecha: hoyISO(), precio_compra: parseFloat(compra), precio_venta: parseFloat(venta) });
+      setTcOficial(res.data);
+    } catch (err) {
+      const detail = err.response?.data?.detail;
+      alert(`No se pudo registrar el TC: ${Array.isArray(detail) ? detail.map(d => d.msg).join(' ') : (detail || 'Error desconocido')}`);
+    }
+  };
+  const tcSugerido = tcOficial?.precio_venta ? String(parseFloat(tcOficial.precio_venta)) : '3.75';
 
   useEffect(() => {
     cargarBancos();
+    cargarTcOficial();
   }, []);
 
   useEffect(() => {
@@ -211,7 +242,7 @@ const Pagos = () => {
       voucher_id: null,
       fecha_pago: new Date().toISOString().split('T')[0],
       moneda: monedaGasto,
-      tipo_cambio: monedaGasto === 'USD' ? '1.00' : '3.75',
+      tipo_cambio: monedaGasto === 'USD' ? '1.00' : tcSugerido,
       importe: saldoPendienteNum > 0 ? saldoPendienteNum.toFixed(2) : '0.00',
       pago_moneda_cruzada: false,
       monto_moneda_origen: ''
@@ -256,7 +287,7 @@ const Pagos = () => {
     e.preventDefault();
     if (isSubmitting) return;
     if (esUsuarioOperaciones) {
-      alert("Operación denegada: Tu rol de Operaciones no tiene permisos para autorizar o liquidar pagos.");
+      alert("Operación denegada: Solo Tesorería o el Administrador pueden liquidar pagos.");
       return;
     }
     if (!form.voucher_id) {
@@ -401,10 +432,18 @@ const Pagos = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          <div className={`px-3 py-1.5 rounded-lg border text-xs font-mono flex items-center gap-2 ${tcOficial ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' : 'bg-rose-500/10 border-rose-500/30 text-rose-300'}`}>
+            <span>{tcOficial ? `TC SUNAT hoy: ${parseFloat(tcOficial.precio_venta).toFixed(4)}` : 'TC SUNAT de hoy no registrado'}</span>
+            {!esUsuarioOperaciones && (
+              <button type="button" onClick={registrarTcOficial} className="underline font-sans font-semibold hover:opacity-80">
+                {tcOficial ? 'Corregir' : 'Registrar'}
+              </button>
+            )}
+          </div>
           {esUsuarioOperaciones && (
             <div className="px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center gap-1.5">
               <AlertTriangle size={14} className="inline-block shrink-0" />
-              <span>Modo Consulta (Rol Logística)</span>
+              <span>Modo Consulta ({userRole === 4 ? 'Rol Auditoría' : 'Rol Logística'})</span>
             </div>
           )}
           <button
@@ -801,7 +840,7 @@ const Pagos = () => {
                           onChange={e => setForm({
                             ...form,
                             moneda: e.target.value,
-                            tipo_cambio: form.tipo_cambio === '1.00' ? '3.75' : form.tipo_cambio
+                            tipo_cambio: form.tipo_cambio === '1.00' ? tcSugerido : form.tipo_cambio
                           })}
                           className="w-full text-xs bg-slate-900 border border-slate-700 rounded-lg p-2 font-bold text-white focus:outline-none focus:border-purple-500"
                         >

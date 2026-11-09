@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy import func, case
 
 import models
+from services.errores import error_interno
 import schemas
 from dependencies import get_db, get_current_user, RoleChecker
 from services.audit import registrar_auditoria, registrar_auditoria_sync
@@ -45,6 +46,26 @@ def convertir_moneda(monto: Decimal, de: str, a: str, tc: Decimal) -> Decimal:
     else:
         raise HTTPException(status_code=400, detail=f"Conversión de moneda no soportada: {de} → {a}.")
     return resultado.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def validar_voucher_unico(db: Session, banco_id: int, numero_operacion: str, excluir_id: Optional[int] = None):
+    """Un mismo depósito (banco + N° de operación) no puede registrarse dos veces: duplicaría fondos."""
+    q = db.query(models.VoucherBancario).filter(
+        models.VoucherBancario.banco_id == banco_id,
+        func.upper(func.trim(models.VoucherBancario.numero_operacion)) == (numero_operacion or "").strip().upper(),
+        models.VoucherBancario.estado_registro == "ACTIVO",
+    )
+    if excluir_id is not None:
+        q = q.filter(models.VoucherBancario.id_voucher != excluir_id)
+    if q.first():
+        raise HTTPException(status_code=400, detail=f"Duplicidad detectada: ya existe un voucher con el N° de operación '{numero_operacion}' en este banco.")
+
+
+def expediente_cerrado(gasto_o_dam) -> bool:
+    """True si el contenedor asociado está en ATENCIÓN TOTAL."""
+    dam_obj = getattr(gasto_o_dam, "dam", None) or gasto_o_dam
+    maestro = getattr(dam_obj, "maestro", None)
+    return bool(maestro and maestro.estado_documentario == "ATE. TOTAL")
 
 
 def validar_tipo_cambio(db: Session, tc: Decimal, fecha: date):
@@ -133,7 +154,7 @@ async def crear_gasto(
         return nuevo_gasto
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=400, detail=f"Error al crear gasto: {str(e)}")
+        raise error_interno("Error al crear gasto", e, 400)
 
 @router.put("/gastos/{id_gasto}", response_model=schemas.RegistroGasto)
 def actualizar_gasto(id_gasto: int, gasto_editado: schemas.RegistroGastoUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1, 2, 3]))):  # 1: Admin, 2: Logística, 3: Tesorería (solo observaciones)
@@ -499,7 +520,10 @@ def eliminar_gasto(
     gasto = db.query(models.RegistroGasto).filter(models.RegistroGasto.id_gasto == id_gasto).first()
     if not gasto:
         raise HTTPException(status_code=404, detail="Gasto no encontrado")
-        
+
+    if expediente_cerrado(gasto) and current_user.id_rol != 1:
+        raise HTTPException(status_code=403, detail="Operación Denegada: El expediente se encuentra en ATENCIÓN TOTAL. Solicite desbloqueo al Administrador.")
+
     pagos_asociados = (
         db.query(models.RegistroPago)
         .filter(
@@ -522,7 +546,13 @@ def eliminar_gasto(
                 status_code=400, 
                 detail=f"❌ Bloqueo: El gasto tiene {len(pagos_asociados)} pago(s) asociado(s) por un total de {total_amortizado} {gasto.moneda}. Puede eliminarlos individualmente o confirmar la eliminación con reversión de pagos."
             )
-            
+        # Segregación de funciones: revertir pagos es potestad de Tesorería; Logística no puede deshacer egresos.
+        if current_user.id_rol != 1:
+            raise HTTPException(
+                status_code=403,
+                detail="Segregación de funciones: solo el Administrador puede eliminar un gasto revirtiendo sus pagos. Solicite a Tesorería anular primero los pagos."
+            )
+
         # Reversión de pagos en cascada
         cols_respaldo_pago = {c.name for c in models.PagoEliminado.__table__.columns}
         for pago in pagos_asociados:
@@ -584,6 +614,9 @@ def eliminar_gasto(
 
 @router.post("/vouchers/", response_model=schemas.VoucherBancarioResponse)
 def crear_voucher(voucher: schemas.VoucherBancarioCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1, 3]))): # 1: Admin, 3: Tesorería
+    validar_voucher_unico(db, voucher.banco_id, voucher.numero_operacion)
+    if voucher.fecha_transferencia > date.today():
+        raise HTTPException(status_code=400, detail="La fecha de transferencia no puede ser futura.")
     nuevo_voucher = models.VoucherBancario(
         banco_id=voucher.banco_id,
         id_importador=voucher.id_importador,
@@ -651,6 +684,21 @@ def actualizar_voucher(
         raise HTTPException(status_code=404, detail="Voucher no encontrado")
 
     update_data = voucher_editado.model_dump(exclude_unset=True)
+    update_data.pop("saldo_disponible", None)  # El saldo solo lo mueve el motor de pagos
+
+    # Bloqueo optimista real (cada pago también incrementa la versión del voucher)
+    version_cliente = update_data.pop("version", None)
+    if version_cliente is not None and version_cliente != voucher.version:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Conflicto de concurrencia: el voucher cambió (otro usuario o un pago aplicado) desde que lo abriste. Recárgalo y vuelve a intentar."
+        )
+
+    # Antifraude: el mismo número de operación no puede registrarse dos veces en el mismo banco
+    nuevo_num = update_data.get("numero_operacion", voucher.numero_operacion)
+    nuevo_banco = update_data.get("banco_id", voucher.banco_id)
+    if (nuevo_num, nuevo_banco) != (voucher.numero_operacion, voucher.banco_id):
+        validar_voucher_unico(db, nuevo_banco, nuevo_num, excluir_id=voucher.id_voucher)
 
     # Verificación de integridad contable
     tiene_pagos = voucher.monto_total != voucher.saldo_disponible
@@ -951,7 +999,7 @@ async def registrar_pago(
         raise
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=400, detail=f"Error en transacción: {str(e)}")
+        raise error_interno("Error en transacción", e, 400)
 
 @router.put("/pagos/{id_pago}", response_model=schemas.RegistroPago)
 def actualizar_pago(
@@ -1139,7 +1187,10 @@ def eliminar_pago(id_pago: int, req: schemas.EliminacionRequest, db: Session = D
     pago = db.query(models.RegistroPago).filter(models.RegistroPago.id_pago == id_pago).first()
     if not pago:
         raise HTTPException(status_code=404, detail="Pago no encontrado")
-        
+
+    if pago.dam and expediente_cerrado(pago.dam) and current_user.id_rol != 1:
+        raise HTTPException(status_code=403, detail="Operación Denegada: El expediente se encuentra en ATENCIÓN TOTAL. Solicite desbloqueo al Administrador.")
+
     id_gasto_afectado = pago.id_gasto
     es_ajuste_actual = pago.es_ajuste_sistema
 
@@ -1251,4 +1302,66 @@ def eliminar_pago(id_pago: int, req: schemas.EliminacionRequest, db: Session = D
         return {"mensaje": f"Pago {id_pago} eliminado exitosamente. Saldos recalculados y sincronizados en los registros de auditoría."}
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=400, detail=f"Error al eliminar pago: {str(e)}")
+        raise error_interno("Error al eliminar pago", e, 400)
+
+
+# ==========================================
+# 4. TIPO DE CAMBIO OFICIAL (SUNAT)
+# ==========================================
+# Alimenta la validación de pagos en moneda cruzada (banda ±MARGEN_TC_OFICIAL respecto al TC del día).
+
+@router.get("/tipo-cambio/", response_model=List[schemas.HistorialTipoCambio], tags=["Tipo de Cambio"])
+def listar_tipo_cambio(
+    limit: int = Query(30, ge=1, le=366),
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(get_current_user)
+):
+    return db.query(models.HistorialTipoCambio).order_by(models.HistorialTipoCambio.fecha.desc()).limit(limit).all()
+
+
+@router.get("/tipo-cambio/{fecha}", response_model=schemas.HistorialTipoCambio, tags=["Tipo de Cambio"])
+def obtener_tipo_cambio(fecha: date, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    tc = db.query(models.HistorialTipoCambio).filter(models.HistorialTipoCambio.fecha == fecha).first()
+    if not tc:
+        raise HTTPException(status_code=404, detail=f"No hay tipo de cambio oficial registrado para {fecha}.")
+    return tc
+
+
+@router.put("/tipo-cambio/", response_model=schemas.HistorialTipoCambio, tags=["Tipo de Cambio"])
+def registrar_tipo_cambio(
+    datos: schemas.HistorialTipoCambioCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(RoleChecker([1, 3]))  # 1: Admin, 3: Tesorería
+):
+    """Registra (o corrige) el TC oficial SUNAT de una fecha. Cada cambio queda en la bitácora."""
+    compra = Decimal(str(datos.precio_compra)).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+    venta = Decimal(str(datos.precio_venta)).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+    for etiqueta, valor in (("compra", compra), ("venta", venta)):
+        if not (TC_MINIMO <= valor <= TC_MAXIMO):
+            raise HTTPException(status_code=400, detail=f"TC de {etiqueta} {valor} fuera de la banda de control ({TC_MINIMO} – {TC_MAXIMO}).")
+    if compra > venta:
+        raise HTTPException(status_code=400, detail="El TC de compra no puede ser mayor que el de venta.")
+    if datos.fecha > date.today():
+        raise HTTPException(status_code=400, detail="No se puede registrar el tipo de cambio de una fecha futura.")
+
+    existente = db.query(models.HistorialTipoCambio).filter(models.HistorialTipoCambio.fecha == datos.fecha).first()
+    anterior = {"compra": str(existente.precio_compra), "venta": str(existente.precio_venta)} if existente else None
+    if existente:
+        existente.precio_compra, existente.precio_venta = compra, venta
+        tc = existente
+    else:
+        tc = models.HistorialTipoCambio(fecha=datos.fecha, precio_compra=compra, precio_venta=venta)
+        db.add(tc)
+
+    registrar_auditoria_sync(
+        db=db,
+        id_usuario=current_user.id_usuario,
+        endpoint=request.url.path,
+        accion="CORRECCION TIPO CAMBIO" if existente else "REGISTRO TIPO CAMBIO",
+        detalles=json.dumps({"fecha": str(datos.fecha), "anterior": anterior, "nuevo": {"compra": str(compra), "venta": str(venta)}}),
+        ip_address=request.client.host if request.client else "IP Desconocida"
+    )
+    db.commit()
+    db.refresh(tc)
+    return tc
