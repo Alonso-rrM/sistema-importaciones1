@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import { guardarUsuario, limpiarSesionLocal } from '../utils/session';
 
 function Login() {
   const [username, setUsername] = useState('');
@@ -36,7 +37,9 @@ function Login() {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
       });
 
-      localStorage.setItem('token', respuesta.data.access_token);
+      // La sesión quedó en una cookie httpOnly; aquí solo se guardan nombre y rol para la interfaz
+      limpiarSesionLocal();
+      guardarUsuario(respuesta.data.usuario);
       navigate('/app/logistica');
     } catch (error) {
       if (!error.response) {

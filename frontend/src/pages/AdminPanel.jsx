@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useRef } from 'react';
 import api from '../services/api';
+import { obtenerRol } from '../utils/session';
 import { Settings, Upload, ShieldCheck, Landmark, Tags, Users, Briefcase, Building2, Factory, FileSpreadsheet, FolderUp, AlertTriangle } from 'lucide-react';
 
 const CATALOGOS = [
@@ -16,15 +17,8 @@ export default function AdminPanel() {
   const fileInputRef = useRef(null);
 
   // Detección de rol
-  const userRole = useMemo(() => {
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) return null;
-      const base64Url = token.split('.')[1];
-      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-      return JSON.parse(atob(base64)).id_rol;
-    } catch { return null; }
-  }, []);
+  // Rol solo para la interfaz (los permisos reales los valida el backend)
+  const userRole = obtenerRol();
 
   const [catalogoSeleccionado, setCatalogoSeleccionado] = useState('conceptos');
   const [archivo, setArchivo] = useState(null);

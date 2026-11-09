@@ -1,66 +1,28 @@
-altgraph==0.17.5
-annotated-doc==0.0.4
-annotated-types==0.7.0
-anyio==4.13.0
-asttokens==3.0.1
-bcrypt==4.0.1
-click==8.3.3
-colorama==0.4.6
-comm==0.2.3
-customtkinter==5.2.2
-darkdetect==0.8.0
-debugpy==1.8.17
-decorator==5.2.1
-et_xmlfile==2.0.0
-executing==2.2.1
+# Dependencias de PRODUCCIÓN del backend (API FastAPI).
+# Solo lo que el código importa realmente; las dependencias transitivas las resuelve pip.
+# Herramientas de desarrollo y pruebas: requirements-dev.txt
+
+# Servidor y framework
 fastapi==0.136.1
-greenlet==3.5.0
-h11==0.16.0
-idna==3.13
-ipykernel==7.1.0
-ipython==9.7.0
-ipython_pygments_lexers==1.1.1
-jedi==0.19.2
-jupyter_client==8.6.3
-jupyter_core==5.9.1
-matplotlib-inline==0.2.1
-nest-asyncio==1.6.0
-numpy==2.4.2
-openpyxl==3.1.5
-packaging==25.0
-pandas==3.0.0
-parso==0.8.5
-passlib==1.7.4
-pefile==2024.8.26
-platformdirs==4.5.0
-prompt_toolkit==3.0.52
-psutil==7.1.3
-psycopg2==2.9.12
-pure_eval==0.2.3
-pydantic==2.13.4
-pydantic_core==2.46.4
-Pygments==2.19.2
-pyinstaller==6.18.0
-pyinstaller-hooks-contrib==2026.0
-PyJWT==2.13.0
-python-dateutil==2.9.0.post0
-python-dotenv==1.2.2
-python-multipart==0.0.29
-pywin32==311
-pywin32-ctypes==0.2.3
-pyzmq==27.1.0
-setuptools==82.0.0
-six==1.17.0
-SQLAlchemy==2.0.49
-stack-data==0.6.3
 starlette==1.0.0
-tornado==6.5.2
-traitlets==5.14.3
-typing-inspection==0.4.2
-typing_extensions==4.15.0
-tzdata==2025.3
 uvicorn==0.46.0
-wcwidth==0.2.14
-xlwings==0.33.20
-requests
-slowapi==0.1.10
+pydantic==2.13.4
+python-multipart==0.0.29   # formularios (login OAuth2) y subida de Excel
+slowapi==0.1.10            # rate limiting
+
+# Base de datos
+SQLAlchemy==2.0.49
+psycopg2==2.9.12
+alembic==1.20.0            # migraciones (antes faltaba: una instalación nueva no podía migrar)
+
+# Seguridad
+passlib==1.7.4
+bcrypt==4.0.1              # fijado: passlib 1.7.4 no es compatible con bcrypt >= 4.1
+PyJWT==2.13.0
+python-dotenv==1.2.2
+
+# Integraciones y reportes
+requests==2.34.2           # consulta RUC (ApiPeru)
+openpyxl==3.1.5            # exportación a Excel
+pandas==3.0.0              # carga masiva de catálogos desde Excel
+numpy==2.4.2

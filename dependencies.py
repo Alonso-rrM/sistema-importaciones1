@@ -1,5 +1,5 @@
-from typing import List
-from fastapi import Depends, HTTPException, status
+from typing import List, Optional
+from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 import jwt
@@ -9,30 +9,45 @@ from slowapi.util import get_remote_address
 
 import models
 from database import SessionLocal
-from security import SECRET_KEY, ALGORITHM
+from security import SECRET_KEY, ALGORITHM, COOKIE_SESION
+from services.audit_trail import fijar_contexto  # también registra el listener de la bitácora
 
 # Limitador de peticiones por IP
 limiter = Limiter(key_func=get_remote_address)
 
-# Configuración del esquema OAuth2 (Apunta al endpoint de login)
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+# Esquema OAuth2 Bearer (opcional): lo usan scripts/API. El navegador usa la cookie httpOnly.
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login", auto_error=False)
 
-# Inyector de Sesión de Base de Datos
-def get_db():
+# Inyector de Sesión de Base de Datos (con contexto para la bitácora automática)
+def get_db(request: Request):
     db = SessionLocal()
+    fijar_contexto(
+        db,
+        ip=request.client.host if request.client else None,
+        endpoint=f"{request.method} {request.url.path}",
+    )
     try:
         yield db
     finally:
         db.close()
 
 # Inyector de Usuario Autenticado
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+def get_current_user(request: Request, bearer: Optional[str] = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     credenciales_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="No se pudieron validar las credenciales",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    
+
+    # Prioridad: header Bearer (scripts) y, si no hay, la cookie httpOnly de sesión (navegador)
+    token = bearer or request.cookies.get(COOKIE_SESION)
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="No ha iniciado sesión",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
@@ -53,7 +68,9 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="El usuario inactivo o suspendido")
-        
+
+    # Toda escritura posterior en esta sesión queda firmada con este usuario en la bitácora
+    fijar_contexto(db, id_usuario=user.id_usuario)
     return user
 
 # Control de Roles (RBAC)

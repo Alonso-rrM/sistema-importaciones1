@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import { obtenerRol } from '../utils/session';
 import useDebounce from '../hooks/useDebounce';
 import Paginador from '../components/Paginador';
 import { descargarExcel } from '../utils/exportUtils';
@@ -49,16 +50,8 @@ const Dams = () => {
   const [formData, setFormData] = useState(estadoInicial);
 
   // Rol del usuario decodificado
-  const userRole = useMemo(() => {
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) return null;
-      const base64Url = token.split('.')[1];
-      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-      const jsonPayload = decodeURIComponent(atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
-      return JSON.parse(jsonPayload)?.id_rol;
-    } catch { return null; }
-  }, []);
+  // Rol solo para la interfaz (los permisos reales los valida el backend)
+  const userRole = obtenerRol();
 
   const maestrosMap = useMemo(() => {
     const map = {};

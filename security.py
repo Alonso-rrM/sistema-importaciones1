@@ -18,6 +18,16 @@ if not SECRET_KEY:
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
 
+# --- Sesión por cookie httpOnly ---
+# El JWT viaja en una cookie que JavaScript NO puede leer (httpOnly): un XSS no puede robar la sesión.
+COOKIE_SESION = "erp_session"
+# Secure=True exige HTTPS. Actívelo (COOKIE_SECURE=true) cuando el sistema se sirva por HTTPS;
+# en la red local por HTTP debe quedar en false o el navegador no guardará la cookie.
+COOKIE_SECURE = os.getenv("COOKIE_SECURE", "false").strip().lower() == "true"
+# Encabezado que el frontend envía en cada petición. Un sitio externo no puede agregarlo sin pasar
+# el control CORS, lo que bloquea ataques CSRF aunque el navegador adjunte la cookie.
+CSRF_HEADER = "X-Requested-With"
+
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verifica que la contraseña en texto plano coincida con el hash de la BD."""
     return pwd_context.verify(plain_password, hashed_password)

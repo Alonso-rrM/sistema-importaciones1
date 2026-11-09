@@ -2,16 +2,18 @@ from typing import List, Optional
 import os
 import re
 import requests
-from fastapi import FastAPI, Depends, HTTPException, status, Request
+from datetime import date, datetime, time
+from fastapi import FastAPI, Depends, HTTPException, status, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
 
 import models
 import schemas
 from database import SessionLocal
-from security import get_password_hash
+from fastapi.responses import JSONResponse
+from security import get_password_hash, COOKIE_SESION, CSRF_HEADER
 from dependencies import get_db, get_current_user, RoleChecker, limiter
 from routers import auth, catalogos, operaciones, finanzas, reportes
 
@@ -39,6 +41,27 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+_METODOS_SEGUROS = {"GET", "HEAD", "OPTIONS"}
+
+
+@app.middleware("http")
+async def proteccion_csrf(request: Request, call_next):
+    """
+    Con sesión por cookie, el navegador adjunta la cookie automáticamente. Para que otro sitio no pueda
+    disparar escrituras en nombre de la usuaria (CSRF), toda operación de escritura autenticada por
+    cookie debe traer el header X-Requested-With, que un sitio ajeno no puede enviar sin pasar CORS.
+    (Complementa SameSite=Strict de la cookie.)
+    """
+    if (
+        request.method not in _METODOS_SEGUROS
+        and COOKIE_SESION in request.cookies
+        and not request.headers.get("authorization")
+        and not request.headers.get(CSRF_HEADER)
+    ):
+        return JSONResponse(status_code=403, content={"detail": "Solicitud rechazada por protección CSRF."})
+    return await call_next(request)
+
 
 # Inclusión de Routers Modulares (Arquitectura Limpia / Strangler Fig)
 app.include_router(auth.router)
@@ -142,8 +165,44 @@ def consultar_ruc_sunat(request: Request, ruc: str, current_user: models.Usuario
 
 # --- ENDPOINTS DE CONSULTA DE AUDITORÍA (HISTÓRICO Y TABLAS SOMBRA) ---
 @app.get("/auditoria/", response_model=List[schemas.AuditLog], tags=["Auditoria"])
-def listar_auditoria(db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1, 4]))):
-    return db.query(models.AuditLog).order_by(models.AuditLog.created_at.desc()).limit(100).all()
+def listar_auditoria(
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    accion: Optional[str] = Query(None, max_length=100, description="Texto contenido en la acción, ej. 'MODIFICACION Pago'"),
+    tabla: Optional[str] = Query(None, max_length=60, description="Tabla afectada, ej. 'registro_pagos'"),
+    id_registro: Optional[int] = Query(None, description="ID del registro afectado (requiere 'tabla')"),
+    id_usuario: Optional[int] = None,
+    fecha_desde: Optional[date] = None,
+    fecha_hasta: Optional[date] = None,
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(RoleChecker([1, 4]))
+):
+    """Bitácora de eventos con filtros. Permite reconstruir la historia completa de un registro."""
+    q = db.query(models.AuditLog)
+    if accion:
+        q = q.filter(models.AuditLog.accion.ilike(f"%{accion.strip()}%"))
+    if tabla:
+        if not re.fullmatch(r"[a-z_]{1,60}", tabla):
+            raise HTTPException(status_code=400, detail="Nombre de tabla inválido.")
+        q = q.filter(models.AuditLog.detalles.like(f'%"tabla": "{tabla}"%'))
+        if id_registro is not None:
+            q = q.filter(models.AuditLog.detalles.like(f'%"tabla": "{tabla}", "id": {id_registro},%'))
+    if id_usuario is not None:
+        q = q.filter(models.AuditLog.id_usuario == id_usuario)
+    if fecha_desde:
+        q = q.filter(models.AuditLog.created_at >= datetime.combine(fecha_desde, time.min))
+    if fecha_hasta:
+        q = q.filter(models.AuditLog.created_at <= datetime.combine(fecha_hasta, time.max))
+    filas = (
+        q.options(joinedload(models.AuditLog.usuario))
+        .order_by(models.AuditLog.created_at.desc(), models.AuditLog.id_log.desc())
+        .offset(offset).limit(limit).all()
+    )
+    return [
+        {**schemas.AuditLog.model_validate(f).model_dump(exclude={"nombre_usuario"}),
+         "nombre_usuario": f.usuario.username if f.usuario else None}
+        for f in filas
+    ]
 @app.get("/auditoria/maestros/", response_model=List[schemas.MaestroEliminadoResponse], tags=["Auditoria"])
 def listar_auditoria_maestros(db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1, 4]))):
     return db.query(models.MaestroEliminado).order_by(models.MaestroEliminado.fecha_eliminacion.desc()).all()

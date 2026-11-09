@@ -371,6 +371,102 @@ db.expire_all(); log = db.query(models.AuditLog).filter(models.AuditLog.accion.l
 chk("TC2", "Pago al TC oficial aceptado; cambios de TC auditados", ok == 200 and log >= 1, f"pago={ok} logs_tc={log}")
 
 # ==========================================
+# 3b. FASE 3: BITÁCORA AUTOMÁTICA Y SESIÓN POR COOKIE
+# ==========================================
+
+print("\n=========== E) FASE 3: BITÁCORA AUTOMÁTICA ===========")
+import json as _json
+def logs(tabla=None, id_reg=None, accion=None, who="audi"):
+    p = {"limit": 500}
+    if tabla: p["tabla"] = tabla
+    if id_reg is not None: p["id_registro"] = id_reg
+    if accion: p["accion"] = accion
+    r = c.get("/auditoria/", params=p, headers=H[who])
+    return r.status_code, (r.json() if r.status_code == 200 else [])
+
+m = mk_maestro("F-B1")
+c.put(f"/maestros/{m}", json={"n_cont_fisico": "CONT-AAA"}, headers=H["logi"])
+st, ev = logs("maestro_importaciones", m)
+mod = [e for e in ev if e["accion"] == "MODIFICACION Contenedor" and "n_cont_fisico" in _json.loads(e["detalles"]).get("cambios", {})]
+alta = [e for e in ev if e["accion"] == "ALTA Contenedor"]
+chk("B1", "Alta y modificación de contenedor registradas con autor, IP, ruta y antes/después",
+    st == 200 and alta and mod and mod[0]["nombre_usuario"] == "logi" and _json.loads(mod[0]["detalles"])["cambios"]["n_cont_fisico"] == [None, "CONT-AAA"] and mod[0]["endpoint"].startswith("PUT /maestros"),
+    f"{st} altas={len(alta)} mods={len(mod)} -> {mod[0]['nombre_usuario'] if mod else ''} {mod[0]['endpoint'] if mod else ''} {_json.loads(mod[0]['detalles'])['cambios'] if mod else ''}")
+
+b = c.post("/bancos/", json={"nombre": "BANCO B2"}, headers=H["teso"]).json()["id_banco"]
+c.put(f"/bancos/{b}", json={"nombre": "BANCO B2 RENOMBRADO"}, headers=H["teso"])
+c.request("DELETE", f"/bancos/{b}", headers=H["teso"])
+st, ev = logs("cat_bancos", b)
+chk("B2", "Catálogos: alta, renombre y desactivación lógica quedan trazados", st == 200 and len(ev) >= 3 and any("estado_registro" in e["detalles"] for e in ev), f"{len(ev)} eventos: {[e['accion'] for e in ev]}")
+
+d = mk_dam(m, "DAM-B3"); g = mk_gasto(d, c_otro.id_concepto, 100, doc_n="B3-1"); v = mk_voucher(500, num="OP-B3")
+p = pagar2(g, v["id_voucher"], 100).json()
+st, ev = logs("vouchers_bancarios", v["id_voucher"])
+saldo_ev = [e for e in ev if "saldo_disponible" in _json.loads(e["detalles"]).get("cambios", {})]
+chk("B3", "Pago: el descuento del voucher queda trazado (500 -> 400) firmado por Tesorería",
+    saldo_ev and _json.loads(saldo_ev[0]["detalles"])["cambios"]["saldo_disponible"] == ["500.00", "400.00"] and saldo_ev[0]["nombre_usuario"] == "teso",
+    f"{[_json.loads(e['detalles'])['cambios'] for e in saldo_ev]}")
+c.request("DELETE", f"/pagos/{p['id_pago']}", json={"motivo": "prueba de bitacora"}, headers=H["teso"])
+st, ev = logs("registro_pagos", p["id_pago"])
+chk("B4", "Anulación de pago: BAJA con snapshot de valores previos", any(e["accion"] == "BAJA Pago" and "valores_previos" in e["detalles"] for e in ev), f"{[e['accion'] for e in ev]}")
+
+r = c.post("/usuarios/", json={"id_rol": 2, "username": "logi_b5", "email": "b5@empresa.pe", "password": "ClaveSegura123"}, headers=H["admin"])
+st, ev = logs("usuarios", r.json()["id_usuario"], who="admin")
+chk("B5", "Alta de usuario auditada sin exponer el hash de la contraseña", ev and "$2b$" not in ev[0]["detalles"] and '"hashed_password": "***"' in ev[0]["detalles"], ev[0]["detalles"][:140] if ev else "sin eventos")
+
+# Un rollback no debe dejar rastro de un cambio que nunca ocurrió
+antes = len(logs("vouchers_bancarios")[1])
+r = pagar2(g, v["id_voucher"], "99999")  # sobrepago -> 400 tras haber descontado en memoria
+despues = len(logs("vouchers_bancarios")[1])
+chk("B6", "Operación rechazada (rollback) no deja eventos huérfanos en la bitácora", r.status_code == 400 and antes == despues, f"{r.status_code} eventos voucher {antes} -> {despues}")
+
+st1, _ = logs(who="logi"); st2, _ = logs(who="teso")
+r = c.get("/auditoria/", params={"tabla": "x'; DROP TABLE audit_logs;--"}, headers=H["audi"])
+chk("B7", "Bitácora: solo Admin/Auditor la leen; filtro de tabla validado", (st1, st2, r.status_code) == (403, 403, 400), f"logi={st1} teso={st2} tabla_maliciosa={r.status_code}")
+
+
+print("\n=========== F) FASE 3: SESIÓN POR COOKIE httpOnly + CSRF ===========")
+from fastapi.testclient import TestClient as _TC
+from dependencies import limiter as _lim
+_lim.enabled = False
+nav = _TC(main.app)  # cliente "navegador": conserva cookies entre peticiones
+r = nav.post("/login", data={"username": "teso", "password": "Clave123!"})
+set_cookie = r.headers.get("set-cookie", "")
+chk("S1", "Login del navegador: token SOLO en cookie httpOnly+SameSite=Strict; el cuerpo no trae el JWT",
+    r.status_code == 200 and "access_token" not in r.json() and r.json()["usuario"]["id_rol"] == 3
+    and "erp_session=" in set_cookie and "httponly" in set_cookie.lower() and "samesite=strict" in set_cookie.lower(),
+    f"{r.status_code} body={list(r.json().keys())} cookie_flags={[p.strip() for p in set_cookie.split(';')[1:]]}")
+
+r = nav.get("/me")
+chk("S2", "/me valida la sesión por cookie", r.status_code == 200 and r.json()["username"] == "teso", f"{r.status_code} {r.json()}")
+
+b_sin = nav.post("/bancos/", json={"nombre": "BANCO CSRF"})
+b_con = nav.post("/bancos/", json={"nombre": "BANCO CSRF OK"}, headers={"X-Requested-With": "XMLHttpRequest"})
+chk("S3", "CSRF: escritura con cookie y sin X-Requested-With -> 403; con el header -> 200", (b_sin.status_code, b_con.status_code) == (403, 200), f"{b_sin.status_code}/{b_con.status_code}")
+
+st, ev = logs("cat_bancos", b_con.json()["id_banco"])
+chk("S4", "Escrituras por cookie quedan firmadas en la bitácora", ev and ev[0]["nombre_usuario"] == "teso", f"{ev[0]['nombre_usuario'] if ev else None}")
+
+nav.post("/logout", headers={"X-Requested-With": "XMLHttpRequest"})
+r = nav.get("/me")
+chk("S5", "Logout elimina la cookie: /me -> 401", r.status_code == 401, f"{r.status_code}")
+
+anon = _TC(main.app)
+r = anon.get("/gastos/")
+chk("S6", "Sin cookie ni Bearer -> 401", r.status_code == 401, f"{r.status_code} {det(r)}")
+
+r = anon.post("/login", data={"username": "teso", "password": "Clave123!"}, headers={"X-Auth-Mode": "bearer"})
+tok = r.json().get("access_token")
+r2 = anon.get("/me", headers={"Authorization": f"Bearer {tok}"})
+chk("S7", "Modo script (X-Auth-Mode: bearer) entrega token y funciona como Bearer (inversor_masivo.py)", bool(tok) and r2.status_code == 200, f"token={'sí' if tok else 'no'} /me={r2.status_code}")
+
+forjada = _TC(main.app); forjada.cookies.set("erp_session", "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhZG1pbiJ9.firma-falsa")
+r = forjada.get("/me")
+chk("S8", "Cookie con JWT falsificado -> 401", r.status_code == 401, f"{r.status_code}")
+_lim.enabled = True
+
+
+# ==========================================
 # 4. PRUEBA DE CONCURRENCIA REAL (PostgreSQL)
 # ==========================================
 print("\n=========== D) PRUEBA DE CONCURRENCIA REAL (PostgreSQL) ===========")

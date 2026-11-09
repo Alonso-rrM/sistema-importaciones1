@@ -1,21 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
-import { ShieldCheck, Package, FileText, Banknote, Scale, Eye } from 'lucide-react';
+import { ShieldCheck, Package, FileText, Banknote, Scale, Eye, History, Landmark } from 'lucide-react';
+import BitacoraCambios from '../components/BitacoraCambios';
 
 const Auditoria = () => {
   const [registros, setRegistros] = useState([]);
   const [loading, setLoading] = useState(false);
   const [modalData, setModalData] = useState(null);
-  const [activeTab, setActiveTab] = useState("maestros");
+  const [activeTab, setActiveTab] = useState("bitacora");
+  const [conteoBitacora, setConteoBitacora] = useState(0);
 
   const tabs = [
+    { id: "bitacora", label: "Bitácora de Cambios", icon: History },
     { id: "maestros", label: "Maestros (Contenedores)", icon: Package },
     { id: "dams", label: "Declaraciones (DAMs)", icon: FileText },
     { id: "gastos", label: "Gastos Logísticos", icon: Banknote },
-    { id: "pagos", label: "Liquidación de Pagos", icon: Scale }
+    { id: "pagos", label: "Liquidación de Pagos", icon: Scale },
+    { id: "vouchers", label: "Vouchers", icon: Landmark }
   ];
 
   useEffect(() => {
+    if (activeTab === "bitacora") return; // La bitácora tiene su propio componente con filtros
     const fetchData = async () => {
       setLoading(true);
       try {
@@ -64,7 +69,7 @@ const Auditoria = () => {
 
         <div className="flex items-center gap-2 text-xs font-mono text-slate-400 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-lg">
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-          <span>Registros Registrados: {registros.length}</span>
+          <span>Registros mostrados: {activeTab === "bitacora" ? conteoBitacora : registros.length}</span>
         </div>
       </header>
 
@@ -92,8 +97,10 @@ const Auditoria = () => {
           })}
         </div>
 
-        {/* TABLA DE AUDITORÍA */}
-        <section className="flex-1 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl flex flex-col min-h-0">
+        {activeTab === "bitacora" && <BitacoraCambios onCount={setConteoBitacora} />}
+
+        {/* TABLA DE AUDITORÍA (tablas sombra de eliminaciones) */}
+        {activeTab !== "bitacora" && <section className="flex-1 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl flex flex-col min-h-0">
           <div className="flex-1 overflow-auto">
             <table className="w-full text-left border-collapse text-xs">
               <thead className="bg-slate-950/80 sticky top-0 z-10 border-b border-slate-800 text-[11px] uppercase tracking-wider text-slate-400">
@@ -161,7 +168,7 @@ const Auditoria = () => {
               </tbody>
             </table>
           </div>
-        </section>
+        </section>}
 
       </div>
 

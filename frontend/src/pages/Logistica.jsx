@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { differenceInDays, parseISO, format } from 'date-fns';
 import api from '../services/api';
+import { obtenerRol } from '../utils/session';
 import useDebounce from '../hooks/useDebounce';
 import Paginador from '../components/Paginador';
 import { descargarExcel } from '../utils/exportUtils';
@@ -83,16 +84,8 @@ const Logistica = () => {
   };
 
   // Detección de Rol desde Token JWT
-  const userRole = useMemo(() => {
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) return null;
-      const base64Url = token.split('.')[1];
-      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-      const jsonPayload = decodeURIComponent(atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
-      return JSON.parse(jsonPayload)?.id_rol;
-    } catch { return null; }
-  }, []);
+  // Rol solo para la interfaz (los permisos reales los valida el backend)
+  const userRole = obtenerRol();
 
   const isReadOnly = userRole !== 1 && formData.estado_documentario === 'ATE. TOTAL' && viewMode === 'MODIFICAR';
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import { obtenerRol } from '../utils/session';
 import Select from 'react-select';
 import Paginador from '../components/Paginador';
 import useDebounce from '../hooks/useDebounce';
@@ -102,20 +103,8 @@ const Pagos = () => {
   const [isEliminandoPago, setIsEliminandoPago] = useState(false);
 
   // Decodificación segura del rol del usuario
-  const userRole = useMemo(() => {
-    try {
-      const user = JSON.parse(localStorage.getItem('user') || '{}');
-      if (user.id_rol) return user.id_rol;
-      const token = localStorage.getItem('token');
-      if (!token) return 1;
-      const base64Url = token.split('.')[1];
-      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-      const jsonPayload = decodeURIComponent(atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
-      return JSON.parse(jsonPayload)?.id_rol || 1;
-    } catch {
-      return 1;
-    }
-  }, []);
+  // Rol solo para la interfaz (los permisos reales los valida el backend)
+  const userRole = obtenerRol();
 
   // Solo Admin (1) y Tesorería (3) liquidan pagos; Logística (2) y Auditoría (4) quedan en modo consulta
   const esUsuarioOperaciones = ![1, 3].includes(userRole);

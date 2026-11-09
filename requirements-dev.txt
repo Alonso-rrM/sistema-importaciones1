@@ -1,2 +1,7 @@
-httpx
+# Dependencias de DESARROLLO y PRUEBAS (no instalar en el servidor de producción)
+-r requirements.txt
+httpx==0.28.1              # TestClient de FastAPI (tests/verif_seguridad.py)
 
+# Herramientas locales que estaban mezcladas en requirements.txt y no las usa la API:
+# debugpy, ipykernel/ipython/jupyter (notebooks), pyinstaller (empaquetado), xlwings, customtkinter.
+# Si las necesitas en tu PC, instálalas aparte:  pip install <paquete>

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from pydantic import BaseModel
 from typing import Optional
 import secrets
@@ -8,10 +9,14 @@ import secrets
 import models
 from schemas import Username, PasswordSegura, Email
 from services.errores import error_interno
-from security import verify_password, create_access_token, get_password_hash
-from dependencies import get_db, limiter
+from fastapi.responses import JSONResponse
+from security import verify_password, create_access_token, get_password_hash, COOKIE_SESION, COOKIE_SECURE, ACCESS_TOKEN_EXPIRE_MINUTES
+from dependencies import get_db, limiter, get_current_user
 
 router = APIRouter(tags=["Auth"])
+
+# Identificador arbitrario del bloqueo consultivo de PostgreSQL para /setup/init
+LOCK_SETUP_INIT = 7_310_001
 
 # Hash bcrypt de una clave aleatoria descartable: se usa para igualar tiempos cuando el usuario no existe
 HASH_SENUELO = get_password_hash(secrets.token_urlsafe(32))
@@ -44,6 +49,12 @@ def inicializar_sistema(payload: SetupInicialRequest, db: Session = Depends(get_
     Se AUTOBLOQUEA en cuanto existe al menos 1 usuario en la BD.
     No requiere autenticación.
     """
+    # Exclusión mutua: si llegan dos inicializaciones al mismo tiempo, la segunda espera a que la primera
+    # termine y entonces ve que ya hay usuarios (evita crear dos SuperAdmin por condición de carrera).
+    # El bloqueo consultivo se libera solo al terminar la transacción.
+    if db.get_bind().dialect.name == "postgresql":
+        db.execute(text("SELECT pg_advisory_xact_lock(:clave)"), {"clave": LOCK_SETUP_INIT})
+
     # VERIFICACIÓN DE SEGURIDAD: Si ya hay usuarios, este endpoint está cerrado
     if db.query(models.Usuario).first():
         raise HTTPException(
@@ -111,5 +122,39 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db
     access_token = create_access_token(
         data={"sub": user.username, "id_rol": user.id_rol, "id_usuario": user.id_usuario}
     )
-    
-    return {"access_token": access_token, "token_type": "bearer"}
+
+    # Modo script/API (ej. inversor_masivo.py): el token se entrega en el cuerpo para usarlo como Bearer.
+    if request.headers.get("X-Auth-Mode", "").lower() == "bearer":
+        return {"access_token": access_token, "token_type": "bearer"}
+
+    # Modo navegador: el token va SOLO en una cookie httpOnly (JavaScript no puede leerla).
+    # El cuerpo devuelve únicamente datos de presentación del usuario (sin secretos).
+    respuesta = JSONResponse({"token_type": "cookie", "usuario": datos_publicos_usuario(user)})
+    respuesta.set_cookie(
+        key=COOKIE_SESION,
+        value=access_token,
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        httponly=True,
+        secure=COOKIE_SECURE,
+        samesite="strict",
+        path="/",
+    )
+    return respuesta
+
+
+def datos_publicos_usuario(user: models.Usuario) -> dict:
+    return {"id_usuario": user.id_usuario, "username": user.username, "email": user.email, "id_rol": user.id_rol}
+
+
+@router.get("/me")
+def usuario_actual(current_user: models.Usuario = Depends(get_current_user)):
+    """Valida la sesión vigente y devuelve los datos de presentación del usuario."""
+    return datos_publicos_usuario(current_user)
+
+
+@router.post("/logout")
+def logout():
+    """Cierra la sesión del navegador eliminando la cookie httpOnly."""
+    respuesta = JSONResponse({"ok": True})
+    respuesta.delete_cookie(COOKIE_SESION, path="/", httponly=True, secure=COOKIE_SECURE, samesite="strict")
+    return respuesta

@@ -1,28 +1,40 @@
-import { useMemo } from 'react';
+import { useEffect } from 'react';
 import { Outlet, NavLink, useNavigate, Navigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
+import api from '../services/api';
+import { obtenerUsuario, guardarUsuario, limpiarSesionLocal } from '../utils/session';
 import { BarChart3, Package, FileText, Building2, Users, Briefcase, Factory, Tags, FileDigit, Landmark, Ticket, Banknote, Scale, ShieldCheck, Settings, Sun, Moon, LogOut } from 'lucide-react';
 
 function Layout() {
   const navigate = useNavigate();
-  const token = localStorage.getItem('token');
   const { isDark, toggleTheme } = useTheme();
+  const usuario = obtenerUsuario();
+  const userRole = usuario?.id_rol ?? null;
 
-  if (!token) {
+  // Valida contra el servidor que la cookie de sesión siga vigente (y refresca nombre/rol).
+  // Si expiró, el interceptor de api.js recibe 401 y redirige al login.
+  useEffect(() => {
+    if (!usuario) return;
+    api.get('/me')
+      .then(res => guardarUsuario(res.data))
+      .catch(err => {
+        if (err.response?.status === 401) {
+          limpiarSesionLocal();
+          navigate('/login', { replace: true });
+        }
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (!usuario) {
     return <Navigate to="/login" replace />;
   }
 
-  const cerrarSesion = () => { localStorage.removeItem('token'); navigate('/login'); };
-
-  const userRole = useMemo(() => {
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) return null;
-      const base64Url = token.split('.')[1];
-      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-      return JSON.parse(atob(base64)).id_rol;
-    } catch { return null; }
-  }, []);
+  const cerrarSesion = async () => {
+    try { await api.post('/logout'); } catch { /* aunque falle la red, se limpia la sesión local */ }
+    limpiarSesionLocal();
+    navigate('/login');
+  };
 
   const navClass = ({ isActive }) => 
     isActive 

@@ -509,6 +509,7 @@ class AuditLogCreate(AuditLogBase):
 class AuditLog(AuditLogBase):
     id_log: int
     created_at: datetime
+    nombre_usuario: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 # --- 9. [INTEGRADO] ESQUEMA DE BORRADO FÍSICO ---
