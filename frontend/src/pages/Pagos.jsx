@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import { avisarReversionDam } from '../utils/reversion';
 import { obtenerRol } from '../utils/session';
 import Select from 'react-select';
 import Paginador from '../components/Paginador';
@@ -288,6 +289,21 @@ const Pagos = () => {
       return;
     }
 
+    // Confirmación explícita del contenedor y la DAM: evita pagar al contenedor equivocado cuando
+    // dos números se parecen (ej. GF-26522 vs GF-26222). El pago puede dar levante automáticamente.
+    const confirmado = window.confirm(
+      `CONFIRME EL DESTINO DEL PAGO\n\n` +
+      `Contenedor / Factura:   ${selectedGasto.maestro_factura || '-'}\n` +
+      `DAM:                    ${selectedGasto.dam_numero || '-'}\n` +
+      `Importador:             ${selectedGasto.importador_nombre || '-'}\n` +
+      `Concepto:               ${selectedGasto.concepto_nombre || '-'}\n` +
+      `Importe:                ${form.moneda} ${parseFloat(form.importe).toFixed(2)}\n\n` +
+      `Verifique el número del contenedor contra el documento de pago.\n` +
+      `Si este pago completa la proforma u OMC, la DAM puede obtener el levante automáticamente.\n\n` +
+      `¿Registrar el pago?`
+    );
+    if (!confirmado) return;
+
     setIsSubmitting(true);
     setMensajeError(null);
     setMensajeExito(null);
@@ -360,9 +376,10 @@ const Pagos = () => {
     }
     setIsEliminandoPago(true);
     try {
-      await api.delete(`/pagos/${modalEliminarPago.pago.id_pago}`, {
+      const resAnulacion = await api.delete(`/pagos/${modalEliminarPago.pago.id_pago}`, {
         data: { motivo: modalEliminarPago.motivo.trim() }
       });
+      avisarReversionDam(resAnulacion);
       setModalEliminarPago({ open: false, pago: null, motivo: '' });
       await cargarPagosHistorial();
       await cargarGastos();

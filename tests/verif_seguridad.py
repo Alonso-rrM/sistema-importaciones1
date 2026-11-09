@@ -467,6 +467,77 @@ _lim.enabled = True
 
 
 # ==========================================
+# 3c. REVERSIÓN AUTOMÁTICA DE LEVANTE
+# ==========================================
+
+print("\n=========== G) REVERSIÓN AUTOMÁTICA DE LEVANTE (caso GF-26522 / GF-26222) ===========")
+_c_omc = db.query(models.CatConceptoPago).filter_by(nombre="OMC").first()
+if not _c_omc:
+    _c_omc = models.CatConceptoPago(nombre="OMC"); db.add(_c_omc); db.commit()
+
+def maestro_estado(idm):
+    db.expire_all(); mm = db.get(models.MaestroImportacion, idm); return mm.estado_documentario, mm.fecha_levante_maestro
+
+def contenedor_con_omc_pendiente(factura, sufijo):
+    """Contenedor DEFINITIVO, canal ROJO, proforma pagada, aforo con observación, OMC registrada y pendiente."""
+    idm = mk_maestro(factura); idd = mk_dam(idm, f"DAM-{sufijo}", "ROJO")
+    gt = mk_gasto(idd, c_trib.id_concepto, 50, doc_n=f"T-{sufijo}"); gp = mk_gasto(idd, c_perc.id_concepto, 5, doc_n=f"P-{sufijo}")
+    vv = mk_voucher(55, num=f"OP-PROF-{sufijo}")
+    pagar2(gt, vv["id_voucher"], 50); pagar2(gp, vv["id_voucher"], 5)
+    for e in ["OBSERVADA / NOTIFICADA", "EN REVISIÓN"]:
+        c.put(f"/dams/{idd}", json={"estado_dam": e}, headers=H["logi"])
+    go = mk_gasto(idd, _c_omc.id_concepto, 300, doc_n=f"OMC-{sufijo}")
+    return idm, idd, go, gt
+
+m1, d1, omc1, trib1 = contenedor_con_omc_pendiente("GF-26522", "26522")
+m2, d2, omc2, trib2 = contenedor_con_omc_pendiente("GF-26222", "26222")
+chk("G0", "Ambos contenedores quedan a un pago de la OMC", dam(d1).estado_dam == dam(d2).estado_dam == "PENDIENTE PAGO OMC", f"{dam(d1).estado_dam} / {dam(d2).estado_dam}")
+
+v_omc = mk_voucher(300, num="OP-OMC-UNICO")
+# ERROR DE DIGITACIÓN: el pago era del GF-26522 pero se registra en el GF-26222
+p_err = pagar2(omc2, v_omc["id_voucher"], 300).json()
+chk("G1", "Pago registrado por error en GF-26222 -> el sistema le da levante (estado indebido)", dam(d2).estado_dam == "CON LEVANTE", f"GF-26222 DAM={dam(d2).estado_dam} contenedor={maestro_estado(m2)}")
+
+r = c.request("DELETE", f"/pagos/{p_err['id_pago']}", json={"motivo": "Pago registrado en contenedor equivocado (era GF-26522)"}, headers=H["teso"])
+rev = r.json().get("reversion_dam") if r.status_code == 200 else None
+est2, fecha2 = maestro_estado(m2)
+chk("G2", "Al anular el pago, GF-26222 vuelve a PENDIENTE PAGO OMC, pierde la fecha de levante y el contenedor recalcula",
+    r.status_code == 200 and dam(d2).estado_dam == "PENDIENTE PAGO OMC" and dam(d2).fecha_levante is None and est2 != "CON LEVANTE (PEND. INGRESO)" and fecha2 is None,
+    f"{r.status_code} DAM={dam(d2).estado_dam} fecha_levante={dam(d2).fecha_levante} contenedor={est2} fecha_cont={fecha2}")
+chk("G3", "La respuesta informa la reversión (para el aviso en pantalla)", bool(rev) and rev["contenedor"] == "GF-26222" and rev["estado_nuevo"] == "PENDIENTE PAGO OMC", f"{rev}")
+db.expire_all(); lg = db.query(models.AuditLog).filter_by(accion="REVERSION AUTOMATICA DAM").order_by(models.AuditLog.id_log.desc()).first()
+chk("G4", "Bitácora: evento 'REVERSION AUTOMATICA DAM' con contenedor, motivo y usuario", lg is not None and "GF-26222" in lg.detalles and lg.id_usuario == users["teso"], lg.detalles if lg else "sin evento")
+chk("G5", "El voucher recuperó el dinero", voucher(v_omc["id_voucher"]).saldo_disponible == Decimal("300.00"), f"saldo={voucher(v_omc['id_voucher']).saldo_disponible}")
+
+p_ok = pagar2(omc1, v_omc["id_voucher"], 300)
+chk("G6", "Pago registrado en el contenedor correcto GF-26522 -> levante correcto; GF-26222 sigue pendiente",
+    p_ok.status_code == 200 and dam(d1).estado_dam == "CON LEVANTE" and dam(d2).estado_dam == "PENDIENTE PAGO OMC", f"GF-26522={dam(d1).estado_dam} GF-26222={dam(d2).estado_dam}")
+
+# Proforma: DAM con diligencias manuales -> Tesorería no puede anular; Admin sí (y revierte)
+p_trib2 = db.query(models.RegistroPago).filter_by(id_gasto=trib2, estado_registro="ACTIVO").first()
+a = c.request("DELETE", f"/pagos/{p_trib2.id_pago}", json={"motivo": "prueba proforma con diligencias"}, headers=H["teso"])
+b = c.request("DELETE", f"/pagos/{p_trib2.id_pago}", json={"motivo": "admin autoriza corregir proforma"}, headers=H["admin"])
+chk("G7", "Proforma de DAM con diligencias manuales: Tesorería 403; Admin 200 y la DAM vuelve a PENDIENTE PAGO PROFORMA",
+    (a.status_code, b.status_code) == (403, 200) and dam(d2).estado_dam == "PENDIENTE PAGO PROFORMA", f"{a.status_code}/{b.status_code} DAM={dam(d2).estado_dam}")
+
+# Canal VERDE: el levante lo dio el pago -> Tesorería puede anular y la DAM revierte
+m3 = mk_maestro("GF-VERDE"); d3 = mk_dam(m3, "DAM-VERDE", "VERDE")
+gt3 = mk_gasto(d3, c_trib.id_concepto, 20, doc_n="T-VERDE"); gp3 = mk_gasto(d3, c_perc.id_concepto, 2, doc_n="P-VERDE"); v3 = mk_voucher(22, num="OP-VERDE")
+pt3 = pagar2(gt3, v3["id_voucher"], 20).json(); pagar2(gp3, v3["id_voucher"], 2)
+antes = dam(d3).estado_dam
+r = c.request("DELETE", f"/pagos/{pt3['id_pago']}", json={"motivo": "tributo registrado en contenedor errado"}, headers=H["teso"])
+chk("G8", "Canal VERDE: anular tributo quita el levante automático (CON LEVANTE -> PENDIENTE PAGO PROFORMA)", antes == "CON LEVANTE" and r.status_code == 200 and dam(d3).estado_dam == "PENDIENTE PAGO PROFORMA", f"{antes} -> {dam(d3).estado_dam}")
+
+# Bug corregido: con 2 gastos de tributos, pagar solo 1 NO debe dar levante
+m4 = mk_maestro("GF-DOBLE"); d4 = mk_dam(m4, "DAM-DOBLE", "VERDE")
+ta = mk_gasto(d4, c_trib.id_concepto, 10, doc_n="T-A"); tb = mk_gasto(d4, c_trib.id_concepto, 10, doc_n="T-B"); pp = mk_gasto(d4, c_perc.id_concepto, 1, doc_n="P-AB")
+v4 = mk_voucher(21, num="OP-DOBLE"); pagar2(ta, v4["id_voucher"], 10); pagar2(pp, v4["id_voucher"], 1)
+e_parcial = dam(d4).estado_dam
+pagar2(tb, v4["id_voucher"], 10)
+chk("G9", "Dos gastos de tributos: con uno solo pagado NO hay levante; con ambos sí", e_parcial == "PENDIENTE PAGO PROFORMA" and dam(d4).estado_dam == "CON LEVANTE", f"1 pagado={e_parcial} / 2 pagados={dam(d4).estado_dam}")
+
+
+# ==========================================
 # 4. PRUEBA DE CONCURRENCIA REAL (PostgreSQL)
 # ==========================================
 print("\n=========== D) PRUEBA DE CONCURRENCIA REAL (PostgreSQL) ===========")

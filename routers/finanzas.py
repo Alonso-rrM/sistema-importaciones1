@@ -16,7 +16,7 @@ from services.errores import error_interno
 import schemas
 from dependencies import get_db, get_current_user, RoleChecker
 from services.audit import registrar_auditoria, registrar_auditoria_sync
-from services.state_machine import evaluar_gatillos_gastos_dam
+from services.state_machine import evaluar_gatillos_gastos_dam, ESTADOS_POST_PROFORMA, resultado_automatico_proforma
 from services.excel_exporter import generar_excel_gastos
 from domain.finanzas import calcular_amortizacion_cruzada
 
@@ -1211,6 +1211,24 @@ def eliminar_pago(id_pago: int, req: schemas.EliminacionRequest, db: Session = D
     if pago.dam and expediente_cerrado(pago.dam) and current_user.id_rol != 1:
         raise HTTPException(status_code=403, detail="Operación Denegada: El expediente se encuentra en ATENCIÓN TOTAL. Solicite desbloqueo al Administrador.")
 
+    # Anular un pago de PROFORMA revierte la DAM a PENDIENTE PAGO PROFORMA. Si la DAM ya avanzó por
+    # diligencias MANUALES (aforo, observación, revisión, OMC), esa reversión borraría ese avance:
+    # solo el Administrador puede autorizarla (queda en bitácora).
+    dam_pago = pago.dam
+    concepto_pago = (pago.concepto_rel.nombre or "").upper() if pago.concepto_rel else ""
+    es_pago_proforma = "TRIBUTO" in concepto_pago or "PERCEPCI" in concepto_pago
+    if (
+        es_pago_proforma and dam_pago and current_user.id_rol != 1
+        and dam_pago.estado_dam in ESTADOS_POST_PROFORMA
+        and dam_pago.estado_dam not in resultado_automatico_proforma(dam_pago)
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail=(f"La DAM {dam_pago.numero_de_dam} ya avanzó por diligencias aduaneras (estado: {dam_pago.estado_dam}). "
+                    "Anular este pago de proforma la haría retroceder a PENDIENTE PAGO PROFORMA y perder ese avance. "
+                    "Solicite la anulación al Administrador.")
+        )
+
     id_gasto_afectado = pago.id_gasto
     es_ajuste_actual = pago.es_ajuste_sistema
 
@@ -1316,10 +1334,23 @@ def eliminar_pago(id_pago: int, req: schemas.EliminacionRequest, db: Session = D
                     
         db.commit()
 
+        transicion = None
         if id_gasto_afectado and gasto and gasto.id_dam:
-            evaluar_gatillos_gastos_dam(db, gasto.id_dam)
+            transicion = evaluar_gatillos_gastos_dam(db, gasto.id_dam)
 
-        return {"mensaje": f"Pago {id_pago} eliminado exitosamente. Saldos recalculados y sincronizados en los registros de auditoría."}
+        mensaje = f"Pago {id_pago} eliminado exitosamente. Saldos recalculados y sincronizados en los registros de auditoría."
+        respuesta = {"mensaje": mensaje, "reversion_dam": None}
+        if transicion and transicion[0] != transicion[1]:
+            dam_rev = db.query(models.DetalleDam).filter(models.DetalleDam.id_dam == gasto.id_dam).first()
+            respuesta["reversion_dam"] = {
+                "numero_de_dam": dam_rev.numero_de_dam if dam_rev else None,
+                "contenedor": dam_rev.maestro.numero_factura if (dam_rev and dam_rev.maestro) else None,
+                "estado_anterior": transicion[0],
+                "estado_nuevo": transicion[1],
+            }
+            respuesta["mensaje"] = (f"{mensaje} ⚠ La DAM {respuesta['reversion_dam']['numero_de_dam']} del contenedor "
+                                    f"{respuesta['reversion_dam']['contenedor']} volvió de '{transicion[0]}' a '{transicion[1]}'.")
+        return respuesta
     except Exception as e:
         db.rollback()
         raise error_interno("Error al eliminar pago", e, 400)

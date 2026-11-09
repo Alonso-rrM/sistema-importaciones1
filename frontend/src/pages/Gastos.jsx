@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../services/api';
+import { avisarReversionDam } from '../utils/reversion';
 import Select from 'react-select';
 import Paginador from '../components/Paginador';
 import ModalCrearProveedorRapido from '../components/ModalCrearProveedorRapido';
@@ -386,9 +387,10 @@ const Gastos = () => {
     }
     setIsReversandoPago(true);
     try {
-      await api.delete(`/pagos/${modalReversarPago.pago.id_pago}`, {
+      const resAnulacion = await api.delete(`/pagos/${modalReversarPago.pago.id_pago}`, {
         data: { motivo: modalReversarPago.motivo.trim() }
       });
+      avisarReversionDam(resAnulacion);
       setModalReversarPago({ open: false, pago: null, motivo: '' });
       await cargarListaGastos();
     } catch (error) {

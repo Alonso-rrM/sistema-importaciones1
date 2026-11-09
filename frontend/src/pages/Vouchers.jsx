@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import { avisarReversionDam } from '../utils/reversion';
 import Select from 'react-select';
 import Paginador from '../components/Paginador';
 import useDebounce from '../hooks/useDebounce';
@@ -303,9 +304,10 @@ const Vouchers = () => {
     }
     setIsReversandoPagoVoucher(true);
     try {
-      await api.delete(`/pagos/${modalReversarPagoVoucher.pago.id_pago}`, {
+      const resAnulacion = await api.delete(`/pagos/${modalReversarPagoVoucher.pago.id_pago}`, {
         data: { motivo: modalReversarPagoVoucher.motivo.trim() }
       });
+      avisarReversionDam(resAnulacion);
       mostrarAlerta(`✅ Pago #${modalReversarPagoVoucher.pago.id_pago} reversado. El saldo fue devuelto al voucher.`, 'exito');
       setModalReversarPagoVoucher({ open: false, pago: null, motivo: '' });
       await cargarVouchers();
