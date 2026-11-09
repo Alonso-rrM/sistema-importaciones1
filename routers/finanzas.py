@@ -9,7 +9,7 @@ from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.orm.exc import StaleDataError
 from sqlalchemy.exc import IntegrityError, OperationalError
-from sqlalchemy import func, case
+from sqlalchemy import func, case, text
 
 import models
 from services.errores import error_interno
@@ -46,6 +46,20 @@ def convertir_moneda(monto: Decimal, de: str, a: str, tc: Decimal) -> Decimal:
     else:
         raise HTTPException(status_code=400, detail=f"Conversión de moneda no soportada: {de} → {a}.")
     return resultado.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+# Tiempo máximo que un pago espera en cola a que otro pago libere el mismo gasto/voucher
+LOCK_TIMEOUT_PAGOS = os.getenv("LOCK_TIMEOUT_PAGOS", "5s")
+
+
+def aplicar_lock_timeout(db: Session):
+    """Limita la espera de bloqueos de fila en la transacción actual (solo PostgreSQL)."""
+    if db.get_bind().dialect.name == "postgresql":
+        # SET LOCAL solo afecta a la transacción en curso; el valor se valida para evitar inyección
+        valor = LOCK_TIMEOUT_PAGOS.strip()
+        if not valor.rstrip("ms").isdigit():
+            valor = "5s"
+        db.execute(text(f"SET LOCAL lock_timeout = '{valor}'"))
 
 
 def validar_voucher_unico(db: Session, banco_id: int, numero_operacion: str, excluir_id: Optional[int] = None):
@@ -794,11 +808,16 @@ async def registrar_pago(
         if registro_previo:
             return json.loads(registro_previo.respuesta_json)
 
-    # 1. Búsqueda y Bloqueo del Gasto
+    # 1. Búsqueda y Bloqueo del Gasto.
+    # En vez de NOWAIT (que rechazaba al instante cualquier pago simultáneo sobre el mismo voucher),
+    # la transacción ESPERA en cola hasta LOCK_TIMEOUT_PAGOS a que el otro pago termine.
+    # El bloqueo de fila sigue garantizando que no haya doble gasto ni saldo negativo.
+    aplicar_lock_timeout(db)
     try:
-        gasto = db.query(models.RegistroGasto).filter(models.RegistroGasto.id_gasto == pago.id_gasto).with_for_update(nowait=True).first()
+        gasto = db.query(models.RegistroGasto).filter(models.RegistroGasto.id_gasto == pago.id_gasto).with_for_update().populate_existing().first()
     except OperationalError:
-        raise HTTPException(status_code=409, detail="El registro está siendo modificado por otro usuario.")
+        db.rollback()
+        raise HTTPException(status_code=409, detail="El gasto está siendo liquidado por otro usuario y no se liberó a tiempo. Intente nuevamente.")
 
     if not gasto or gasto.estado_registro != "ACTIVO":
         raise HTTPException(status_code=404, detail="El gasto asociado no existe.")
@@ -812,9 +831,10 @@ async def registrar_pago(
 
     # 2. Bloqueo y validación del Voucher (obligatorio: no existe pago sin respaldo bancario)
     try:
-        voucher = db.query(models.VoucherBancario).filter(models.VoucherBancario.id_voucher == pago.voucher_id).with_for_update(nowait=True).first()
+        voucher = db.query(models.VoucherBancario).filter(models.VoucherBancario.id_voucher == pago.voucher_id).with_for_update().populate_existing().first()
     except OperationalError:
-        raise HTTPException(status_code=409, detail="El voucher está siendo modificado por otro usuario.")
+        db.rollback()
+        raise HTTPException(status_code=409, detail="El voucher está siendo usado por otro pago y no se liberó a tiempo. Intente nuevamente.")
 
     if not voucher or voucher.estado_registro != "ACTIVO":
         raise HTTPException(status_code=404, detail="El voucher especificado no existe.")
