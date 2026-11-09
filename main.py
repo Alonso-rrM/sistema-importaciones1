@@ -1,4 +1,5 @@
 from typing import List, Optional
+import json
 import os
 import re
 import requests
@@ -15,6 +16,7 @@ from database import SessionLocal
 from fastapi.responses import JSONResponse
 from security import get_password_hash, COOKIE_SESION, CSRF_HEADER
 from dependencies import get_db, get_current_user, RoleChecker, limiter
+from services.audit_trail import enriquecer_bitacora
 from routers import auth, catalogos, operaciones, finanzas, reportes
 
 # La documentación interactiva (/docs, /redoc, /openapi.json) expone el mapa completo de la API.
@@ -171,6 +173,7 @@ def listar_auditoria(
     accion: Optional[str] = Query(None, max_length=100, description="Texto contenido en la acción, ej. 'MODIFICACION Pago'"),
     tabla: Optional[str] = Query(None, max_length=60, description="Tabla afectada, ej. 'registro_pagos'"),
     id_registro: Optional[int] = Query(None, description="ID del registro afectado (requiere 'tabla')"),
+    buscar: Optional[str] = Query(None, max_length=120, description="Texto a buscar en valores legibles (DAM, Factura, Voucher, Concepto...)"),
     id_usuario: Optional[int] = None,
     fecha_desde: Optional[date] = None,
     fecha_hasta: Optional[date] = None,
@@ -184,9 +187,18 @@ def listar_auditoria(
     if tabla:
         if not re.fullmatch(r"[a-z_]{1,60}", tabla):
             raise HTTPException(status_code=400, detail="Nombre de tabla inválido.")
-        q = q.filter(models.AuditLog.detalles.like(f'%"tabla": "{tabla}"%'))
         if id_registro is not None:
             q = q.filter(models.AuditLog.detalles.like(f'%"tabla": "{tabla}", "id": {id_registro},%'))
+        elif tabla == "registro_gastos":
+            q = q.filter(models.AuditLog.detalles.like(f'%"tabla": "{tabla}"%') | (models.AuditLog.accion == "CREACION GASTO"))
+        elif tabla == "registro_pagos":
+            q = q.filter(models.AuditLog.detalles.like(f'%"tabla": "{tabla}"%') | models.AuditLog.accion.in_(["CREACION PAGO", "EDICION FECHA PAGO"]))
+        elif tabla == "detalle_dams":
+            q = q.filter(models.AuditLog.detalles.like(f'%"tabla": "{tabla}"%') | models.AuditLog.accion.in_(["CAMBIO ESTADO DAM", "REVERSION AUTOMATICA DAM"]))
+        elif tabla == "historial_tipo_cambio":
+            q = q.filter(models.AuditLog.detalles.like(f'%"tabla": "{tabla}"%') | models.AuditLog.accion.like("%TIPO CAMBIO%"))
+        else:
+            q = q.filter(models.AuditLog.detalles.like(f'%"tabla": "{tabla}"%'))
     if id_usuario is not None:
         q = q.filter(models.AuditLog.id_usuario == id_usuario)
     if fecha_desde:
@@ -198,11 +210,17 @@ def listar_auditoria(
         .order_by(models.AuditLog.created_at.desc(), models.AuditLog.id_log.desc())
         .offset(offset).limit(limit).all()
     )
-    return [
-        {**schemas.AuditLog.model_validate(f).model_dump(exclude={"nombre_usuario"}),
-         "nombre_usuario": f.usuario.username if f.usuario else None}
-        for f in filas
-    ]
+    enriquecidos = enriquecer_bitacora(db, filas)
+    if buscar and buscar.strip():
+        termino = buscar.strip().lower()
+        enriquecidos = [
+            item for item in enriquecidos
+            if termino in (item.get("resumen_legible") or "").lower()
+            or termino in (item.get("accion") or "").lower()
+            or termino in (item.get("nombre_usuario") or "").lower()
+            or termino in json.dumps(item.get("detalles_legibles") or {}, ensure_ascii=False).lower()
+        ]
+    return enriquecidos
 @app.get("/auditoria/maestros/", response_model=List[schemas.MaestroEliminadoResponse], tags=["Auditoria"])
 def listar_auditoria_maestros(db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1, 4]))):
     return db.query(models.MaestroEliminado).order_by(models.MaestroEliminado.fecha_eliminacion.desc()).all()
