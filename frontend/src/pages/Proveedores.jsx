@@ -5,6 +5,12 @@ import { acortarRazonSocial } from '../utils/textUtils';
 import { Users, Search } from 'lucide-react';
 import { CATEGORIA_PROVEEDOR, ESTADO_REGISTRO } from '../constants';
 
+const ETIQUETA_CATEGORIA = {
+  [CATEGORIA_PROVEEDOR.NACIONAL]: 'Nacional',
+  [CATEGORIA_PROVEEDOR.INTERNACIONAL]: 'Internacional',
+  [CATEGORIA_PROVEEDOR.ESTADO_O_TRIBUTO]: 'Estado o Tributo',
+};
+
 const Proveedores = () => {
   const [proveedores, setProveedores] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
@@ -13,7 +19,7 @@ const Proveedores = () => {
   const [busqueda, setBusqueda] = useState('');
   const debouncedSearch = useDebounce(busqueda, 300);
   const [filtroEstado, setFiltroEstado] = useState(ESTADO_REGISTRO.ACTIVO); // 'ACTIVO', 'INACTIVO', 'TODOS'
-  const [filtroCategoria, setFiltroCategoria] = useState(''); // '', 'NACIONAL', 'INTERNACIONAL'
+  const [filtroCategoria, setFiltroCategoria] = useState(''); // '', NACIONAL, INTERNACIONAL, ESTADO_O_TRIBUTO
 
   const [buscandoRuc, setBuscandoRuc] = useState(false);
   const [sunatData, setSunatData] = useState(null);
@@ -325,6 +331,7 @@ const Proveedores = () => {
                 <option value="">Todas las Cat.</option>
                 <option value={CATEGORIA_PROVEEDOR.NACIONAL}>Nacional</option>
                 <option value={CATEGORIA_PROVEEDOR.INTERNACIONAL}>Internacional</option>
+                <option value={CATEGORIA_PROVEEDOR.ESTADO_O_TRIBUTO}>Estado o Tributo</option>
               </select>
             </div>
           </div>
@@ -358,8 +365,12 @@ const Proveedores = () => {
                           }`}>
                           {prov.estado_registro || ESTADO_REGISTRO.ACTIVO}
                         </span>
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
-                          {prov.categoria || CATEGORIA_PROVEEDOR.NACIONAL}
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border ${
+                          prov.categoria === CATEGORIA_PROVEEDOR.ESTADO_O_TRIBUTO
+                            ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                            : 'bg-slate-800 text-slate-300 border-slate-700'
+                        }`}>
+                          {ETIQUETA_CATEGORIA[prov.categoria] || prov.categoria || CATEGORIA_PROVEEDOR.NACIONAL}
                         </span>
                       </div>
                       <span className="font-mono text-[11px] text-slate-400">
@@ -485,7 +496,7 @@ const Proveedores = () => {
                     </div>
                     <div>
                       <span className="text-slate-500 text-[10px] uppercase font-bold block">Categoría</span>
-                      <span className="text-slate-200 font-semibold">{selectedProveedor?.categoria}</span>
+                      <span className="text-slate-200 font-semibold">{ETIQUETA_CATEGORIA[selectedProveedor?.categoria] || selectedProveedor?.categoria}</span>
                     </div>
                     <div>
                       <span className="text-slate-500 text-[10px] uppercase font-bold block">Estado</span>
@@ -513,7 +524,7 @@ const Proveedores = () => {
 
                     <div className="bg-slate-900/80 border border-slate-800 p-3.5 rounded-lg space-y-1">
                       <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Categoría Operativa</span>
-                      <span className="font-bold text-purple-300 text-sm">{selectedProveedor?.categoria}</span>
+                      <span className="font-bold text-purple-300 text-sm">{ETIQUETA_CATEGORIA[selectedProveedor?.categoria] || selectedProveedor?.categoria}</span>
                     </div>
                   </div>
                 </div>
@@ -574,6 +585,7 @@ const Proveedores = () => {
                         >
                           <option value={CATEGORIA_PROVEEDOR.NACIONAL}>NACIONAL</option>
                           <option value={CATEGORIA_PROVEEDOR.INTERNACIONAL}>INTERNACIONAL</option>
+                          <option value={CATEGORIA_PROVEEDOR.ESTADO_O_TRIBUTO}>ESTADO O TRIBUTO (SUNAT / Estado)</option>
                         </select>
                       </div>
                     </div>

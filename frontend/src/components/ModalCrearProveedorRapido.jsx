@@ -60,10 +60,14 @@ const ModalCrearProveedorRapido = ({
     }
   };
 
+  const esRucLocal =
+    categoria === CATEGORIA_PROVEEDOR.NACIONAL ||
+    categoria === CATEGORIA_PROVEEDOR.ESTADO_O_TRIBUTO;
+
   const handleRucKeyDown = (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      if (categoria === CATEGORIA_PROVEEDOR.NACIONAL) {
+      if (esRucLocal) {
         handleBuscarSunat();
       }
     }
@@ -81,8 +85,8 @@ const ModalCrearProveedorRapido = ({
       return;
     }
 
-    if (categoria === CATEGORIA_PROVEEDOR.NACIONAL && rucLimpio && (rucLimpio.length !== 11 || isNaN(rucLimpio))) {
-      mostrarAlerta('Si ingresas un RUC nacional, debe tener 11 dígitos.', 'error');
+    if (esRucLocal && rucLimpio && (rucLimpio.length !== 11 || isNaN(rucLimpio))) {
+      mostrarAlerta('Si ingresas un RUC nacional o estatal, debe tener 11 dígitos.', 'error');
       return;
     }
 
@@ -164,28 +168,39 @@ const ModalCrearProveedorRapido = ({
             <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
               Tipo de Proveedor
             </label>
-            <div className="grid grid-cols-2 gap-2 p-1 bg-slate-950 rounded-lg border border-slate-800">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 p-1 bg-slate-950 rounded-lg border border-slate-800">
               <button
                 type="button"
                 onClick={() => setCategoria(CATEGORIA_PROVEEDOR.NACIONAL)}
-                className={`py-1.5 px-3 rounded text-xs font-semibold transition ${
+                className={`py-1.5 px-2.5 rounded text-xs font-semibold transition ${
                   categoria === CATEGORIA_PROVEEDOR.NACIONAL
                     ? 'bg-teal-600 text-white shadow-sm'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                🇵🇪 Nacional (SUNAT / RUC)
+                🇵🇪 Nacional
               </button>
               <button
                 type="button"
                 onClick={() => setCategoria(CATEGORIA_PROVEEDOR.INTERNACIONAL)}
-                className={`py-1.5 px-3 rounded text-xs font-semibold transition ${
+                className={`py-1.5 px-2.5 rounded text-xs font-semibold transition ${
                   categoria === CATEGORIA_PROVEEDOR.INTERNACIONAL
                     ? 'bg-teal-600 text-white shadow-sm'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                🌏 Internacional (China / Ext.)
+                🌏 Internacional
+              </button>
+              <button
+                type="button"
+                onClick={() => setCategoria(CATEGORIA_PROVEEDOR.ESTADO_O_TRIBUTO)}
+                className={`py-1.5 px-2.5 rounded text-xs font-semibold transition ${
+                  categoria === CATEGORIA_PROVEEDOR.ESTADO_O_TRIBUTO
+                    ? 'bg-teal-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                🏛️ Estado / Tributo
               </button>
             </div>
           </div>
@@ -193,20 +208,20 @@ const ModalCrearProveedorRapido = ({
           {/* Campo RUC / Identificación Fiscal */}
           <div>
             <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-              {categoria === CATEGORIA_PROVEEDOR.NACIONAL ? 'RUC (11 dígitos) *' : 'Tax ID / Identificación Fiscal (Opcional)'}
+              {esRucLocal ? 'RUC (11 dígitos)' : 'Tax ID / Identificación Fiscal (Opcional)'}
             </label>
             <div className="flex gap-2">
               <input
                 type="text"
                 value={ruc}
-                onChange={(e) => setRuc(e.target.value.replace(/\D/g, '').slice(0, categoria === CATEGORIA_PROVEEDOR.NACIONAL ? 11 : 20))}
+                onChange={(e) => setRuc(e.target.value.replace(/\D/g, '').slice(0, esRucLocal ? 11 : 20))}
                 onKeyDown={handleRucKeyDown}
-                placeholder={categoria === CATEGORIA_PROVEEDOR.NACIONAL ? 'Ej. 20123456789' : 'Ej. CN1234567 (opcional)'}
-                maxLength={categoria === CATEGORIA_PROVEEDOR.NACIONAL ? 11 : 20}
+                placeholder={esRucLocal ? 'Ej. 20131312955' : 'Ej. CN1234567 (opcional)'}
+                maxLength={esRucLocal ? 11 : 20}
                 className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 font-mono focus:border-teal-500 focus:outline-none"
                 autoFocus
               />
-              {categoria === CATEGORIA_PROVEEDOR.NACIONAL && (
+              {esRucLocal && (
                 <button
                   type="button"
                   onClick={handleBuscarSunat}
@@ -228,7 +243,7 @@ const ModalCrearProveedorRapido = ({
                 </button>
               )}
             </div>
-            {categoria === CATEGORIA_PROVEEDOR.NACIONAL && (
+            {esRucLocal && (
               <p className="text-[10px] text-slate-500 mt-1">
                 Presiona Enter o el botón SUNAT para autocompletar la razón social oficial.
               </p>
@@ -238,14 +253,24 @@ const ModalCrearProveedorRapido = ({
           {/* Campo Nombre / Razón Social */}
           <div>
             <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-              {categoria === CATEGORIA_PROVEEDOR.NACIONAL ? 'Razón Social / Nombre Comercial *' : 'Nombre de la Fábrica o Empresa *'}
+              {categoria === CATEGORIA_PROVEEDOR.ESTADO_O_TRIBUTO
+                ? 'Entidad Estatal / Tributaria *'
+                : categoria === CATEGORIA_PROVEEDOR.NACIONAL
+                ? 'Razón Social / Nombre Comercial *'
+                : 'Nombre de la Fábrica o Empresa *'}
             </label>
             <input
               type="text"
               required
               value={nombre}
               onChange={(e) => setNombre(e.target.value)}
-              placeholder={categoria === CATEGORIA_PROVEEDOR.NACIONAL ? 'Ej. DISTRIBUIDORA LOGÍSTICA S.A.C.' : 'Ej. Yiwu Import & Export Ltd.'}
+              placeholder={
+                categoria === CATEGORIA_PROVEEDOR.ESTADO_O_TRIBUTO
+                  ? 'Ej. SUNAT / ADUANAS'
+                  : categoria === CATEGORIA_PROVEEDOR.NACIONAL
+                  ? 'Ej. DISTRIBUIDORA LOGÍSTICA S.A.C.'
+                  : 'Ej. Yiwu Import & Export Ltd.'
+              }
               className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:border-teal-500 focus:outline-none"
             />
           </div>
