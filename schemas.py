@@ -110,15 +110,18 @@ class CatProveedorUpdate(BaseModel):
 
 class CatAlmacenCreate(BaseModel):
     nombre: str
+    ubicacion: Optional[str] = None
 
 class CatAlmacen(BaseModel):
     id_almacen: int
     nombre: str
+    ubicacion: Optional[str] = None
     estado_registro: str = EstadoRegistro.ACTIVO
     model_config = ConfigDict(from_attributes=True)
 
 class CatAlmacenUpdate(BaseModel):
     nombre: Optional[str] = None
+    ubicacion: Optional[str] = None
 
 class CatImportadorCreate(BaseModel):
     nombre: str

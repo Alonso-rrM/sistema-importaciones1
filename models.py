@@ -63,6 +63,7 @@ class CatAlmacen(Base):
     __tablename__ = "cat_almacenes"
     id_almacen = Column(Integer, primary_key=True, index=True)
     nombre = Column(String(100), unique=True, nullable=False)
+    ubicacion = Column(String(255), nullable=True)
     estado_registro = Column(String(20), default=EstadoRegistro.ACTIVO)
 
 class CatBanco(Base):

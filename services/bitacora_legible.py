@@ -89,6 +89,7 @@ ETIQUETAS_CAMPOS = {
     # Catálogos y Usuarios
     "nombre": "Nombre / Razón Social",
     "nombre_documento": "Nombre del Documento",
+    "ubicacion": "Ubicación",
     "ruc": "RUC",
     "categoria": "Categoría",
     "descripcion": "Descripción",
@@ -141,7 +142,7 @@ ORDEN_PREFERIDO_CAMPOS = [
     "tipo_valor", "documento_transporte", "fecha_embarque", "fecha_arribo",
     "fob_usd", "flete_usd", "cfr_usd", "venta_sucesiva",
     "estado_pago", "fecha_pago", "fecha_vencimiento", "fecha_transferencia",
-    "nombre", "nombre_documento", "ruc", "categoria", "tipo_gasto", "clase_aduanera", "descripcion",
+    "nombre", "nombre_documento", "ubicacion", "ruc", "categoria", "tipo_gasto", "clase_aduanera", "descripcion",
     "username", "email", "id_rol", "is_active", "hashed_password",
     "fecha", "precio_compra", "precio_venta",
     "observaciones", "motivo", "es_ajuste_sistema", "estado_registro",

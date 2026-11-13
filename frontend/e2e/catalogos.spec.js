@@ -59,3 +59,33 @@ test('catálogo de bancos: un nombre duplicado muestra el mensaje del sistema', 
   await page.locator('form button[type=submit]').click();
   await esperarAviso(page, 'ya está registrado');
 });
+
+test('almacenes: la ubicación se guarda y se muestra', async ({ page }) => {
+  await iniciarSesion(page);
+  await page.goto('/app/almacenes');
+  await page.getByRole('button', { name: 'Nuevo Almacén' }).first().click();
+  await page.getByPlaceholder('Ej. DP World Callao').fill('ALMACEN CON UBICACION');
+  await page.getByPlaceholder('Ej. Av. Manco Cápac').fill('Av. Néstor Gambetta 123, Callao');
+  await page.locator('form button[type=submit]').click();
+  await esperarAviso(page, 'exitosamente');
+  await page.reload();
+  await page.locator('section').first().getByText('ALMACEN CON UBICACION', { exact: true }).click();
+  await expect(page.getByText('Av. Néstor Gambetta 123, Callao').first()).toBeVisible();
+});
+
+test('proveedores: se puede registrar una entidad del Estado y filtrar por categoría', async ({ page }) => {
+  await iniciarSesion(page);
+  await page.goto('/app/proveedores');
+  await page.getByRole('button', { name: 'Nuevo Proveedor' }).first().click();
+  await page.getByPlaceholder('Ej. 20987654321').fill('20200000099');
+  await page.locator('form select').selectOption({ label: 'Estado / Tributo (SUNAT)' });
+  await page.getByPlaceholder('Nombre oficial o abreviado del proveedor').fill('MUNICIPALIDAD DEL CALLAO');
+  await page.locator('form button[type=submit]').click();
+  await esperarAviso(page, 'exitosamente');
+
+  const lista = page.locator('section').first();
+  await lista.locator('select').selectOption({ label: 'Estado / Tributo (SUNAT)' });
+  await expect(lista.getByText('MUNICIPALIDAD DEL CALLAO', { exact: true })).toBeVisible();
+  await expect(lista.getByText('SUNAT', { exact: true })).toBeVisible();          // creado en los datos de ejemplo
+  await expect(lista.getByText('NAVIERA E2E', { exact: true })).toBeHidden();     // nacional: queda fuera del filtro
+});

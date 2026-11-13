@@ -61,7 +61,8 @@ def _importador(fila: dict):
 
 
 def _almacen(fila: dict):
-    return models.CatAlmacen(nombre=str(fila["nombre"]))
+    ubicacion = fila.get("ubicacion")
+    return models.CatAlmacen(nombre=str(fila["nombre"]), ubicacion=str(ubicacion) if ubicacion else None)
 
 
 # El orden es el que se muestra en el mensaje de "catálogo inválido".

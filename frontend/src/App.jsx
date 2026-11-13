@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { ThemeProvider } from './context/ThemeContext'
+import ProveedorInteraccion from './components/ProveedorInteraccion'
 import Login from './pages/Login'
 import Setup from './pages/Setup'
 import AdminPanel from './pages/AdminPanel'
@@ -23,6 +24,7 @@ import Reportes from './pages/Reportes'
 function App() {
   return (
     <ThemeProvider>
+      <ProveedorInteraccion>
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
@@ -61,6 +63,7 @@ function App() {
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </BrowserRouter>
+      </ProveedorInteraccion>
     </ThemeProvider>
   )
 }
