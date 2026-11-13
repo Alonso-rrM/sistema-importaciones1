@@ -1,0 +1,26 @@
+# Configuración de herramientas de calidad del backend.
+# Uso local:  pip install -r requirements-dev.txt  →  ruff check .  →  pytest
+
+[tool.ruff]
+target-version = "py311"
+extend-exclude = ["frontend", "alembic/versions"]
+
+[tool.ruff.lint]
+# Línea base: errores reales (nombres indefinidos, imports y variables sin usar, sintaxis) y
+# sentencias mal formadas. El estilo (largo de línea, espacios) se incorporará por fases.
+select = ["F", "E4", "E7", "E9"]
+
+[tool.ruff.lint.per-file-ignores]
+# Scripts que ajustan sys.path / variables de entorno ANTES de importar la aplicación.
+"tests/verif_seguridad.py" = ["E401", "E402", "E701", "E702"]
+"tests/conftest.py" = ["E402"]
+"scripts/*.py" = ["E402"]
+"alembic/env.py" = ["E402"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-ra"
+markers = [
+    "integracion: requiere PostgreSQL (variable TEST_DATABASE_URL); se omite si no está definida",
+]

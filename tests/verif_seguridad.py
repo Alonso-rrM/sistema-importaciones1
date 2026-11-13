@@ -62,7 +62,7 @@ _ejecutar("[ALEMBIC] alembic check (models.py == esquema)", ["-m", "alembic", "c
 # 3. CARGA DE LA APLICACIÓN Y TESTCLIENT
 # ==========================================
 import models, main
-from database import engine, SessionLocal, Base
+from database import SessionLocal
 from security import create_access_token, get_password_hash
 from dependencies import limiter
 from fastapi.testclient import TestClient
@@ -334,7 +334,6 @@ for ws in wb.worksheets:
 chk("V17", "Texto con '=' se exporta como texto, no fórmula", tipos and all(t == "s" for t in tipos) and guiones_ok, f"tipos={tipos} marcadores '-' intactos={guiones_ok}")
 
 # V18: tiempo de login
-from dependencies import limiter
 limiter.enabled = False
 def t(u):
     s = time.perf_counter(); c.post("/login", data={"username": u, "password": "mala"}); return time.perf_counter() - s
@@ -603,9 +602,11 @@ print(f"\nRESUMEN TOTAL: {len(R)-len(fallas)}/{len(R)} pruebas pasan." + (" Fall
 # ==========================================
 # 5. LIMPIEZA FINAL DE LA BASE DE PRUEBAS
 # ==========================================
-print("\n[LIMPIEZA FINAL] Limpiando la base de datos importaciones_test ...")
+print(f"\n[LIMPIEZA FINAL] Limpiando la base de datos {db_name} ...")
 db.close()
 with engine_clean.connect() as conn:
     conn.execute(text("DROP SCHEMA public CASCADE; CREATE SCHEMA public;"))
 print("✅ [LIMPIEZA FINAL] Esquema public limpiado.")
 
+# Código de salida distinto de cero si alguna verificación falló (lo usan pytest y la integración continua)
+sys.exit(1 if fallas else 0)
