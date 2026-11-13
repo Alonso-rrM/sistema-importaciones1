@@ -72,9 +72,7 @@ Deuda conocida y aceptada por ahora:
 - 76 advertencias de ESLint (reglas del compilador de React en pantallas grandes). Tienen tope:
   `npm run lint:ci` falla si aumentan. Se resuelven en la fase 4.
 - Restricciones `CHECK` en la base y validación estricta de `tipo_valor`, `canal_control`, `categoria`
-  y `status_llegada`: pendientes hasta revisar la base real con `scripts/verificar_valores.py`.
-- La categoría de proveedor `ESTADO_O_TRIBUTO` existe en el backend pero **no se puede elegir en pantalla**
-  (Proveedores y el modal de creación rápida solo ofrecen Nacional e Internacional).
+  y `status_llegada`: listas para activar tras revisar la base local con `scripts/verificar_valores.py` (0 hallazgos tras corregir `cat_proveedores.categoria` de `'EXTRANJERO'` a `'INTERNACIONAL'`).
 - Los roles iniciales tienen nombres distintos según se creen por `/setup` o por `scripts/seed_inicial.py`
   (los números de rol coinciden; solo cambia el texto).
 
@@ -113,5 +111,4 @@ GitHub Actions (`.github/workflows/ci.yml`) corre todo lo anterior en cada subid
   de comprobantes y el C.D.A. en `numero_documento` del gasto.
 - Por confirmar con la usuaria: si los tributos propios de la DAM comparten un solo C.D.A. (afectaría el
   candado anti-duplicados de `routers/finanzas.py`) y qué número usa Tesorería para pagar (C.D.A. o número de L/C).
-- Por decidir: el concepto "PERCEPCION OMC" hoy está clasificado como PERCEPCION (cuenta para la proforma),
-  igual que antes de la fase 2. Si en realidad pertenece a la OMC, se cambia desde la pantalla de Conceptos.
+- Confirmado por el usuario (separa `"TRIBUTOS"` + `"PERCEPCION DE TRIBUTOS"` vs. `"OMC"` + `"PERCEPCION DE OMC"`): el concepto `"PERCEPCION OMC"` (#17) pertenece a clase `OMC` (actualizado en la base local y en `plantillas/1_conceptos.xlsx`).
