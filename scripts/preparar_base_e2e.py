@@ -67,7 +67,7 @@ def cargar_datos_de_ejemplo():
     from fastapi.testclient import TestClient
 
     import main
-    from constantes import CategoriaProveedor, ClaseAduanera, Moneda, TipoGasto, TipoValor
+    from constantes import CanalControl, CategoriaProveedor, ClaseAduanera, Moneda, TipoGasto, TipoValor
 
     cliente = TestClient(main.app)
     r = cliente.post("/login", data={"username": ADMIN_USUARIO, "password": ADMIN_CLAVE},
@@ -90,7 +90,8 @@ def cargar_datos_de_ejemplo():
     banco = post("/bancos/", {"nombre": "BANCO E2E"})
     doc = post("/tipos-documento/", {"nombre_documento": "FACTURA", "multiplicador_financiero": 1})
     trib = post("/conceptos/", {"nombre": "TRIBUTOS", "tipo_gasto": TipoGasto.FIJO_DESPACHO, "clase_aduanera": ClaseAduanera.TRIBUTO})
-    post("/conceptos/", {"nombre": "PERCEPCION", "tipo_gasto": TipoGasto.FIJO_DESPACHO, "clase_aduanera": ClaseAduanera.PERCEPCION})
+    post("/conceptos/", {"nombre": "PERCEPCION", "tipo_gasto": TipoGasto.FIJO_DESPACHO,  # literal-permitido: nombre del concepto
+                         "clase_aduanera": ClaseAduanera.PERCEPCION})
     flete = post("/conceptos/", {"nombre": "FLETE LOCAL", "tipo_gasto": TipoGasto.POST_LEVANTE, "clase_aduanera": ClaseAduanera.NINGUNA})
 
     respuesta_tc = cliente.put("/tipo-cambio/", json={"fecha": hoy, "precio_compra": "3.7450", "precio_venta": "3.7520"},
@@ -99,7 +100,7 @@ def cargar_datos_de_ejemplo():
 
     maestro = post("/maestros/", {"numero_factura": "GF-E2E-1", "id_importador": imp["id_importador"],
                                   "tipo_valor": TipoValor.DEFINITIVO})
-    dam = post("/dams/", {"id_maestro": maestro["id_maestro"], "numero_de_dam": "118-2026-10-000001", "canal_control": "VERDE"})
+    dam = post("/dams/", {"id_maestro": maestro["id_maestro"], "numero_de_dam": "118-2026-10-000001", "canal_control": CanalControl.VERDE})
     for concepto, proveedor, monto, moneda, numero in [
         (flete, prov, "250.00", Moneda.USD, "F001-1"),
         (trib, sunat, "1200.00", Moneda.PEN, "118-26-10-000001-01"),
