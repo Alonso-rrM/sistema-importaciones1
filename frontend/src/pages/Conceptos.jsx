@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import api from '../services/api';
 import useDebounce from '../hooks/useDebounce';
 import { Tags, Search, Plus, Pencil, Trash2, RotateCcw, Ban, FileText } from 'lucide-react';
-import { ESTADO_PAGO, ESTADO_REGISTRO, MONEDA, TIPO_GASTO } from '../constants';
+import { CLASE_ADUANERA, ESTADO_PAGO, ESTADO_REGISTRO, MONEDA, TIPO_GASTO } from '../constants';
 
 const Conceptos = () => {
   const [conceptos, setConceptos] = useState([]);
@@ -25,10 +25,23 @@ const Conceptos = () => {
   const [textoObsTemp, setTextoObsTemp] = useState('');
   const [isGuardandoObs, setIsGuardandoObs] = useState(false);
 
+  // Clase aduanera: papel del concepto en el despacho. La usa el backend para decidir el levante de la DAM.
+  const CLASES_ADUANERAS = [
+    { valor: CLASE_ADUANERA.NINGUNA, etiqueta: 'Ninguna', detalle: 'No interviene en el levante (fletes, almacenaje, multas, etc.)' },
+    { valor: CLASE_ADUANERA.TRIBUTO, etiqueta: 'Tributo', detalle: 'Forma parte de la proforma junto con la percepción' },
+    { valor: CLASE_ADUANERA.PERCEPCION, etiqueta: 'Percepción', detalle: 'Forma parte de la proforma junto con los tributos' },
+    { valor: CLASE_ADUANERA.OMC, etiqueta: CLASE_ADUANERA.OMC, detalle: 'Ajuste de valor OMC: su pago libera o cierra la DAM' },
+  ];
+  const etiquetaClase = (valor) => CLASES_ADUANERAS.find(c => c.valor === valor)?.etiqueta || 'Ninguna';
+  const colorClase = (valor) => (!valor || valor === CLASE_ADUANERA.NINGUNA)
+    ? 'bg-slate-500/10 text-slate-400 border-slate-500/30'
+    : 'bg-sky-500/10 text-sky-300 border-sky-500/30';
+
   const estadoInicial = {
     nombre: '',
     descripcion: '',
-    tipo_gasto: TIPO_GASTO.FIJO_DESPACHO
+    tipo_gasto: TIPO_GASTO.FIJO_DESPACHO,
+    clase_aduanera: CLASE_ADUANERA.NINGUNA
   };
   const [formData, setFormData] = useState(estadoInicial);
 
@@ -89,7 +102,8 @@ const Conceptos = () => {
           setFormData({
             nombre: found.nombre || '',
             descripcion: found.descripcion || '',
-            tipo_gasto: found.tipo_gasto || TIPO_GASTO.FIJO_DESPACHO
+            tipo_gasto: found.tipo_gasto || TIPO_GASTO.FIJO_DESPACHO,
+            clase_aduanera: found.clase_aduanera || CLASE_ADUANERA.NINGUNA
           });
         }
       } else if (data.length > 0 && viewMode === 'DETALLE') {
@@ -97,7 +111,8 @@ const Conceptos = () => {
         setFormData({
           nombre: data[0].nombre || '',
           descripcion: data[0].descripcion || '',
-          tipo_gasto: data[0].tipo_gasto || TIPO_GASTO.FIJO_DESPACHO
+          tipo_gasto: data[0].tipo_gasto || TIPO_GASTO.FIJO_DESPACHO,
+          clase_aduanera: data[0].clase_aduanera || CLASE_ADUANERA.NINGUNA
         });
       }
     } catch (error) {
@@ -117,7 +132,8 @@ const Conceptos = () => {
     setFormData({
       nombre: c.nombre || '',
       descripcion: c.descripcion || '',
-      tipo_gasto: c.tipo_gasto || TIPO_GASTO.FIJO_DESPACHO
+      tipo_gasto: c.tipo_gasto || TIPO_GASTO.FIJO_DESPACHO,
+      clase_aduanera: c.clase_aduanera || CLASE_ADUANERA.NINGUNA
     });
   };
 
@@ -133,7 +149,8 @@ const Conceptos = () => {
     setFormData({
       nombre: selectedConcepto.nombre || '',
       descripcion: selectedConcepto.descripcion || '',
-      tipo_gasto: selectedConcepto.tipo_gasto || TIPO_GASTO.FIJO_DESPACHO
+      tipo_gasto: selectedConcepto.tipo_gasto || TIPO_GASTO.FIJO_DESPACHO,
+      clase_aduanera: selectedConcepto.clase_aduanera || CLASE_ADUANERA.NINGUNA
     });
   };
 
@@ -143,7 +160,8 @@ const Conceptos = () => {
       setFormData({
         nombre: selectedConcepto.nombre || '',
         descripcion: selectedConcepto.descripcion || '',
-        tipo_gasto: selectedConcepto.tipo_gasto || TIPO_GASTO.FIJO_DESPACHO
+        tipo_gasto: selectedConcepto.tipo_gasto || TIPO_GASTO.FIJO_DESPACHO,
+        clase_aduanera: selectedConcepto.clase_aduanera || CLASE_ADUANERA.NINGUNA
       });
     } else {
       setViewMode('DETALLE');
@@ -165,7 +183,8 @@ const Conceptos = () => {
       const payload = {
         nombre: formData.nombre.trim(),
         descripcion: formData.descripcion?.trim() || null,
-        tipo_gasto: formData.tipo_gasto || TIPO_GASTO.FIJO_DESPACHO
+        tipo_gasto: formData.tipo_gasto || TIPO_GASTO.FIJO_DESPACHO,
+        clase_aduanera: formData.clase_aduanera || CLASE_ADUANERA.NINGUNA
       };
 
       if (viewMode === 'NUEVO') {
@@ -385,6 +404,13 @@ const Conceptos = () => {
                         {c.tipo_gasto === TIPO_GASTO.FIJO_DESPACHO ? 'Fijo Despacho' : c.tipo_gasto === TIPO_GASTO.POST_LEVANTE ? 'Post-Levante' : 'Extraordinario'}
                       </span>
                     </div>
+                    {c.clase_aduanera && c.clase_aduanera !== CLASE_ADUANERA.NINGUNA && (
+                      <div className="mt-1.5">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${colorClase(c.clase_aduanera)}`} title="Clase aduanera: interviene en el levante de la DAM">
+                          Aduana: {etiquetaClase(c.clase_aduanera)}
+                        </span>
+                      </div>
+                    )}
 
                     <div className="mt-1.5 text-xs font-semibold text-slate-200 truncate">
                       {c.nombre}
@@ -542,6 +568,16 @@ const Conceptos = () => {
                           : selectedConcepto?.tipo_gasto === TIPO_GASTO.POST_LEVANTE
                           ? '2. Gasto Post-Levante (Devolución/Entrega)'
                           : '3. Gasto Extraordinario (Eventualidades)'}
+                      </span>
+                    </div>
+
+                    <div className="bg-slate-900/80 border border-slate-800 p-3.5 rounded-lg space-y-1">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Clase Aduanera (Levante)</span>
+                      <span className={`inline-block px-2 py-0.5 rounded text-xs font-bold border mt-0.5 ${colorClase(selectedConcepto?.clase_aduanera)}`}>
+                        {etiquetaClase(selectedConcepto?.clase_aduanera)}
+                      </span>
+                      <span className="block text-[10px] text-slate-500">
+                        {CLASES_ADUANERAS.find(c => c.valor === (selectedConcepto?.clase_aduanera || CLASE_ADUANERA.NINGUNA))?.detalle}
                       </span>
                     </div>
 
@@ -738,6 +774,24 @@ const Conceptos = () => {
                       </select>
                       <p className="text-[10px] text-slate-500 mt-1">
                         Determina cómo medirá el sistema el avance de pagos de este concepto en la barra de progreso del contenedor.
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-300 uppercase tracking-wide mb-1.5">
+                        Clase Aduanera (Levante de la DAM) *
+                      </label>
+                      <select
+                        value={formData.clase_aduanera}
+                        onChange={(e) => setFormData({ ...formData, clase_aduanera: e.target.value })}
+                        className="w-full text-xs font-bold bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-sky-300 focus:outline-none focus:border-sky-500"
+                      >
+                        {CLASES_ADUANERAS.map(c => (
+                          <option key={c.valor} value={c.valor}>{c.etiqueta} — {c.detalle}</option>
+                        ))}
+                      </select>
+                      <p className="text-[10px] text-slate-500 mt-1">
+                        El sistema da el levante de la DAM cuando los gastos de clase Tributo y Percepción están pagados. Ya no depende del nombre del concepto.
                       </p>
                     </div>
 
