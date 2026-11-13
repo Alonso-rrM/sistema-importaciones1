@@ -121,3 +121,34 @@ def test_el_backend_no_usa_numeros_de_rol_sueltos():
                 if patron.search(linea) and not linea.lstrip().startswith(("#", "print(")):
                     infracciones.append(f"{os.path.relpath(ruta, REPO)}:{n}: {linea.strip()[:110]}")
     assert not infracciones, "Números de rol sueltos (use constantes.Rol / ROLES_*):\n" + "\n".join(infracciones)
+
+
+# ---------- Coherencia entre el backend y el frontend ----------
+
+def _constantes_frontend():
+    """Lee frontend/src/constants/index.js y devuelve {NOMBRE: {MIEMBRO: valor}}."""
+    import re
+    ruta = os.path.join(REPO, "frontend", "src", "constants", "index.js")
+    with open(ruta, encoding="utf-8") as f:
+        codigo = f.read()
+    grupos = {}
+    for nombre, cuerpo in re.findall(r"export const (\w+) = Object\.freeze\(\{(.*?)\}\);", codigo, flags=re.S):
+        miembros = {}
+        for clave, texto, numero in re.findall(r"^\s*(\w+):\s*(?:'([^']*)'|(\d+)),", cuerpo, flags=re.M):
+            miembros[clave] = int(numero) if numero else texto
+        grupos[nombre] = miembros
+    return grupos
+
+
+def test_las_constantes_del_frontend_son_identicas_a_las_del_backend():
+    """Si falla: se cambió un valor en constantes.py o en frontend/src/constants/index.js y no en el otro."""
+    equivalencias = {
+        "ROL": C.Rol, "ESTADO_REGISTRO": C.EstadoRegistro, "MONEDA": C.Moneda, "ESTADO_PAGO": C.EstadoPago,
+        "TIPO_VALOR": C.TipoValor, "ESTADO_DOCUMENTARIO": C.EstadoDocumentario, "ESTADO_LEVANTE": C.EstadoLevante,
+        "STATUS_LLEGADA": C.StatusLlegada, "CANAL_CONTROL": C.CanalControl, "ESTADO_DAM": C.EstadoDam,
+        "CATEGORIA_PROVEEDOR": C.CategoriaProveedor, "TIPO_GASTO": C.TipoGasto,
+    }
+    frontend = _constantes_frontend()
+    assert set(frontend) == set(equivalencias)
+    for nombre, enum in equivalencias.items():
+        assert frontend[nombre] == {m.name: m.value for m in enum}, nombre

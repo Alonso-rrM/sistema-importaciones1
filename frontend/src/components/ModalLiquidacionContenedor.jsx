@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import api from '../services/api';
 import { descargarExcel } from '../utils/exportUtils';
+import { ESTADO_LEVANTE, ESTADO_PAGO, MONEDA, TIPO_GASTO } from '../constants';
 
 const ModalLiquidacionContenedor = ({ isOpen, idMaestro, onClose }) => {
   const [data, setData] = useState(null);
@@ -79,9 +80,9 @@ const ModalLiquidacionContenedor = ({ isOpen, idMaestro, onClose }) => {
   if (!isOpen) return null;
 
   // Filtrar gastos por etapa para la tabla unificada
-  const gastosFijos = data?.gastos?.filter(g => g.tipo_gasto === 'FIJO_DESPACHO') || [];
-  const gastosPost = data?.gastos?.filter(g => g.tipo_gasto === 'POST_LEVANTE') || [];
-  const gastosExtra = data?.gastos?.filter(g => g.tipo_gasto === 'EXTRAORDINARIO') || [];
+  const gastosFijos = data?.gastos?.filter(g => g.tipo_gasto === TIPO_GASTO.FIJO_DESPACHO) || [];
+  const gastosPost = data?.gastos?.filter(g => g.tipo_gasto === TIPO_GASTO.POST_LEVANTE) || [];
+  const gastosExtra = data?.gastos?.filter(g => g.tipo_gasto === TIPO_GASTO.EXTRAORDINARIO) || [];
 
   return (
     <>
@@ -258,7 +259,7 @@ const ModalLiquidacionContenedor = ({ isOpen, idMaestro, onClose }) => {
                       </span>
                     </div>
                     <span className="block text-[9px] text-slate-500 mt-1 font-mono">
-                      Estado: <strong className={data.estado_levante === 'CON LEVANTE' ? 'text-emerald-700' : 'text-amber-700'}>{data.estado_levante}</strong>
+                      Estado: <strong className={data.estado_levante === ESTADO_LEVANTE.CON_LEVANTE ? 'text-emerald-700' : 'text-amber-700'}>{data.estado_levante}</strong>
                     </span>
                   </div>
                 </div>
@@ -564,22 +565,22 @@ const renderFilasGastos = (gastos) => {
         <td className="p-1 text-left border-r border-slate-200 pl-2 font-medium text-slate-900 truncate" title={g.proveedor_nombre}>{g.proveedor_nombre}</td>
         <td className="p-1 text-left border-r border-slate-200 pl-2 text-slate-700 truncate" title={g.concepto_nombre}>{g.concepto_nombre}</td>
         <td className="p-1 text-center font-bold border-r border-slate-200 text-[8.5px]">
-          <span className={`px-1 py-0.5 rounded font-mono ${g.moneda === 'USD' ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'}`}>
+          <span className={`px-1 py-0.5 rounded font-mono ${g.moneda === MONEDA.USD ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'}`}>
             {g.moneda}
           </span>
         </td>
         <td className="p-1 text-right font-mono border-r border-slate-200 pr-2 font-semibold">
-          {g.moneda === 'USD' ? '$' : 'S/'} {orig.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+          {g.moneda === MONEDA.USD ? '$' : 'S/'} {orig.toLocaleString('en-US', { minimumFractionDigits: 2 })}
         </td>
         <td className="p-1 text-right font-mono border-r border-slate-200 pr-2 text-emerald-700 font-semibold">
-          {g.moneda === 'USD' ? '$' : 'S/'} {pagado.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+          {g.moneda === MONEDA.USD ? '$' : 'S/'} {pagado.toLocaleString('en-US', { minimumFractionDigits: 2 })}
         </td>
         <td className={`p-1 text-right font-mono border-r border-slate-200 pr-2 ${saldo > 0 ? 'text-rose-700 font-bold' : 'text-slate-400'}`}>
-          {g.moneda === 'USD' ? '$' : 'S/'} {saldo.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+          {g.moneda === MONEDA.USD ? '$' : 'S/'} {saldo.toLocaleString('en-US', { minimumFractionDigits: 2 })}
         </td>
         <td className="p-1 text-center border-r border-slate-200 text-[8px] font-bold">
-          <span className={`px-1 py-0.5 rounded ${g.estado_pago === 'PAGADO' ? 'bg-emerald-100 text-emerald-800' :
-            g.estado_pago === 'PARCIAL' ? 'bg-amber-100 text-amber-800' :
+          <span className={`px-1 py-0.5 rounded ${g.estado_pago === ESTADO_PAGO.PAGADO ? 'bg-emerald-100 text-emerald-800' :
+            g.estado_pago === ESTADO_PAGO.PARCIAL ? 'bg-amber-100 text-amber-800' :
               'bg-rose-100 text-rose-800'
             }`}>
             {g.estado_pago}

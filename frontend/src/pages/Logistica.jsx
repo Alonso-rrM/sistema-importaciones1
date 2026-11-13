@@ -9,8 +9,9 @@ import { descargarExcel } from '../utils/exportUtils';
 import ModalLiquidacionContenedor from '../components/ModalLiquidacionContenedor';
 import ModalCrearProveedorRapido from '../components/ModalCrearProveedorRapido';
 import { Download, Clock, Search, Settings, FileText, Banknote, Trash2, Unlock, CreditCard, Receipt, FolderOpen } from 'lucide-react';
+import { CANAL_CONTROL, CATEGORIA_PROVEEDOR, ESTADO_DAM, ESTADO_DOCUMENTARIO, ESTADO_LEVANTE, ESTADO_PAGO, MONEDA, ROL, STATUS_LLEGADA, TIPO_GASTO, TIPO_VALOR } from '../constants';
 
-const KPI_KEYS = ['FIJO_DESPACHO', 'POST_LEVANTE', 'EXTRAORDINARIO', 'GLOBAL'];
+const KPI_KEYS = [TIPO_GASTO.FIJO_DESPACHO, TIPO_GASTO.POST_LEVANTE, TIPO_GASTO.EXTRAORDINARIO, 'GLOBAL'];
 
 const Logistica = () => {
   const navigate = useNavigate();
@@ -43,10 +44,10 @@ const Logistica = () => {
 
   // Estructura completa
   const estadoInicial = {
-    numero_factura: '', documento_transporte: '', n_cont_fisico: '', status_llegada: 'EN TRÁNSITO',
+    numero_factura: '', documento_transporte: '', n_cont_fisico: '', status_llegada: STATUS_LLEGADA.EN_TRANSITO,
     fecha_embarque: '', fecha_arribo: '', id_proveedor: '', id_importador: '', id_agente: '', id_almacen: '',
-    fob_usd: '', flete_usd: '', tipo_valor: 'DEFINITIVO', venta_sucesiva: 'NO',
-    estado_documentario: 'SIN NUMERAR', fecha_levante_maestro: '', fecha_recepcion_almacen: ''
+    fob_usd: '', flete_usd: '', tipo_valor: TIPO_VALOR.DEFINITIVO, venta_sucesiva: 'NO',
+    estado_documentario: ESTADO_DOCUMENTARIO.SIN_NUMERAR, fecha_levante_maestro: '', fecha_recepcion_almacen: ''
   };
 
   const [formData, setFormData] = useState(estadoInicial);
@@ -67,12 +68,12 @@ const Logistica = () => {
   const [showKpiDetails, setShowKpiDetails] = useState(false);
 
   // Modales Inline para Creación Rápida
-  const [modalNuevaDam, setModalNuevaDam] = useState({ open: false, numero_de_dam: '', serie: '', canal_control: 'VERDE', monto_valor_provisional_usd: '' });
-  const [modalNuevoGasto, setModalNuevoGasto] = useState({ open: false, id_dam: '', id_concepto: '', id_proveedor: '', id_tipo_doc: '', numero_documento: '', monto_original: '', moneda: 'USD', observaciones: '' });
+  const [modalNuevaDam, setModalNuevaDam] = useState({ open: false, numero_de_dam: '', serie: '', canal_control: CANAL_CONTROL.VERDE, monto_valor_provisional_usd: '' });
+  const [modalNuevoGasto, setModalNuevoGasto] = useState({ open: false, id_dam: '', id_concepto: '', id_proveedor: '', id_tipo_doc: '', numero_documento: '', monto_original: '', moneda: MONEDA.USD, observaciones: '' });
   const [isSubmittingInline, setIsSubmittingInline] = useState(false);
   const [isExportando, setIsExportando] = useState(false);
   const [modalLiquidacionOpen, setModalLiquidacionOpen] = useState(false);
-  const [modalCrearProveedor, setModalCrearProveedor] = useState({ open: false, context: 'maestro', categoriaDefecto: 'INTERNACIONAL' });
+  const [modalCrearProveedor, setModalCrearProveedor] = useState({ open: false, context: 'maestro', categoriaDefecto: CATEGORIA_PROVEEDOR.INTERNACIONAL });
 
   const handleProveedorCreado = (nuevoProv) => {
     setOpcionesProveedores(prev => [nuevoProv, ...prev]);
@@ -87,7 +88,7 @@ const Logistica = () => {
   // Rol solo para la interfaz (los permisos reales los valida el backend)
   const userRole = obtenerRol();
 
-  const isReadOnly = userRole !== 1 && formData.estado_documentario === 'ATE. TOTAL' && viewMode === 'MODIFICAR';
+  const isReadOnly = userRole !== ROL.SUPERADMIN && formData.estado_documentario === ESTADO_DOCUMENTARIO.ATENCION_TOTAL && viewMode === 'MODIFICAR';
 
   useEffect(() => { cargarCatalogos(); }, []);
   useEffect(() => {
@@ -174,7 +175,7 @@ const Logistica = () => {
     numero_factura: m.numero_factura || '',
     documento_transporte: m.documento_transporte || '',
     n_cont_fisico: m.n_cont_fisico || '',
-    status_llegada: m.status_llegada || 'EN TRÁNSITO',
+    status_llegada: m.status_llegada || STATUS_LLEGADA.EN_TRANSITO,
     fecha_embarque: m.fecha_embarque ? m.fecha_embarque.split('T')[0] : '',
     fecha_arribo: m.fecha_arribo ? m.fecha_arribo.split('T')[0] : '',
     id_proveedor: m.id_proveedor != null ? String(m.id_proveedor) : '',
@@ -183,9 +184,9 @@ const Logistica = () => {
     id_almacen: m.id_almacen != null ? String(m.id_almacen) : '',
     fob_usd: m.fob_usd != null ? String(m.fob_usd) : '',
     flete_usd: m.flete_usd != null ? String(m.flete_usd) : '',
-    tipo_valor: m.tipo_valor || 'DEFINITIVO',
+    tipo_valor: m.tipo_valor || TIPO_VALOR.DEFINITIVO,
     venta_sucesiva: m.venta_sucesiva || 'NO',
-    estado_documentario: m.estado_documentario || 'SIN NUMERAR',
+    estado_documentario: m.estado_documentario || ESTADO_DOCUMENTARIO.SIN_NUMERAR,
     fecha_levante_maestro: m.fecha_levante_maestro ? m.fecha_levante_maestro.split('T')[0] : '',
     fecha_recepcion_almacen: m.fecha_recepcion_almacen ? m.fecha_recepcion_almacen.split('T')[0] : '',
     version: m.version
@@ -233,7 +234,7 @@ const Logistica = () => {
     e.preventDefault();
     if (isReadOnly) return alert("Este registro cuenta con LEVANTE y está protegido contra edición.");
 
-    if (formData.status_llegada === 'EN ALMACÉN' && !formData.fecha_recepcion_almacen) {
+    if (formData.status_llegada === STATUS_LLEGADA.EN_ALMACEN && !formData.fecha_recepcion_almacen) {
       return alert("Debe ingresar la Fecha de Recepción en Almacén.");
     }
 
@@ -244,7 +245,7 @@ const Logistica = () => {
         numero_factura: (formData.numero_factura || '').trim(),
         documento_transporte: formData.documento_transporte?.trim() || null,
         n_cont_fisico: formData.n_cont_fisico?.trim() || null,
-        status_llegada: formData.status_llegada || 'EN TRÁNSITO',
+        status_llegada: formData.status_llegada || STATUS_LLEGADA.EN_TRANSITO,
         fecha_embarque: formData.fecha_embarque?.trim() ? formData.fecha_embarque.trim() : null,
         fecha_arribo: formData.fecha_arribo?.trim() ? formData.fecha_arribo.trim() : null,
         fecha_recepcion_almacen: formData.fecha_recepcion_almacen?.trim() ? formData.fecha_recepcion_almacen.trim() : null,
@@ -254,7 +255,7 @@ const Logistica = () => {
         id_almacen: formData.id_almacen ? parseInt(formData.id_almacen, 10) : null,
         fob_usd: formData.fob_usd !== '' && formData.fob_usd != null ? parseFloat(formData.fob_usd) : null,
         flete_usd: formData.flete_usd !== '' && formData.flete_usd != null ? parseFloat(formData.flete_usd) : null,
-        tipo_valor: formData.tipo_valor || 'DEFINITIVO',
+        tipo_valor: formData.tipo_valor || TIPO_VALOR.DEFINITIVO,
         venta_sucesiva: formData.venta_sucesiva || 'NO'
       };
 
@@ -290,11 +291,11 @@ const Logistica = () => {
         id_maestro: selectedId,
         numero_de_dam: modalNuevaDam.numero_de_dam.trim(),
         serie: modalNuevaDam.serie?.trim() || null,
-        canal_control: modalNuevaDam.canal_control || 'VERDE',
+        canal_control: modalNuevaDam.canal_control || CANAL_CONTROL.VERDE,
         monto_valor_provisional_usd: modalNuevaDam.monto_valor_provisional_usd ? parseFloat(modalNuevaDam.monto_valor_provisional_usd) : null
       };
       await api.post('/dams/', payload);
-      setModalNuevaDam({ open: false, numero_de_dam: '', serie: '', canal_control: 'VERDE', monto_valor_provisional_usd: '' });
+      setModalNuevaDam({ open: false, numero_de_dam: '', serie: '', canal_control: CANAL_CONTROL.VERDE, monto_valor_provisional_usd: '' });
       cargarSubRegistros(selectedId, formData.numero_factura);
       cargarMaestros();
       alert("✅ DAM registrada correctamente.");
@@ -322,11 +323,11 @@ const Logistica = () => {
         id_tipo_doc: parseInt(modalNuevoGasto.id_tipo_doc, 10),
         numero_documento: modalNuevoGasto.numero_documento?.trim() || null,
         monto_original: monto,
-        moneda: modalNuevoGasto.moneda || 'USD',
+        moneda: modalNuevoGasto.moneda || MONEDA.USD,
         observaciones: modalNuevoGasto.observaciones?.trim() || null
       };
       await api.post('/gastos/', payload);
-      setModalNuevoGasto({ open: false, id_dam: '', id_concepto: '', id_proveedor: '', id_tipo_doc: '', numero_documento: '', monto_original: '', moneda: 'USD', observaciones: '' });
+      setModalNuevoGasto({ open: false, id_dam: '', id_concepto: '', id_proveedor: '', id_tipo_doc: '', numero_documento: '', monto_original: '', moneda: MONEDA.USD, observaciones: '' });
       cargarSubRegistros(selectedId, formData.numero_factura);
       alert("✅ Gasto registrado y vinculado al contenedor.");
     } catch (err) {
@@ -339,7 +340,7 @@ const Logistica = () => {
     try {
       await api.post(`/maestros/${selectedId}/desbloquear/`);
       alert("✅ Expediente desbloqueado correctamente.");
-      setFormData(prev => ({ ...prev, estado_levante: 'SIN LEVANTE' }));
+      setFormData(prev => ({ ...prev, estado_levante: ESTADO_LEVANTE.SIN_LEVANTE }));
       cargarMaestros();
     } catch (error) { alert(`Error al desbloquear: ${error.response?.data?.detail || 'Error desconocido'}`); }
   };
@@ -437,8 +438,8 @@ const Logistica = () => {
                     className="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-slate-200 text-[10px]"
                   >
                     <option value="">Todos</option>
-                    <option value="SIN LEVANTE">Sin Levante</option>
-                    <option value="CON LEVANTE">Con Levante</option>
+                    <option value={ESTADO_LEVANTE.SIN_LEVANTE}>Sin Levante</option>
+                    <option value={ESTADO_LEVANTE.CON_LEVANTE}>Con Levante</option>
                   </select>
                 </div>
                 <div>
@@ -449,11 +450,11 @@ const Logistica = () => {
                     className="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-slate-200 text-[10px]"
                   >
                     <option value="">Todos</option>
-                    <option value="EN TRÁNSITO">En Tránsito</option>
-                    <option value="EN PUERTO">En Puerto</option>
-                    <option value="EN ALMACÉN TEMPORAL">En Almacén Temporal</option>
-                    <option value="RETIRO PROGRAMADO">Retiro Programado</option>
-                    <option value="EN ALMACÉN">En Almacén</option>
+                    <option value={STATUS_LLEGADA.EN_TRANSITO}>En Tránsito</option>
+                    <option value={STATUS_LLEGADA.EN_PUERTO}>En Puerto</option>
+                    <option value={STATUS_LLEGADA.EN_ALMACEN_TEMPORAL}>En Almacén Temporal</option>
+                    <option value={STATUS_LLEGADA.RETIRO_PROGRAMADO}>Retiro Programado</option>
+                    <option value={STATUS_LLEGADA.EN_ALMACEN}>En Almacén</option>
                   </select>
                 </div>
                 <div>
@@ -477,8 +478,8 @@ const Logistica = () => {
                     className="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-slate-200 text-[10px]"
                   >
                     <option value="">Todos</option>
-                    <option value="DEFINITIVO">Definitivo</option>
-                    <option value="GARANTIZADO">Garantizado</option>
+                    <option value={TIPO_VALOR.DEFINITIVO}>Definitivo</option>
+                    <option value={TIPO_VALOR.GARANTIZADO}>Garantizado</option>
                   </select>
                 </div>
               </div>
@@ -511,16 +512,16 @@ const Logistica = () => {
                     <span className={`text-sm font-bold font-mono tracking-tight ${isActive ? 'text-teal-300' : 'text-slate-200'}`}>FAC: {m.numero_factura}</span>
                   </div>
                   <div className="flex items-center gap-1">
-                    <span className={`px-1.5 py-0.5 text-[9px] font-bold uppercase rounded border ${m.estado_documentario?.includes('ATE. TOTAL') || m.estado_documentario?.includes('CON LEVANTE') ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300' :
-                      m.estado_documentario?.includes('ATE. PARCIAL') ? 'bg-amber-500/15 border-amber-500/30 text-amber-300' :
-                        m.estado_documentario === 'EN PROCESO' ? 'bg-blue-500/15 border-blue-500/30 text-blue-300' :
+                    <span className={`px-1.5 py-0.5 text-[9px] font-bold uppercase rounded border ${m.estado_documentario?.includes(ESTADO_DOCUMENTARIO.ATENCION_TOTAL) || m.estado_documentario?.includes('CON LEVANTE') ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300' :
+                      m.estado_documentario?.includes(ESTADO_DOCUMENTARIO.ATENCION_PARCIAL) ? 'bg-amber-500/15 border-amber-500/30 text-amber-300' :
+                        m.estado_documentario === ESTADO_DOCUMENTARIO.EN_PROCESO ? 'bg-blue-500/15 border-blue-500/30 text-blue-300' :
                           'bg-slate-700/40 border-slate-600 text-slate-400'
                       }`}>
-                      {m.estado_documentario || 'SIN NUMERAR'}
+                      {m.estado_documentario || ESTADO_DOCUMENTARIO.SIN_NUMERAR}
                     </span>
                   </div>
                 </div>
-                {m.estado_documentario === 'CON LEVANTE (PEND. INGRESO)' && (m.status_llegada === 'EN ALMACÉN TEMPORAL' || m.status_llegada === 'EN PUERTO') && m.fecha_levante_maestro && (() => {
+                {m.estado_documentario === ESTADO_DOCUMENTARIO.CON_LEVANTE_PENDIENTE_INGRESO && (m.status_llegada === STATUS_LLEGADA.EN_ALMACEN_TEMPORAL || m.status_llegada === STATUS_LLEGADA.EN_PUERTO) && m.fecha_levante_maestro && (() => {
                   const dias = differenceInDays(new Date(), parseISO(m.fecha_levante_maestro));
                   if (dias >= 2) return <div className="mt-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-rose-500/20 border border-rose-500/40 text-rose-400 animate-pulse">🚨 DURMIENDO: {dias} días en Temp.</div>;
                   if (dias >= 0) return <div className="mt-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-300">⚠️ {dias} días con Levante</div>;
@@ -578,7 +579,7 @@ const Logistica = () => {
                       <Receipt size={14} className="inline-block shrink-0" />
                       <span>Liquidación Caja</span>
                     </button>
-                    {userRole === 1 && (formData.estado_documentario === 'ATE. TOTAL' || formData.estado_documentario?.includes('CON LEVANTE')) && (
+                    {userRole === ROL.SUPERADMIN && (formData.estado_documentario === ESTADO_DOCUMENTARIO.ATENCION_TOTAL || formData.estado_documentario?.includes('CON LEVANTE')) && (
                       <button onClick={handleDesbloquearLevante} className="px-2.5 py-1.5 rounded bg-amber-600/20 border border-amber-500/40 hover:bg-amber-600/30 text-amber-300 font-bold text-xs transition-colors flex items-center gap-1.5"><Unlock size={14} className="inline-block shrink-0" /> Desbloquear Levante</button>
                     )}
                     <button onClick={() => setModalNuevaDam(prev => ({ ...prev, open: true }))} className="px-2.5 py-1.5 rounded bg-teal-600/20 border border-teal-500/40 hover:bg-teal-600/30 text-teal-300 font-bold text-xs transition-colors flex items-center gap-1.5"><FileText size={14} className="inline-block shrink-0" /> + DAM Rápida</button>
@@ -602,8 +603,8 @@ const Logistica = () => {
                 <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-2.5"><span className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Total CIF Est. (CFR)</span><div className="text-base font-bold font-mono text-slate-100">${cfr}</div></div>
                 <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-2.5">
                   <span className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Estado Documentario</span>
-                  <div className={`text-xs font-bold font-mono uppercase mt-1 ${formData.estado_documentario?.includes('ATE. TOTAL') || formData.estado_documentario?.includes('CON LEVANTE') ? 'text-emerald-400' : 'text-amber-400'}`}>
-                    {formData.estado_documentario || 'SIN NUMERAR'}
+                  <div className={`text-xs font-bold font-mono uppercase mt-1 ${formData.estado_documentario?.includes(ESTADO_DOCUMENTARIO.ATENCION_TOTAL) || formData.estado_documentario?.includes('CON LEVANTE') ? 'text-emerald-400' : 'text-amber-400'}`}>
+                    {formData.estado_documentario || ESTADO_DOCUMENTARIO.SIN_NUMERAR}
                   </div>
                 </div>
               </div>
@@ -646,7 +647,7 @@ const Logistica = () => {
 
               {/* CONTROL DE AVANCE OPERATIVO DE PAGOS (FASE C - MOTOR DE KPIS) */}
               {viewMode === 'MODIFICAR' && kpiGastos && kpiGastos.kpis && (() => {
-                const currentKpiKey = KPI_KEYS[kpiViewIndex] || 'FIJO_DESPACHO';
+                const currentKpiKey = KPI_KEYS[kpiViewIndex] || TIPO_GASTO.FIJO_DESPACHO;
                 const kpiActual = kpiGastos.kpis[currentKpiKey];
                 if (!kpiActual) return null;
 
@@ -705,9 +706,9 @@ const Logistica = () => {
                             </span>
                           </div>
                           <span className="text-[10px] text-slate-400">
-                            {currentKpiKey === 'FIJO_DESPACHO' && 'Medido contra el universo de conceptos obligatorios del catálogo'}
-                            {currentKpiKey === 'POST_LEVANTE' && 'Gastos operativos posteriores al levante aduanero'}
-                            {currentKpiKey === 'EXTRAORDINARIO' && 'Gastos extraordinarios o incidencias no previstas'}
+                            {currentKpiKey === TIPO_GASTO.FIJO_DESPACHO && 'Medido contra el universo de conceptos obligatorios del catálogo'}
+                            {currentKpiKey === TIPO_GASTO.POST_LEVANTE && 'Gastos operativos posteriores al levante aduanero'}
+                            {currentKpiKey === TIPO_GASTO.EXTRAORDINARIO && 'Gastos extraordinarios o incidencias no previstas'}
                             {currentKpiKey === 'GLOBAL' && 'Visión consolidada de todos los conceptos del expediente'}
                           </span>
                         </div>
@@ -737,9 +738,9 @@ const Logistica = () => {
                                 : 'text-slate-400 hover:text-slate-200'
                                 }`}
                             >
-                              {key === 'FIJO_DESPACHO' && 'Fijos'}
-                              {key === 'POST_LEVANTE' && 'Post-Lev.'}
-                              {key === 'EXTRAORDINARIO' && 'Extraord.'}
+                              {key === TIPO_GASTO.FIJO_DESPACHO && 'Fijos'}
+                              {key === TIPO_GASTO.POST_LEVANTE && 'Post-Lev.'}
+                              {key === TIPO_GASTO.EXTRAORDINARIO && 'Extraord.'}
                               {key === 'GLOBAL' && 'Global'}
                             </button>
                           ))}
@@ -810,7 +811,7 @@ const Logistica = () => {
                         <div className="text-[11px] font-bold text-slate-300 mb-2 flex items-center justify-between">
                           <span className="uppercase tracking-wider">Desglose de Conceptos ({kpiActual.items?.length || 0}):</span>
                           <span className="text-[10px] text-slate-400 font-mono">
-                            {currentKpiKey === 'FIJO_DESPACHO' ? 'Catálogo Obligatorio' : 'Gastos Registrados'}
+                            {currentKpiKey === TIPO_GASTO.FIJO_DESPACHO ? 'Catálogo Obligatorio' : 'Gastos Registrados'}
                           </span>
                         </div>
 
@@ -821,8 +822,8 @@ const Logistica = () => {
                         ) : (
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-52 overflow-y-auto pr-1">
                             {kpiActual.items.map((item, idx) => {
-                              const isPagado = item.estado === 'PAGADO';
-                              const isPendiente = item.estado === 'PENDIENTE';
+                              const isPagado = item.estado === ESTADO_PAGO.PAGADO;
+                              const isPendiente = item.estado === ESTADO_PAGO.PENDIENTE;
                               const isNoRegistrado = item.estado === 'NO_REGISTRADO';
 
                               return (
@@ -899,11 +900,11 @@ const Logistica = () => {
                         disabled={isReadOnly}
                         className="w-full bg-slate-900 border border-slate-600 text-amber-300 font-bold text-xs rounded px-2.5 py-2 disabled:opacity-60"
                       >
-                        <option value="EN TRÁNSITO">EN TRÁNSITO</option>
-                        <option value="EN PUERTO">EN PUERTO</option>
-                        <option value="EN ALMACÉN TEMPORAL">EN ALMACÉN TEMPORAL</option>
-                        <option value="RETIRO PROGRAMADO">RETIRO PROGRAMADO</option>
-                        <option value="EN ALMACÉN">EN ALMACÉN</option>
+                        <option value={STATUS_LLEGADA.EN_TRANSITO}>EN TRÁNSITO</option>
+                        <option value={STATUS_LLEGADA.EN_PUERTO}>EN PUERTO</option>
+                        <option value={STATUS_LLEGADA.EN_ALMACEN_TEMPORAL}>EN ALMACÉN TEMPORAL</option>
+                        <option value={STATUS_LLEGADA.RETIRO_PROGRAMADO}>RETIRO PROGRAMADO</option>
+                        <option value={STATUS_LLEGADA.EN_ALMACEN}>EN ALMACÉN</option>
                       </select>
                     </div>
                   </div>
@@ -922,7 +923,7 @@ const Logistica = () => {
                           type="date"
                           value={formData.fecha_recepcion_almacen}
                           onChange={e => handleFormChange('fecha_recepcion_almacen', e.target.value)}
-                          disabled={isReadOnly || formData.status_llegada !== 'EN ALMACÉN'}
+                          disabled={isReadOnly || formData.status_llegada !== STATUS_LLEGADA.EN_ALMACEN}
                           className="w-full bg-slate-900 border border-slate-600 focus:border-teal-500 text-slate-100 text-xs rounded px-2.5 py-2 disabled:opacity-60"
                         />
                       </div>
@@ -950,7 +951,7 @@ const Logistica = () => {
                         {!isReadOnly && (
                           <button
                             type="button"
-                            onClick={() => setModalCrearProveedor({ open: true, context: 'maestro', categoriaDefecto: 'INTERNACIONAL' })}
+                            onClick={() => setModalCrearProveedor({ open: true, context: 'maestro', categoriaDefecto: CATEGORIA_PROVEEDOR.INTERNACIONAL })}
                             title="Registrar nuevo proveedor (+)"
                             className="flex items-center justify-center w-5 h-5 rounded bg-teal-600/30 hover:bg-teal-600 text-teal-300 hover:text-white border border-teal-500/40 text-xs font-bold leading-none transition shadow-sm cursor-pointer"
                           >
@@ -1025,7 +1026,7 @@ const Logistica = () => {
                             </thead>
                             <tbody className="divide-y divide-slate-800/80 text-slate-300">
                               {damsVinculadas.map(d => {
-                                const requiereAforo = d.estado_dam === 'PENDIENTE DE AFORO';
+                                const requiereAforo = d.estado_dam === ESTADO_DAM.PENDIENTE_AFORO;
                                 return (
                                   <tr key={d.id_dam} className="hover:bg-slate-800/50 transition-colors group">
                                     <td className="px-3 py-2 font-mono text-slate-500 group-hover:text-teal-400">#{d.id_dam}</td>
@@ -1039,7 +1040,7 @@ const Logistica = () => {
                                     </td>
                                     <td className="px-3 py-2 font-mono text-slate-400">{d.serie || 'N/A'}</td>
                                     <td className="px-3 py-2 text-center">
-                                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${d.canal_control === 'VERDE' ? 'bg-emerald-900/30 text-emerald-400 border-emerald-800' : d.canal_control === 'ROJO' ? 'bg-rose-900/30 text-rose-400 border-rose-800' : 'bg-orange-900/30 text-orange-400 border-orange-800'}`}>
+                                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${d.canal_control === CANAL_CONTROL.VERDE ? 'bg-emerald-900/30 text-emerald-400 border-emerald-800' : d.canal_control === CANAL_CONTROL.ROJO ? 'bg-rose-900/30 text-rose-400 border-rose-800' : 'bg-orange-900/30 text-orange-400 border-orange-800'}`}>
                                         {d.canal_control}
                                       </span>
                                     </td>
@@ -1048,7 +1049,7 @@ const Logistica = () => {
                                         d.estado_dam?.includes('OBSERVADA') ? 'bg-rose-900/40 text-rose-300 border-rose-700' :
                                           'bg-amber-900/40 text-amber-300 border-amber-700'
                                         }`}>
-                                        {d.estado_dam || 'NUMERADA / EN EVALUACIÓN'}
+                                        {d.estado_dam || ESTADO_DAM.NUMERADA}
                                       </span>
                                     </td>
                                     <td className="px-3 py-2 text-right font-mono font-bold text-slate-200">${d.monto_valor_provisional_usd ? parseFloat(d.monto_valor_provisional_usd).toFixed(2) : '0.00'}</td>
@@ -1093,10 +1094,10 @@ const Logistica = () => {
                                   <td className="px-3 py-2 font-mono text-slate-300">{g.numero_documento || 'S/N'}</td>
                                   <td className="px-3 py-2 text-right font-mono font-bold text-slate-200">{parseFloat(g.monto_original || 0).toFixed(2)}</td>
                                   <td className="px-3 py-2 text-center font-bold text-slate-400">{g.moneda}</td>
-                                  <td className="px-3 py-2 text-center"><span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${g.estado_pago === 'PAGADO' ? 'bg-emerald-900/30 text-emerald-400 border-emerald-800' : g.estado_pago === 'PENDIENTE' ? 'bg-rose-900/30 text-rose-400 border-rose-800' : 'bg-amber-900/30 text-amber-400 border-amber-800'}`}>{g.estado_pago}</span></td>
+                                  <td className="px-3 py-2 text-center"><span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${g.estado_pago === ESTADO_PAGO.PAGADO ? 'bg-emerald-900/30 text-emerald-400 border-emerald-800' : g.estado_pago === ESTADO_PAGO.PENDIENTE ? 'bg-rose-900/30 text-rose-400 border-rose-800' : 'bg-amber-900/30 text-amber-400 border-amber-800'}`}>{g.estado_pago}</span></td>
                                   <td className="px-3 py-2 font-mono text-slate-400 truncate max-w-[120px]">{g.dam_numero || '-'}</td>
                                   <td className="px-3 py-2 text-center">
-                                    {g.estado_pago !== 'PAGADO' ? (
+                                    {g.estado_pago !== ESTADO_PAGO.PAGADO ? (
                                       <button
                                         onClick={(e) => { e.stopPropagation(); navigate(`/app/pagos?gasto_id=${g.id_gasto}`); }}
                                         className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded border transition-all duration-150 shadow-sm bg-purple-50 text-purple-700 border-purple-300 hover:bg-purple-700 hover:text-white hover:border-purple-700 dark:bg-purple-600/30 dark:text-purple-300 dark:border-purple-500/40 dark:hover:bg-purple-600 dark:hover:text-white cursor-pointer"
@@ -1162,13 +1163,13 @@ const Logistica = () => {
                     onChange={e => setModalNuevaDam({ ...modalNuevaDam, canal_control: e.target.value })}
                     className="w-full bg-slate-950 border border-slate-700 text-slate-100 text-xs rounded p-2 focus:border-teal-500 font-bold"
                   >
-                    <option value="VERDE">VERDE</option>
-                    <option value="NARANJA">NARANJA</option>
-                    <option value="ROJO">ROJO</option>
+                    <option value={CANAL_CONTROL.VERDE}>VERDE</option>
+                    <option value={CANAL_CONTROL.NARANJA}>NARANJA</option>
+                    <option value={CANAL_CONTROL.ROJO}>ROJO</option>
                   </select>
                 </div>
               </div>
-              {formData.tipo_valor === 'GARANTIZADO' && (
+              {formData.tipo_valor === TIPO_VALOR.GARANTIZADO && (
                 <div>
                   <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Monto Garantizado (USD) *</label>
                   <input
@@ -1236,7 +1237,7 @@ const Logistica = () => {
                     <label className="block text-[10px] font-bold uppercase text-slate-400">Proveedor *</label>
                     <button
                       type="button"
-                      onClick={() => setModalCrearProveedor({ open: true, context: 'gasto_inline', categoriaDefecto: 'NACIONAL' })}
+                      onClick={() => setModalCrearProveedor({ open: true, context: 'gasto_inline', categoriaDefecto: CATEGORIA_PROVEEDOR.NACIONAL })}
                       title="Registrar nuevo proveedor (+)"
                       className="flex items-center justify-center w-5 h-5 rounded bg-teal-600/30 hover:bg-teal-600 text-teal-300 hover:text-white border border-teal-500/40 text-xs font-bold leading-none transition shadow-sm cursor-pointer"
                     >
@@ -1312,8 +1313,8 @@ const Logistica = () => {
                     onChange={e => setModalNuevoGasto({ ...modalNuevoGasto, moneda: e.target.value })}
                     className="w-full bg-slate-950 border border-slate-700 text-slate-100 text-xs rounded p-2 focus:border-teal-500 font-bold"
                   >
-                    <option value="USD">USD ($)</option>
-                    <option value="PEN">PEN (S/)</option>
+                    <option value={MONEDA.USD}>USD ($)</option>
+                    <option value={MONEDA.PEN}>PEN (S/)</option>
                   </select>
                 </div>
               </div>

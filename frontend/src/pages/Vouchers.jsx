@@ -6,6 +6,7 @@ import Select from 'react-select';
 import Paginador from '../components/Paginador';
 import useDebounce from '../hooks/useDebounce';
 import { Ticket, Scale, Search, Building2, Pencil, Trash2, Banknote, CreditCard, Lock, RotateCcw, Plus, FileText, AlertTriangle, Ban } from 'lucide-react';
+import { MONEDA } from '../constants';
 
 const selectDarkStyles = {
   control: (base, state) => ({
@@ -86,7 +87,7 @@ const Vouchers = () => {
     id_importador: null,
     numero_operacion: '',
     monto_total: '',
-    moneda: 'USD',
+    moneda: MONEDA.USD,
     fecha_transferencia: ''
   };
   const [formData, setFormData] = useState(estadoInicial);
@@ -166,7 +167,7 @@ const Vouchers = () => {
       id_importador: v.id_importador || null,
       numero_operacion: v.numero_operacion || '',
       monto_total: v.monto_total !== undefined && v.monto_total !== null ? String(v.monto_total) : '',
-      moneda: v.moneda || 'USD',
+      moneda: v.moneda || MONEDA.USD,
       fecha_transferencia: v.fecha_transferencia ? String(v.fecha_transferencia).slice(0, 10) : '',
       version: v.version
     });
@@ -445,7 +446,7 @@ const Vouchers = () => {
                 const isSelected = selectedId === v.id_voucher;
                 const saldoNum = parseFloat(v.saldo_disponible);
                 const totalNum = parseFloat(v.monto_total);
-                const simbolo = v.moneda === 'PEN' ? 'S/' : '$';
+                const simbolo = v.moneda === MONEDA.PEN ? 'S/' : '$';
                 const tieneSaldo = saldoNum > 0.009;
 
                 const bName = opcionesBancos.find(b => b.value === v.banco_id)?.label || 'Banco';
@@ -629,7 +630,7 @@ const Vouchers = () => {
                   <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
                     <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Monto Total</span>
                     <div className="mt-1 font-mono font-bold text-sm text-slate-100 tabular-nums">
-                      {selectedVoucher?.moneda === 'PEN' ? 'S/' : '$'} {parseFloat(selectedVoucher?.monto_total || 0).toFixed(2)}
+                      {selectedVoucher?.moneda === MONEDA.PEN ? 'S/' : '$'} {parseFloat(selectedVoucher?.monto_total || 0).toFixed(2)}
                     </div>
                     <span className="text-[10px] text-slate-500 mt-0.5 block">Depósito inicial</span>
                   </div>
@@ -637,7 +638,7 @@ const Vouchers = () => {
                   <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
                     <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Consumido</span>
                     <div className="mt-1 font-mono font-bold text-sm text-slate-300 tabular-nums">
-                      {selectedVoucher?.moneda === 'PEN' ? 'S/' : '$'} {(parseFloat(selectedVoucher?.monto_total || 0) - parseFloat(selectedVoucher?.saldo_disponible || 0)).toFixed(2)}
+                      {selectedVoucher?.moneda === MONEDA.PEN ? 'S/' : '$'} {(parseFloat(selectedVoucher?.monto_total || 0) - parseFloat(selectedVoucher?.saldo_disponible || 0)).toFixed(2)}
                     </div>
                     <span className="text-[10px] text-slate-500 mt-0.5 block">Liquidado en gastos</span>
                   </div>
@@ -645,7 +646,7 @@ const Vouchers = () => {
                   <div className="bg-emerald-950/20 border border-emerald-500/30 rounded-xl p-3">
                     <span className="text-[10px] uppercase font-bold text-emerald-400 block tracking-wider">Saldo Disponible</span>
                     <div className="mt-1 font-mono font-bold text-sm text-emerald-400 tabular-nums">
-                      {selectedVoucher?.moneda === 'PEN' ? 'S/' : '$'} {parseFloat(selectedVoucher?.saldo_disponible || 0).toFixed(2)}
+                      {selectedVoucher?.moneda === MONEDA.PEN ? 'S/' : '$'} {parseFloat(selectedVoucher?.saldo_disponible || 0).toFixed(2)}
                     </div>
                     <span className="text-[10px] text-emerald-500 mt-0.5 block">A favor de la empresa</span>
                   </div>
@@ -740,7 +741,7 @@ const Vouchers = () => {
                             <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-800">
                               <div className="text-right">
                                 <div className="font-mono font-bold text-emerald-400">
-                                  {pago.moneda === 'PEN' ? 'S/' : '$'} {parseFloat(pago.importe).toFixed(2)}
+                                  {pago.moneda === MONEDA.PEN ? 'S/' : '$'} {parseFloat(pago.importe).toFixed(2)}
                                 </div>
                                 {pago.pago_moneda_cruzada && (
                                   <div className="text-[10px] text-amber-400 font-mono">
@@ -838,8 +839,8 @@ const Vouchers = () => {
                           disabled={viewMode === 'MODIFICAR' && tienePagos}
                           className="w-full text-xs font-bold bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white disabled:bg-slate-950 disabled:text-slate-500 focus:outline-none focus:border-teal-500"
                         >
-                          <option value="USD">USD - Dólares ($)</option>
-                          <option value="PEN">PEN - Soles (S/)</option>
+                          <option value={MONEDA.USD}>USD - Dólares ($)</option>
+                          <option value={MONEDA.PEN}>PEN - Soles (S/)</option>
                         </select>
                       </div>
 
@@ -1004,7 +1005,7 @@ const Vouchers = () => {
                 <div className="flex justify-between">
                   <span className="text-slate-400">Importe a Reversar:</span>
                   <span className="font-mono font-bold text-emerald-400">
-                    {modalReversarPagoVoucher.pago?.moneda === 'PEN' ? 'S/' : '$'} {parseFloat(modalReversarPagoVoucher.pago?.importe || 0).toFixed(2)}
+                    {modalReversarPagoVoucher.pago?.moneda === MONEDA.PEN ? 'S/' : '$'} {parseFloat(modalReversarPagoVoucher.pago?.importe || 0).toFixed(2)}
                   </span>
                 </div>
                 <div className="flex justify-between">

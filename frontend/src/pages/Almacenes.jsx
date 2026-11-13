@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import api from '../services/api';
 import useDebounce from '../hooks/useDebounce';
 import { Factory, Search } from 'lucide-react';
+import { ESTADO_REGISTRO } from '../constants';
 
 const Almacenes = () => {
   const [almacenes, setAlmacenes] = useState([]);
@@ -10,7 +11,7 @@ const Almacenes = () => {
   
   const [busqueda, setBusqueda] = useState('');
   const debouncedSearch = useDebounce(busqueda, 300);
-  const [filtroEstado, setFiltroEstado] = useState('ACTIVO'); // 'ACTIVO', 'INACTIVO', 'TODOS'
+  const [filtroEstado, setFiltroEstado] = useState(ESTADO_REGISTRO.ACTIVO); // 'ACTIVO', 'INACTIVO', 'TODOS'
 
   const [isGuardando, setIsGuardando] = useState(false);
   const [mensaje, setMensaje] = useState({ texto: '', tipo: '' });
@@ -27,7 +28,7 @@ const Almacenes = () => {
 
   const cargarAlmacenes = async () => {
     try {
-      const mostrarInactivos = filtroEstado !== 'ACTIVO';
+      const mostrarInactivos = filtroEstado !== ESTADO_REGISTRO.ACTIVO;
       const respuesta = await api.get(`/almacenes/?mostrar_inactivos=${mostrarInactivos}`);
       const data = respuesta.data || [];
       setAlmacenes(data);
@@ -176,8 +177,8 @@ const Almacenes = () => {
         (al.nombre || '').toLowerCase().includes(debouncedSearch.toLowerCase()) ||
         (al.ubicacion || '').toLowerCase().includes(debouncedSearch.toLowerCase());
 
-      if (filtroEstado === 'ACTIVO') return coincideBusqueda && al.estado_registro === 'ACTIVO';
-      if (filtroEstado === 'INACTIVO') return coincideBusqueda && al.estado_registro === 'INACTIVO';
+      if (filtroEstado === ESTADO_REGISTRO.ACTIVO) return coincideBusqueda && al.estado_registro === ESTADO_REGISTRO.ACTIVO;
+      if (filtroEstado === ESTADO_REGISTRO.INACTIVO) return coincideBusqueda && al.estado_registro === ESTADO_REGISTRO.INACTIVO;
       return coincideBusqueda;
     });
   }, [almacenes, debouncedSearch, filtroEstado]);
@@ -186,7 +187,7 @@ const Almacenes = () => {
     return almacenes.find(a => a.id_almacen === selectedId) || null;
   }, [almacenes, selectedId]);
 
-  const esInactivoSeleccionado = selectedAlmacen?.estado_registro === 'INACTIVO';
+  const esInactivoSeleccionado = selectedAlmacen?.estado_registro === ESTADO_REGISTRO.INACTIVO;
 
   return (
     <div className="flex-1 flex flex-col h-full bg-slate-950 text-slate-100 overflow-hidden font-sans">
@@ -245,25 +246,25 @@ const Almacenes = () => {
             <div className="flex items-center gap-1.5 text-[11px]">
               <button
                 type="button"
-                onClick={() => setFiltroEstado('ACTIVO')}
+                onClick={() => setFiltroEstado(ESTADO_REGISTRO.ACTIVO)}
                 className={`px-3 py-1 rounded-md font-semibold transition-colors ${
-                  filtroEstado === 'ACTIVO'
+                  filtroEstado === ESTADO_REGISTRO.ACTIVO
                     ? 'bg-teal-600 text-white shadow'
                     : 'bg-slate-800 text-slate-400 hover:text-slate-200'
                 }`}
               >
-                Activos ({almacenes.filter(a => a.estado_registro === 'ACTIVO').length})
+                Activos ({almacenes.filter(a => a.estado_registro === ESTADO_REGISTRO.ACTIVO).length})
               </button>
               <button
                 type="button"
-                onClick={() => setFiltroEstado('INACTIVO')}
+                onClick={() => setFiltroEstado(ESTADO_REGISTRO.INACTIVO)}
                 className={`px-3 py-1 rounded-md font-semibold transition-colors ${
-                  filtroEstado === 'INACTIVO'
+                  filtroEstado === ESTADO_REGISTRO.INACTIVO
                     ? 'bg-teal-600 text-white shadow'
                     : 'bg-slate-800 text-slate-400 hover:text-slate-200'
                 }`}
               >
-                Inactivos ({almacenes.filter(a => a.estado_registro === 'INACTIVO').length})
+                Inactivos ({almacenes.filter(a => a.estado_registro === ESTADO_REGISTRO.INACTIVO).length})
               </button>
               <button
                 type="button"
@@ -287,7 +288,7 @@ const Almacenes = () => {
             ) : (
               almacenesFiltrados.map((al) => {
                 const isSelected = selectedId === al.id_almacen;
-                const isInactivo = al.estado_registro === 'INACTIVO';
+                const isInactivo = al.estado_registro === ESTADO_REGISTRO.INACTIVO;
 
                 return (
                   <div
@@ -307,7 +308,7 @@ const Almacenes = () => {
                             ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
                             : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                         }`}>
-                          {al.estado_registro || 'ACTIVO'}
+                          {al.estado_registro || ESTADO_REGISTRO.ACTIVO}
                         </span>
                       </div>
                       <span className="text-[11px] text-slate-400 truncate max-w-[140px]">
@@ -372,7 +373,7 @@ const Almacenes = () => {
                           ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
                           : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                       }`}>
-                        {selectedAlmacen?.estado_registro || 'ACTIVO'}
+                        {selectedAlmacen?.estado_registro || ESTADO_REGISTRO.ACTIVO}
                       </span>
                     )}
                   </div>

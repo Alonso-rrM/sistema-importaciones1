@@ -8,6 +8,7 @@ import ModalCrearProveedorRapido from '../components/ModalCrearProveedorRapido';
 import useDebounce from '../hooks/useDebounce';
 import { descargarExcel } from '../utils/exportUtils';
 import { Download, Clock, Search, Settings, FileText, Banknote, Trash2, Pencil, CheckCircle2, AlertTriangle, Building2, Scale, Package, BarChart3, CreditCard } from 'lucide-react';
+import { CATEGORIA_PROVEEDOR, ESTADO_PAGO, MONEDA, TIPO_GASTO } from '../constants';
 
 const selectDarkStyles = {
   control: (base, state) => ({
@@ -101,7 +102,7 @@ const Gastos = () => {
     numero_documento: '',
     fecha_vencimiento: '',
     monto_original: '',
-    moneda: 'USD',
+    moneda: MONEDA.USD,
     observaciones: '',
     dam_numero: ''
   };
@@ -258,19 +259,19 @@ const Gastos = () => {
     
     gastos.forEach(g => {
       const monto = parseFloat(g.monto_original) || 0;
-      const moneda = g.moneda || 'USD';
+      const moneda = g.moneda || MONEDA.USD;
       if (totales[moneda]) {
-        if (g.estado_pago === 'PAGADO') totales[moneda].liquidado += monto;
-        if (g.estado_pago === 'PENDIENTE') totales[moneda].pendiente += monto;
-        if (g.estado_pago === 'PARCIAL') totales[moneda].parcial += monto;
+        if (g.estado_pago === ESTADO_PAGO.PAGADO) totales[moneda].liquidado += monto;
+        if (g.estado_pago === ESTADO_PAGO.PENDIENTE) totales[moneda].pendiente += monto;
+        if (g.estado_pago === ESTADO_PAGO.PARCIAL) totales[moneda].parcial += monto;
       }
     });
     return totales;
   }, [gastos]);
 
   const formatMultiMoneda = (tipo) => {
-    if (monedaFiltro === 'USD') return `$${kpis.USD[tipo].toFixed(2)} USD`;
-    if (monedaFiltro === 'PEN') return `S/${kpis.PEN[tipo].toFixed(2)} PEN`;
+    if (monedaFiltro === MONEDA.USD) return `$${kpis.USD[tipo].toFixed(2)} USD`;
+    if (monedaFiltro === MONEDA.PEN) return `S/${kpis.PEN[tipo].toFixed(2)} PEN`;
     return `$${kpis.USD[tipo].toFixed(2)} | S/${kpis.PEN[tipo].toFixed(2)}`;
   };
 
@@ -289,7 +290,7 @@ const Gastos = () => {
         numero_documento: gasto.numero_documento || '',
         fecha_vencimiento: gasto.fecha_vencimiento ? String(gasto.fecha_vencimiento).slice(0, 10) : '',
         monto_original: gasto.monto_original !== undefined && gasto.monto_original !== null ? String(gasto.monto_original) : '',
-        moneda: gasto.moneda || 'USD',
+        moneda: gasto.moneda || MONEDA.USD,
         observaciones: gasto.observaciones || '',
         dam_numero: gasto.dam_numero || ''
       });
@@ -343,7 +344,7 @@ const Gastos = () => {
         numero_documento: form.numero_documento?.trim() || null,
         fecha_vencimiento: form.fecha_vencimiento || null,
         monto_original: monto,
-        moneda: form.moneda || 'USD',
+        moneda: form.moneda || MONEDA.USD,
         observaciones: form.observaciones?.trim() || null
       };
 
@@ -563,9 +564,9 @@ const Gastos = () => {
                 className="w-1/2 py-1 px-2 text-[11px] bg-slate-950 border border-slate-700 rounded-md text-slate-300 font-medium focus:outline-none focus:border-teal-500"
               >
                 <option value="">Todos los Estados</option>
-                <option value="PENDIENTE">PENDIENTE</option>
-                <option value="PARCIAL">PARCIAL</option>
-                <option value="PAGADO">PAGADO</option>
+                <option value={ESTADO_PAGO.PENDIENTE}>PENDIENTE</option>
+                <option value={ESTADO_PAGO.PARCIAL}>PARCIAL</option>
+                <option value={ESTADO_PAGO.PAGADO}>PAGADO</option>
               </select>
 
               <select
@@ -574,8 +575,8 @@ const Gastos = () => {
                 className="w-1/2 py-1 px-2 text-[11px] bg-slate-950 border border-slate-700 rounded-md text-slate-300 font-medium focus:outline-none focus:border-teal-500"
               >
                 <option value="">Todas las Monedas</option>
-                <option value="USD">USD ($)</option>
-                <option value="PEN">PEN (S/)</option>
+                <option value={MONEDA.USD}>USD ($)</option>
+                <option value={MONEDA.PEN}>PEN (S/)</option>
               </select>
             </div>
 
@@ -591,9 +592,9 @@ const Gastos = () => {
                       className="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-slate-200 text-[10px]"
                     >
                       <option value="">Todas las Etapas</option>
-                      <option value="FIJO_DESPACHO">Fijo Despacho</option>
-                      <option value="POST_LEVANTE">Post-Levante</option>
-                      <option value="EXTRAORDINARIO">Extraordinario</option>
+                      <option value={TIPO_GASTO.FIJO_DESPACHO}>Fijo Despacho</option>
+                      <option value={TIPO_GASTO.POST_LEVANTE}>Post-Levante</option>
+                      <option value={TIPO_GASTO.EXTRAORDINARIO}>Extraordinario</option>
                     </select>
                   </div>
                   <div>
@@ -666,7 +667,7 @@ const Gastos = () => {
                 const isSelected = selectedId === g.id_gasto;
                 const saldoNum = parseFloat(g.saldo_pendiente ?? g.monto_original);
                 const originalNum = parseFloat(g.monto_original);
-                const simbolo = g.moneda === 'PEN' ? 'S/' : '$';
+                const simbolo = g.moneda === MONEDA.PEN ? 'S/' : '$';
 
                 return (
                   <div
@@ -685,9 +686,9 @@ const Gastos = () => {
                       <div className="flex items-center gap-2">
                         <span className="font-mono font-bold text-xs text-teal-400">#{g.id_gasto}</span>
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                          g.estado_pago === 'PENDIENTE'
+                          g.estado_pago === ESTADO_PAGO.PENDIENTE
                             ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
-                            : g.estado_pago === 'PARCIAL'
+                            : g.estado_pago === ESTADO_PAGO.PARCIAL
                             ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
                             : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                         }`}>
@@ -784,9 +785,9 @@ const Gastos = () => {
                       Gasto #{selectedGasto.id_gasto} · {selectedGasto.concepto_nombre || 'Gasto General'}
                     </h2>
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                      selectedGasto.estado_pago === 'PENDIENTE'
+                      selectedGasto.estado_pago === ESTADO_PAGO.PENDIENTE
                         ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
-                        : selectedGasto.estado_pago === 'PARCIAL'
+                        : selectedGasto.estado_pago === ESTADO_PAGO.PARCIAL
                         ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
                         : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                     }`}>
@@ -845,7 +846,7 @@ const Gastos = () => {
                 <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
                   <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Monto Facturado</span>
                   <div className="mt-1 font-mono font-bold text-sm text-slate-100 tabular-nums">
-                    {selectedGasto.moneda === 'PEN' ? 'S/' : '$'} {parseFloat(selectedGasto.monto_original || 0).toFixed(2)}
+                    {selectedGasto.moneda === MONEDA.PEN ? 'S/' : '$'} {parseFloat(selectedGasto.monto_original || 0).toFixed(2)}
                   </div>
                   <span className="text-[10px] text-slate-500 mt-0.5 block">Importe total</span>
                 </div>
@@ -853,7 +854,7 @@ const Gastos = () => {
                 <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
                   <span className="text-[10px] uppercase font-bold text-emerald-400 block tracking-wider">Amortizado</span>
                   <div className="mt-1 font-mono font-bold text-sm text-emerald-400 tabular-nums">
-                    {selectedGasto.moneda === 'PEN' ? 'S/' : '$'} {(parseFloat(selectedGasto.monto_original || 0) - parseFloat(selectedGasto.saldo_pendiente ?? selectedGasto.monto_original ?? 0)).toFixed(2)}
+                    {selectedGasto.moneda === MONEDA.PEN ? 'S/' : '$'} {(parseFloat(selectedGasto.monto_original || 0) - parseFloat(selectedGasto.saldo_pendiente ?? selectedGasto.monto_original ?? 0)).toFixed(2)}
                   </div>
                   <span className="text-[10px] text-emerald-500 mt-0.5 block">Liquidado a la fecha</span>
                 </div>
@@ -861,7 +862,7 @@ const Gastos = () => {
                 <div className="bg-rose-950/20 border border-rose-500/30 rounded-xl p-3">
                   <span className="text-[10px] uppercase font-bold text-rose-400 block tracking-wider">Saldo Pendiente</span>
                   <div className="mt-1 font-mono font-bold text-sm text-rose-400 tabular-nums">
-                    {selectedGasto.moneda === 'PEN' ? 'S/' : '$'} {parseFloat(selectedGasto.saldo_pendiente ?? selectedGasto.monto_original ?? 0).toFixed(2)}
+                    {selectedGasto.moneda === MONEDA.PEN ? 'S/' : '$'} {parseFloat(selectedGasto.saldo_pendiente ?? selectedGasto.monto_original ?? 0).toFixed(2)}
                   </div>
                   <span className="text-[10px] text-rose-300/70 mt-0.5 block">Por transferir</span>
                 </div>
@@ -1000,7 +1001,7 @@ const Gastos = () => {
                         <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-800">
                           <div className="text-right">
                             <div className="font-mono font-bold text-emerald-400 text-sm">
-                              {pago.moneda === 'PEN' ? 'S/' : '$'} {parseFloat(pago.importe).toFixed(2)}
+                              {pago.moneda === MONEDA.PEN ? 'S/' : '$'} {parseFloat(pago.importe).toFixed(2)}
                             </div>
                             {pago.monto_moneda_origen && parseFloat(pago.monto_moneda_origen) !== parseFloat(pago.importe) && (
                               <div className="font-mono text-[10px] text-slate-400">
@@ -1060,7 +1061,7 @@ const Gastos = () => {
             
             <form onSubmit={handleGuardar} className="flex-1 overflow-y-auto p-6 space-y-5">
               
-              {viewMode === 'MODIFICAR' && selectedGasto?.estado_pago === 'PAGADO' && (
+              {viewMode === 'MODIFICAR' && selectedGasto?.estado_pago === ESTADO_PAGO.PAGADO && (
                 <div className="p-3 rounded-lg bg-amber-950/40 border border-amber-500/40 text-xs text-amber-200 space-y-1">
                   <div className="font-bold text-amber-400">🔒 Gasto con Estado PAGADO (Auditoría Financiera)</div>
                   <p className="text-[11px] leading-relaxed">
@@ -1231,8 +1232,8 @@ const Gastos = () => {
                     onChange={(e) => setForm({ ...form, moneda: e.target.value })} 
                     className="w-full text-xs font-bold bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white focus:outline-none focus:border-teal-500"
                   >
-                    <option value="USD">USD - Dólares ($)</option>
-                    <option value="PEN">PEN - Soles (S/)</option>
+                    <option value={MONEDA.USD}>USD - Dólares ($)</option>
+                    <option value={MONEDA.PEN}>PEN - Soles (S/)</option>
                   </select>
                 </div>
 
@@ -1376,7 +1377,7 @@ const Gastos = () => {
                 <div className="flex justify-between">
                   <span className="text-slate-400">Importe a Reversar:</span>
                   <span className="font-mono font-bold text-emerald-400">
-                    {modalReversarPago.pago?.moneda === 'PEN' ? 'S/' : '$'} {parseFloat(modalReversarPago.pago?.importe || 0).toFixed(2)}
+                    {modalReversarPago.pago?.moneda === MONEDA.PEN ? 'S/' : '$'} {parseFloat(modalReversarPago.pago?.importe || 0).toFixed(2)}
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -1439,7 +1440,7 @@ const Gastos = () => {
         isOpen={modalCrearProveedorOpen}
         onClose={() => setModalCrearProveedorOpen(false)}
         onProveedorCreado={handleProveedorCreado}
-        categoriaDefecto="NACIONAL"
+        categoriaDefecto={CATEGORIA_PROVEEDOR.NACIONAL}
       />
 
     </div>

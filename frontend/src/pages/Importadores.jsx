@@ -3,6 +3,7 @@ import api from '../services/api';
 import useDebounce from '../hooks/useDebounce';
 import { acortarRazonSocial } from '../utils/textUtils';
 import { Building2, Search } from 'lucide-react';
+import { ESTADO_REGISTRO } from '../constants';
 
 const Importadores = () => {
   const [importadores, setImportadores] = useState([]);
@@ -11,7 +12,7 @@ const Importadores = () => {
   
   const [busqueda, setBusqueda] = useState('');
   const debouncedSearch = useDebounce(busqueda, 300);
-  const [filtroEstado, setFiltroEstado] = useState('ACTIVO'); // 'ACTIVO', 'INACTIVO', 'TODOS'
+  const [filtroEstado, setFiltroEstado] = useState(ESTADO_REGISTRO.ACTIVO); // 'ACTIVO', 'INACTIVO', 'TODOS'
   
   const [buscandoRuc, setBuscandoRuc] = useState(false);
   const [sunatData, setSunatData] = useState(null);
@@ -30,7 +31,7 @@ const Importadores = () => {
 
   const cargarImportadores = async () => {
     try {
-      const mostrarInactivos = filtroEstado !== 'ACTIVO';
+      const mostrarInactivos = filtroEstado !== ESTADO_REGISTRO.ACTIVO;
       const respuesta = await api.get(`/importadores/?mostrar_inactivos=${mostrarInactivos}`);
       const data = respuesta.data || [];
       setImportadores(data);
@@ -214,8 +215,8 @@ const Importadores = () => {
         (imp.nombre || '').toLowerCase().includes(debouncedSearch.toLowerCase()) ||
         (imp.ruc || '').includes(debouncedSearch);
 
-      if (filtroEstado === 'ACTIVO') return coincideBusqueda && imp.estado_registro === 'ACTIVO';
-      if (filtroEstado === 'INACTIVO') return coincideBusqueda && imp.estado_registro === 'INACTIVO';
+      if (filtroEstado === ESTADO_REGISTRO.ACTIVO) return coincideBusqueda && imp.estado_registro === ESTADO_REGISTRO.ACTIVO;
+      if (filtroEstado === ESTADO_REGISTRO.INACTIVO) return coincideBusqueda && imp.estado_registro === ESTADO_REGISTRO.INACTIVO;
       return coincideBusqueda;
     });
   }, [importadores, debouncedSearch, filtroEstado]);
@@ -224,7 +225,7 @@ const Importadores = () => {
     return importadores.find(i => i.id_importador === selectedId) || null;
   }, [importadores, selectedId]);
 
-  const esInactivoSeleccionado = selectedImportador?.estado_registro === 'INACTIVO';
+  const esInactivoSeleccionado = selectedImportador?.estado_registro === ESTADO_REGISTRO.INACTIVO;
 
   return (
     <div className="flex-1 flex flex-col h-full bg-slate-950 text-slate-100 overflow-hidden font-sans">
@@ -287,25 +288,25 @@ const Importadores = () => {
             <div className="flex items-center gap-1.5 text-[11px]">
               <button
                 type="button"
-                onClick={() => setFiltroEstado('ACTIVO')}
+                onClick={() => setFiltroEstado(ESTADO_REGISTRO.ACTIVO)}
                 className={`px-3 py-1 rounded-md font-semibold transition-colors ${
-                  filtroEstado === 'ACTIVO'
+                  filtroEstado === ESTADO_REGISTRO.ACTIVO
                     ? 'bg-teal-600 text-white shadow'
                     : 'bg-slate-800 text-slate-400 hover:text-slate-200'
                 }`}
               >
-                Activos ({importadores.filter(i => i.estado_registro === 'ACTIVO').length})
+                Activos ({importadores.filter(i => i.estado_registro === ESTADO_REGISTRO.ACTIVO).length})
               </button>
               <button
                 type="button"
-                onClick={() => setFiltroEstado('INACTIVO')}
+                onClick={() => setFiltroEstado(ESTADO_REGISTRO.INACTIVO)}
                 className={`px-3 py-1 rounded-md font-semibold transition-colors ${
-                  filtroEstado === 'INACTIVO'
+                  filtroEstado === ESTADO_REGISTRO.INACTIVO
                     ? 'bg-teal-600 text-white shadow'
                     : 'bg-slate-800 text-slate-400 hover:text-slate-200'
                 }`}
               >
-                Inactivos ({importadores.filter(i => i.estado_registro === 'INACTIVO').length})
+                Inactivos ({importadores.filter(i => i.estado_registro === ESTADO_REGISTRO.INACTIVO).length})
               </button>
               <button
                 type="button"
@@ -330,7 +331,7 @@ const Importadores = () => {
             ) : (
               importadoresFiltrados.map((imp) => {
                 const isSelected = selectedId === imp.id_importador;
-                const isInactivo = imp.estado_registro === 'INACTIVO';
+                const isInactivo = imp.estado_registro === ESTADO_REGISTRO.INACTIVO;
 
                 return (
                   <div
@@ -350,7 +351,7 @@ const Importadores = () => {
                             ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
                             : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                         }`}>
-                          {imp.estado_registro || 'ACTIVO'}
+                          {imp.estado_registro || ESTADO_REGISTRO.ACTIVO}
                         </span>
                       </div>
                       <span className="font-mono text-[11px] text-slate-400">
@@ -419,7 +420,7 @@ const Importadores = () => {
                           ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
                           : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                       }`}>
-                        {selectedImportador?.estado_registro || 'ACTIVO'}
+                        {selectedImportador?.estado_registro || ESTADO_REGISTRO.ACTIVO}
                       </span>
                     )}
                   </div>

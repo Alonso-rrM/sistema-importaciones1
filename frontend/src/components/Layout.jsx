@@ -4,6 +4,7 @@ import { useTheme } from '../context/ThemeContext';
 import api from '../services/api';
 import { obtenerUsuario, guardarUsuario, limpiarSesionLocal } from '../utils/session';
 import { BarChart3, Package, FileText, Building2, Users, Briefcase, Factory, Tags, FileDigit, Landmark, Ticket, Banknote, Scale, ShieldCheck, Settings, Sun, Moon, LogOut } from 'lucide-react';
+import { ROL } from '../constants';
 
 function Layout() {
   const navigate = useNavigate();
@@ -67,7 +68,7 @@ function Layout() {
             <NavLink to="/app/pagos" className={navClass} title="Liquidación Pagos"><Scale size={18} className="shrink-0" /></NavLink>
             <div className="w-6 h-px bg-slate-700 my-1 mx-auto"></div>
             <NavLink to="/app/auditoria" className={navClass} title="Auditoría"><ShieldCheck size={18} className="shrink-0" /></NavLink>
-            {userRole === 1 && (
+            {userRole === ROL.SUPERADMIN && (
               <>
                 <div className="w-6 h-px bg-slate-700 my-1 mx-auto"></div>
                 <NavLink to="/app/admin" className={navClass} title="Administración & Carga Masiva"><Settings size={18} className="shrink-0" /></NavLink>

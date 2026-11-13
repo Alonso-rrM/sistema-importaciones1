@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import api from '../services/api';
 import useDebounce from '../hooks/useDebounce';
 import { Tags, Search, Plus, Pencil, Trash2, RotateCcw, Ban, FileText } from 'lucide-react';
+import { ESTADO_PAGO, ESTADO_REGISTRO, MONEDA, TIPO_GASTO } from '../constants';
 
 const Conceptos = () => {
   const [conceptos, setConceptos] = useState([]);
@@ -10,7 +11,7 @@ const Conceptos = () => {
   
   const [busqueda, setBusqueda] = useState('');
   const debouncedSearch = useDebounce(busqueda, 300);
-  const [filtroEstado, setFiltroEstado] = useState('ACTIVO'); // 'ACTIVO', 'INACTIVO', 'TODOS'
+  const [filtroEstado, setFiltroEstado] = useState(ESTADO_REGISTRO.ACTIVO); // 'ACTIVO', 'INACTIVO', 'TODOS'
 
   const [isGuardando, setIsGuardando] = useState(false);
   const [mensaje, setMensaje] = useState({ texto: '', tipo: '' });
@@ -27,7 +28,7 @@ const Conceptos = () => {
   const estadoInicial = {
     nombre: '',
     descripcion: '',
-    tipo_gasto: 'FIJO_DESPACHO'
+    tipo_gasto: TIPO_GASTO.FIJO_DESPACHO
   };
   const [formData, setFormData] = useState(estadoInicial);
 
@@ -77,7 +78,7 @@ const Conceptos = () => {
 
   const cargarConceptos = async () => {
     try {
-      const mostrarInactivos = filtroEstado !== 'ACTIVO';
+      const mostrarInactivos = filtroEstado !== ESTADO_REGISTRO.ACTIVO;
       const respuesta = await api.get(`/conceptos/?mostrar_inactivos=${mostrarInactivos}`);
       const data = respuesta.data || [];
       setConceptos(data);
@@ -88,7 +89,7 @@ const Conceptos = () => {
           setFormData({
             nombre: found.nombre || '',
             descripcion: found.descripcion || '',
-            tipo_gasto: found.tipo_gasto || 'FIJO_DESPACHO'
+            tipo_gasto: found.tipo_gasto || TIPO_GASTO.FIJO_DESPACHO
           });
         }
       } else if (data.length > 0 && viewMode === 'DETALLE') {
@@ -96,7 +97,7 @@ const Conceptos = () => {
         setFormData({
           nombre: data[0].nombre || '',
           descripcion: data[0].descripcion || '',
-          tipo_gasto: data[0].tipo_gasto || 'FIJO_DESPACHO'
+          tipo_gasto: data[0].tipo_gasto || TIPO_GASTO.FIJO_DESPACHO
         });
       }
     } catch (error) {
@@ -116,7 +117,7 @@ const Conceptos = () => {
     setFormData({
       nombre: c.nombre || '',
       descripcion: c.descripcion || '',
-      tipo_gasto: c.tipo_gasto || 'FIJO_DESPACHO'
+      tipo_gasto: c.tipo_gasto || TIPO_GASTO.FIJO_DESPACHO
     });
   };
 
@@ -132,7 +133,7 @@ const Conceptos = () => {
     setFormData({
       nombre: selectedConcepto.nombre || '',
       descripcion: selectedConcepto.descripcion || '',
-      tipo_gasto: selectedConcepto.tipo_gasto || 'FIJO_DESPACHO'
+      tipo_gasto: selectedConcepto.tipo_gasto || TIPO_GASTO.FIJO_DESPACHO
     });
   };
 
@@ -142,7 +143,7 @@ const Conceptos = () => {
       setFormData({
         nombre: selectedConcepto.nombre || '',
         descripcion: selectedConcepto.descripcion || '',
-        tipo_gasto: selectedConcepto.tipo_gasto || 'FIJO_DESPACHO'
+        tipo_gasto: selectedConcepto.tipo_gasto || TIPO_GASTO.FIJO_DESPACHO
       });
     } else {
       setViewMode('DETALLE');
@@ -164,7 +165,7 @@ const Conceptos = () => {
       const payload = {
         nombre: formData.nombre.trim(),
         descripcion: formData.descripcion?.trim() || null,
-        tipo_gasto: formData.tipo_gasto || 'FIJO_DESPACHO'
+        tipo_gasto: formData.tipo_gasto || TIPO_GASTO.FIJO_DESPACHO
       };
 
       if (viewMode === 'NUEVO') {
@@ -238,8 +239,8 @@ const Conceptos = () => {
         (c.nombre || '').toLowerCase().includes(debouncedSearch.toLowerCase()) ||
         (c.descripcion || '').toLowerCase().includes(debouncedSearch.toLowerCase());
 
-      if (filtroEstado === 'ACTIVO') return coincideBusqueda && c.estado_registro === 'ACTIVO';
-      if (filtroEstado === 'INACTIVO') return coincideBusqueda && c.estado_registro === 'INACTIVO';
+      if (filtroEstado === ESTADO_REGISTRO.ACTIVO) return coincideBusqueda && c.estado_registro === ESTADO_REGISTRO.ACTIVO;
+      if (filtroEstado === ESTADO_REGISTRO.INACTIVO) return coincideBusqueda && c.estado_registro === ESTADO_REGISTRO.INACTIVO;
       return coincideBusqueda;
     });
   }, [conceptos, debouncedSearch, filtroEstado]);
@@ -248,7 +249,7 @@ const Conceptos = () => {
     return conceptos.find(c => c.id_concepto === selectedId) || null;
   }, [conceptos, selectedId]);
 
-  const esInactivoSeleccionado = selectedConcepto?.estado_registro === 'INACTIVO';
+  const esInactivoSeleccionado = selectedConcepto?.estado_registro === ESTADO_REGISTRO.INACTIVO;
 
   return (
     <div className="flex-1 flex flex-col h-full bg-slate-950 text-slate-100 overflow-hidden font-sans">
@@ -309,25 +310,25 @@ const Conceptos = () => {
             <div className="flex items-center gap-1.5 text-[11px]">
               <button
                 type="button"
-                onClick={() => setFiltroEstado('ACTIVO')}
+                onClick={() => setFiltroEstado(ESTADO_REGISTRO.ACTIVO)}
                 className={`px-3 py-1 rounded-md font-semibold transition-colors ${
-                  filtroEstado === 'ACTIVO'
+                  filtroEstado === ESTADO_REGISTRO.ACTIVO
                     ? 'bg-teal-600 text-white shadow'
                     : 'bg-slate-800 text-slate-400 hover:text-slate-200'
                 }`}
               >
-                Activos ({conceptos.filter(c => c.estado_registro === 'ACTIVO').length})
+                Activos ({conceptos.filter(c => c.estado_registro === ESTADO_REGISTRO.ACTIVO).length})
               </button>
               <button
                 type="button"
-                onClick={() => setFiltroEstado('INACTIVO')}
+                onClick={() => setFiltroEstado(ESTADO_REGISTRO.INACTIVO)}
                 className={`px-3 py-1 rounded-md font-semibold transition-colors ${
-                  filtroEstado === 'INACTIVO'
+                  filtroEstado === ESTADO_REGISTRO.INACTIVO
                     ? 'bg-teal-600 text-white shadow'
                     : 'bg-slate-800 text-slate-400 hover:text-slate-200'
                 }`}
               >
-                Inactivos ({conceptos.filter(c => c.estado_registro === 'INACTIVO').length})
+                Inactivos ({conceptos.filter(c => c.estado_registro === ESTADO_REGISTRO.INACTIVO).length})
               </button>
               <button
                 type="button"
@@ -351,7 +352,7 @@ const Conceptos = () => {
             ) : (
               conceptosFiltrados.map((c) => {
                 const isSelected = selectedId === c.id_concepto;
-                const isInactivo = c.estado_registro === 'INACTIVO';
+                const isInactivo = c.estado_registro === ESTADO_REGISTRO.INACTIVO;
 
                 return (
                   <div
@@ -371,17 +372,17 @@ const Conceptos = () => {
                             ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
                             : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                         }`}>
-                          {c.estado_registro || 'ACTIVO'}
+                          {c.estado_registro || ESTADO_REGISTRO.ACTIVO}
                         </span>
                       </div>
                       <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
-                        c.tipo_gasto === 'FIJO_DESPACHO'
+                        c.tipo_gasto === TIPO_GASTO.FIJO_DESPACHO
                           ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
-                          : c.tipo_gasto === 'POST_LEVANTE'
+                          : c.tipo_gasto === TIPO_GASTO.POST_LEVANTE
                           ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                           : 'bg-purple-500/10 text-purple-400 border-purple-500/30'
                       }`}>
-                        {c.tipo_gasto === 'FIJO_DESPACHO' ? 'Fijo Despacho' : c.tipo_gasto === 'POST_LEVANTE' ? 'Post-Levante' : 'Extraordinario'}
+                        {c.tipo_gasto === TIPO_GASTO.FIJO_DESPACHO ? 'Fijo Despacho' : c.tipo_gasto === TIPO_GASTO.POST_LEVANTE ? 'Post-Levante' : 'Extraordinario'}
                       </span>
                     </div>
 
@@ -448,7 +449,7 @@ const Conceptos = () => {
                           ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
                           : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                       }`}>
-                        {selectedConcepto?.estado_registro || 'ACTIVO'}
+                        {selectedConcepto?.estado_registro || ESTADO_REGISTRO.ACTIVO}
                       </span>
                     )}
                   </div>
@@ -530,15 +531,15 @@ const Conceptos = () => {
                     <div className="bg-slate-900/80 border border-slate-800 p-3.5 rounded-lg space-y-1">
                       <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Etapa Logística (KPI)</span>
                       <span className={`inline-block px-2 py-0.5 rounded text-xs font-bold border mt-0.5 ${
-                        selectedConcepto?.tipo_gasto === 'FIJO_DESPACHO'
+                        selectedConcepto?.tipo_gasto === TIPO_GASTO.FIJO_DESPACHO
                           ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
-                          : selectedConcepto?.tipo_gasto === 'POST_LEVANTE'
+                          : selectedConcepto?.tipo_gasto === TIPO_GASTO.POST_LEVANTE
                           ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                           : 'bg-purple-500/10 text-purple-400 border-purple-500/30'
                       }`}>
-                        {selectedConcepto?.tipo_gasto === 'FIJO_DESPACHO'
+                        {selectedConcepto?.tipo_gasto === TIPO_GASTO.FIJO_DESPACHO
                           ? '1. Gasto Fijo Operativo (Despacho)'
-                          : selectedConcepto?.tipo_gasto === 'POST_LEVANTE'
+                          : selectedConcepto?.tipo_gasto === TIPO_GASTO.POST_LEVANTE
                           ? '2. Gasto Post-Levante (Devolución/Entrega)'
                           : '3. Gasto Extraordinario (Eventualidades)'}
                       </span>
@@ -600,7 +601,7 @@ const Conceptos = () => {
                       <div className="space-y-2 max-h-[340px] overflow-y-auto pr-1">
                         {gastosConcepto.map((g) => {
                           const isEditingThis = editandoObsId === g.id_gasto;
-                          const simbolo = g.moneda === 'PEN' ? 'S/' : '$';
+                          const simbolo = g.moneda === MONEDA.PEN ? 'S/' : '$';
                           return (
                             <div
                               key={g.id_gasto}
@@ -627,9 +628,9 @@ const Conceptos = () => {
                                     {simbolo} {parseFloat(g.monto_original || 0).toFixed(2)}
                                   </span>
                                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                                    g.estado_pago === 'PENDIENTE'
+                                    g.estado_pago === ESTADO_PAGO.PENDIENTE
                                       ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
-                                      : g.estado_pago === 'PARCIAL'
+                                      : g.estado_pago === ESTADO_PAGO.PARCIAL
                                       ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
                                       : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                                   }`}>
@@ -731,9 +732,9 @@ const Conceptos = () => {
                         onChange={(e) => setFormData({ ...formData, tipo_gasto: e.target.value })}
                         className="w-full text-xs font-bold bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-teal-300 focus:outline-none focus:border-teal-500"
                       >
-                        <option value="FIJO_DESPACHO">1. Gasto Fijo Operativo (Ruta Crítica Despacho)</option>
-                        <option value="POST_LEVANTE">2. Gasto Post-Levante (Devolución de Vacío / Entrega)</option>
-                        <option value="EXTRAORDINARIO">3. Gasto Extraordinario (Multas / Eventualidades)</option>
+                        <option value={TIPO_GASTO.FIJO_DESPACHO}>1. Gasto Fijo Operativo (Ruta Crítica Despacho)</option>
+                        <option value={TIPO_GASTO.POST_LEVANTE}>2. Gasto Post-Levante (Devolución de Vacío / Entrega)</option>
+                        <option value={TIPO_GASTO.EXTRAORDINARIO}>3. Gasto Extraordinario (Multas / Eventualidades)</option>
                       </select>
                       <p className="text-[10px] text-slate-500 mt-1">
                         Determina cómo medirá el sistema el avance de pagos de este concepto en la barra de progreso del contenedor.

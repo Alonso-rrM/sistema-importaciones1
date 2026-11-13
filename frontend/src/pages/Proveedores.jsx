@@ -3,6 +3,7 @@ import api from '../services/api';
 import useDebounce from '../hooks/useDebounce';
 import { acortarRazonSocial } from '../utils/textUtils';
 import { Users, Search } from 'lucide-react';
+import { CATEGORIA_PROVEEDOR, ESTADO_REGISTRO } from '../constants';
 
 const Proveedores = () => {
   const [proveedores, setProveedores] = useState([]);
@@ -11,7 +12,7 @@ const Proveedores = () => {
 
   const [busqueda, setBusqueda] = useState('');
   const debouncedSearch = useDebounce(busqueda, 300);
-  const [filtroEstado, setFiltroEstado] = useState('ACTIVO'); // 'ACTIVO', 'INACTIVO', 'TODOS'
+  const [filtroEstado, setFiltroEstado] = useState(ESTADO_REGISTRO.ACTIVO); // 'ACTIVO', 'INACTIVO', 'TODOS'
   const [filtroCategoria, setFiltroCategoria] = useState(''); // '', 'NACIONAL', 'INTERNACIONAL'
 
   const [buscandoRuc, setBuscandoRuc] = useState(false);
@@ -22,7 +23,7 @@ const Proveedores = () => {
   const estadoInicial = {
     ruc: '',
     nombre: '',
-    categoria: 'NACIONAL'
+    categoria: CATEGORIA_PROVEEDOR.NACIONAL
   };
   const [formData, setFormData] = useState(estadoInicial);
 
@@ -32,7 +33,7 @@ const Proveedores = () => {
 
   const cargarProveedores = async () => {
     try {
-      const mostrarInactivos = filtroEstado !== 'ACTIVO';
+      const mostrarInactivos = filtroEstado !== ESTADO_REGISTRO.ACTIVO;
       const respuesta = await api.get(`/proveedores/?mostrar_inactivos=${mostrarInactivos}`);
       const data = respuesta.data || [];
       setProveedores(data);
@@ -40,11 +41,11 @@ const Proveedores = () => {
       if (selectedId) {
         const found = data.find(p => p.id_proveedor === selectedId);
         if (found) {
-          setFormData({ ruc: found.ruc || '', nombre: found.nombre || '', categoria: found.categoria || 'NACIONAL' });
+          setFormData({ ruc: found.ruc || '', nombre: found.nombre || '', categoria: found.categoria || CATEGORIA_PROVEEDOR.NACIONAL });
         }
       } else if (data.length > 0 && viewMode === 'DETALLE') {
         setSelectedId(data[0].id_proveedor);
-        setFormData({ ruc: data[0].ruc || '', nombre: data[0].nombre || '', categoria: data[0].categoria || 'NACIONAL' });
+        setFormData({ ruc: data[0].ruc || '', nombre: data[0].nombre || '', categoria: data[0].categoria || CATEGORIA_PROVEEDOR.NACIONAL });
       }
     } catch (error) {
       console.error('Error al cargar proveedores:', error);
@@ -63,7 +64,7 @@ const Proveedores = () => {
     setFormData({
       ruc: prov.ruc || '',
       nombre: prov.nombre || '',
-      categoria: prov.categoria || 'NACIONAL'
+      categoria: prov.categoria || CATEGORIA_PROVEEDOR.NACIONAL
     });
   };
 
@@ -81,7 +82,7 @@ const Proveedores = () => {
     setFormData({
       ruc: selectedProveedor.ruc || '',
       nombre: selectedProveedor.nombre || '',
-      categoria: selectedProveedor.categoria || 'NACIONAL'
+      categoria: selectedProveedor.categoria || CATEGORIA_PROVEEDOR.NACIONAL
     });
   };
 
@@ -92,7 +93,7 @@ const Proveedores = () => {
       setFormData({
         ruc: selectedProveedor.ruc || '',
         nombre: selectedProveedor.nombre || '',
-        categoria: selectedProveedor.categoria || 'NACIONAL'
+        categoria: selectedProveedor.categoria || CATEGORIA_PROVEEDOR.NACIONAL
       });
     } else {
       setViewMode('DETALLE');
@@ -222,8 +223,8 @@ const Proveedores = () => {
 
       const coincideCategoria = !filtroCategoria || prov.categoria === filtroCategoria;
 
-      if (filtroEstado === 'ACTIVO') return coincideBusqueda && coincideCategoria && prov.estado_registro === 'ACTIVO';
-      if (filtroEstado === 'INACTIVO') return coincideBusqueda && coincideCategoria && prov.estado_registro === 'INACTIVO';
+      if (filtroEstado === ESTADO_REGISTRO.ACTIVO) return coincideBusqueda && coincideCategoria && prov.estado_registro === ESTADO_REGISTRO.ACTIVO;
+      if (filtroEstado === ESTADO_REGISTRO.INACTIVO) return coincideBusqueda && coincideCategoria && prov.estado_registro === ESTADO_REGISTRO.INACTIVO;
       return coincideBusqueda && coincideCategoria;
     });
   }, [proveedores, debouncedSearch, filtroEstado, filtroCategoria]);
@@ -232,7 +233,7 @@ const Proveedores = () => {
     return proveedores.find(p => p.id_proveedor === selectedId) || null;
   }, [proveedores, selectedId]);
 
-  const esInactivoSeleccionado = selectedProveedor?.estado_registro === 'INACTIVO';
+  const esInactivoSeleccionado = selectedProveedor?.estado_registro === ESTADO_REGISTRO.INACTIVO;
 
   return (
     <div className="flex-1 flex flex-col h-full bg-slate-950 text-slate-100 overflow-hidden font-sans">
@@ -296,18 +297,18 @@ const Proveedores = () => {
               <div className="flex items-center gap-1 text-[11px]">
                 <button
                   type="button"
-                  onClick={() => setFiltroEstado('ACTIVO')}
-                  className={`px-2.5 py-1 rounded-md font-semibold transition-colors ${filtroEstado === 'ACTIVO'
+                  onClick={() => setFiltroEstado(ESTADO_REGISTRO.ACTIVO)}
+                  className={`px-2.5 py-1 rounded-md font-semibold transition-colors ${filtroEstado === ESTADO_REGISTRO.ACTIVO
                     ? 'bg-teal-600 text-white shadow'
                     : 'bg-slate-800 text-slate-400 hover:text-slate-200'
                     }`}
                 >
-                  Activos ({proveedores.filter(p => p.estado_registro === 'ACTIVO').length})
+                  Activos ({proveedores.filter(p => p.estado_registro === ESTADO_REGISTRO.ACTIVO).length})
                 </button>
                 <button
                   type="button"
-                  onClick={() => setFiltroEstado('INACTIVO')}
-                  className={`px-2.5 py-1 rounded-md font-semibold transition-colors ${filtroEstado === 'INACTIVO'
+                  onClick={() => setFiltroEstado(ESTADO_REGISTRO.INACTIVO)}
+                  className={`px-2.5 py-1 rounded-md font-semibold transition-colors ${filtroEstado === ESTADO_REGISTRO.INACTIVO
                     ? 'bg-teal-600 text-white shadow'
                     : 'bg-slate-800 text-slate-400 hover:text-slate-200'
                     }`}
@@ -322,8 +323,8 @@ const Proveedores = () => {
                 className="py-1 px-2 text-[11px] bg-slate-950 border border-slate-700 rounded-md text-slate-300 focus:outline-none focus:border-teal-500"
               >
                 <option value="">Todas las Cat.</option>
-                <option value="NACIONAL">Nacional</option>
-                <option value="INTERNACIONAL">Internacional</option>
+                <option value={CATEGORIA_PROVEEDOR.NACIONAL}>Nacional</option>
+                <option value={CATEGORIA_PROVEEDOR.INTERNACIONAL}>Internacional</option>
               </select>
             </div>
           </div>
@@ -337,7 +338,7 @@ const Proveedores = () => {
             ) : (
               proveedoresFiltrados.map((prov) => {
                 const isSelected = selectedId === prov.id_proveedor;
-                const isInactivo = prov.estado_registro === 'INACTIVO';
+                const isInactivo = prov.estado_registro === ESTADO_REGISTRO.INACTIVO;
 
                 return (
                   <div
@@ -355,10 +356,10 @@ const Proveedores = () => {
                           ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
                           : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                           }`}>
-                          {prov.estado_registro || 'ACTIVO'}
+                          {prov.estado_registro || ESTADO_REGISTRO.ACTIVO}
                         </span>
                         <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
-                          {prov.categoria || 'NACIONAL'}
+                          {prov.categoria || CATEGORIA_PROVEEDOR.NACIONAL}
                         </span>
                       </div>
                       <span className="font-mono text-[11px] text-slate-400">
@@ -425,7 +426,7 @@ const Proveedores = () => {
                         ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
                         : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                         }`}>
-                        {selectedProveedor?.estado_registro || 'ACTIVO'}
+                        {selectedProveedor?.estado_registro || ESTADO_REGISTRO.ACTIVO}
                       </span>
                     )}
                   </div>
@@ -571,8 +572,8 @@ const Proveedores = () => {
                           onChange={(e) => setFormData({ ...formData, categoria: e.target.value })}
                           className="w-full text-xs font-semibold bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white focus:outline-none focus:border-teal-500"
                         >
-                          <option value="NACIONAL">NACIONAL</option>
-                          <option value="INTERNACIONAL">INTERNACIONAL</option>
+                          <option value={CATEGORIA_PROVEEDOR.NACIONAL}>NACIONAL</option>
+                          <option value={CATEGORIA_PROVEEDOR.INTERNACIONAL}>INTERNACIONAL</option>
                         </select>
                       </div>
                     </div>

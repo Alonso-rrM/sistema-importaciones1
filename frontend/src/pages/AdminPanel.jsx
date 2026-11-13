@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import api from '../services/api';
 import { obtenerRol } from '../utils/session';
 import { Settings, Upload, ShieldCheck, Landmark, Tags, Users, Briefcase, Building2, Factory, FileSpreadsheet, FolderUp, AlertTriangle } from 'lucide-react';
+import { ROL } from '../constants';
 
 const CATALOGOS = [
   { key: 'roles',        label: 'Roles',        icono: ShieldCheck, cols: 'nombre_rol, descripcion' },
@@ -25,7 +26,7 @@ export default function AdminPanel() {
   const [cargando, setCargando] = useState(false);
   const [resultado, setResultado] = useState(null);
 
-  if (userRole !== 1) {
+  if (userRole !== ROL.SUPERADMIN) {
     return (
       <div className="flex items-center justify-center h-full text-slate-400 text-sm">
         Acceso denegado. Este módulo es exclusivo del SuperAdministrador.

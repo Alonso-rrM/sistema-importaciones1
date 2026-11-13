@@ -5,6 +5,7 @@ import useDebounce from '../hooks/useDebounce';
 import Paginador from '../components/Paginador';
 import { descargarExcel } from '../utils/exportUtils';
 import { Download, Clock, Search, Settings, FileText, Banknote, Trash2, Zap, CheckCircle2, AlertTriangle, Unlock, CreditCard } from 'lucide-react';
+import { CANAL_CONTROL, ESTADO_DAM, ESTADO_PAGO, TIPO_VALOR } from '../constants';
 
 const Dams = () => {
   const location = useLocation();
@@ -41,9 +42,9 @@ const Dams = () => {
     id_maestro: '',
     numero_de_dam: '',
     serie: '',
-    canal_control: 'VERDE',
+    canal_control: CANAL_CONTROL.VERDE,
     monto_valor_provisional_usd: '',
-    estado_dam: 'NUMERADA / EN EVALUACIÓN'
+    estado_dam: ESTADO_DAM.NUMERADA
   };
 
   const [formData, setFormData] = useState(estadoInicial);
@@ -148,9 +149,9 @@ const Dams = () => {
       id_maestro: d.id_maestro != null ? String(d.id_maestro) : '',
       numero_de_dam: d.numero_de_dam || '',
       serie: d.serie || '',
-      canal_control: d.canal_control || 'VERDE',
+      canal_control: d.canal_control || CANAL_CONTROL.VERDE,
       monto_valor_provisional_usd: d.monto_valor_provisional_usd != null ? String(d.monto_valor_provisional_usd) : '',
-      estado_dam: d.estado_dam || 'NUMERADA / EN EVALUACIÓN'
+      estado_dam: d.estado_dam || ESTADO_DAM.NUMERADA
     });
     setHasUnsavedChanges(false);
     cargarGastosDeDam(d.numero_de_dam);
@@ -176,11 +177,11 @@ const Dams = () => {
         id_maestro: parseInt(formData.id_maestro, 10),
         numero_de_dam: formData.numero_de_dam.trim(),
         serie: formData.serie?.trim() || null,
-        canal_control: formData.canal_control || 'VERDE',
+        canal_control: formData.canal_control || CANAL_CONTROL.VERDE,
         monto_valor_provisional_usd: formData.monto_valor_provisional_usd !== '' && formData.monto_valor_provisional_usd != null 
           ? parseFloat(formData.monto_valor_provisional_usd) 
           : null,
-        estado_dam: formData.estado_dam || 'NUMERADA / EN EVALUACIÓN'
+        estado_dam: formData.estado_dam || ESTADO_DAM.NUMERADA
       };
 
       if (viewMode === 'NUEVO') {
@@ -230,7 +231,7 @@ const Dams = () => {
   };
 
   const maestroActual = maestrosMap[formData.id_maestro];
-  const esGarantizado = maestroActual?.tipo_valor === 'GARANTIZADO';
+  const esGarantizado = maestroActual?.tipo_valor === TIPO_VALOR.GARANTIZADO;
 
   const handleExportarExcel = async () => {
     setIsExportando(true);
@@ -311,9 +312,9 @@ const Dams = () => {
                     className="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-slate-200 text-[10px]"
                   >
                     <option value="">Todos</option>
-                    <option value="VERDE">🟢 Verde</option>
-                    <option value="NARANJA">🟠 Naranja</option>
-                    <option value="ROJO">🔴 Rojo</option>
+                    <option value={CANAL_CONTROL.VERDE}>🟢 Verde</option>
+                    <option value={CANAL_CONTROL.NARANJA}>🟠 Naranja</option>
+                    <option value={CANAL_CONTROL.ROJO}>🔴 Rojo</option>
                   </select>
                 </div>
                 <div>
@@ -336,8 +337,8 @@ const Dams = () => {
                     className="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-slate-200 text-[10px]"
                   >
                     <option value="">Todos</option>
-                    <option value="DEFINITIVO">Definitivo</option>
-                    <option value="GARANTIZADO">Garantizado</option>
+                    <option value={TIPO_VALOR.DEFINITIVO}>Definitivo</option>
+                    <option value={TIPO_VALOR.GARANTIZADO}>Garantizado</option>
                   </select>
                 </div>
               </div>
@@ -360,7 +361,7 @@ const Dams = () => {
           {dams.map(d => {
             const isActive = selectedId === d.id_dam;
             const m = maestrosMap[d.id_maestro];
-            const pendienteAforo = d.estado_dam === 'PENDIENTE DE AFORO';
+            const pendienteAforo = d.estado_dam === ESTADO_DAM.PENDIENTE_AFORO;
 
             return (
               <article key={d.id_dam} onClick={() => handleSelect(d)} className={`p-3 cursor-pointer transition-all group ${isActive ? 'row-selected' : 'border-l-4 border-transparent hover:bg-slate-50 dark:hover:bg-slate-800/40'}`}>
@@ -371,7 +372,7 @@ const Dams = () => {
                     {pendienteAforo && <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" title="Aforo pendiente"></span>}
                   </div>
                   <div className="flex items-center gap-1">
-                    <span className={`px-1.5 py-0.5 text-[9px] font-bold uppercase rounded border ${d.canal_control === 'VERDE' ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300' : d.canal_control === 'ROJO' ? 'bg-rose-500/15 border-rose-500/30 text-rose-300' : 'bg-orange-500/15 border-orange-500/30 text-orange-300'}`}>
+                    <span className={`px-1.5 py-0.5 text-[9px] font-bold uppercase rounded border ${d.canal_control === CANAL_CONTROL.VERDE ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300' : d.canal_control === CANAL_CONTROL.ROJO ? 'bg-rose-500/15 border-rose-500/30 text-rose-300' : 'bg-orange-500/15 border-orange-500/30 text-orange-300'}`}>
                       {d.canal_control}
                     </span>
                   </div>
@@ -388,7 +389,7 @@ const Dams = () => {
                     d.estado_dam?.includes('OBSERVADA') ? 'bg-rose-900/40 text-rose-400 border-rose-800' :
                     'bg-amber-900/40 text-amber-400 border-amber-800'
                   }`}>
-                    {d.estado_dam || 'NUMERADA / EN EVALUACIÓN'}
+                    {d.estado_dam || ESTADO_DAM.NUMERADA}
                   </span>
                   {d.monto_valor_provisional_usd && <span className="text-emerald-400 font-bold font-mono">${parseFloat(d.monto_valor_provisional_usd).toFixed(2)}</span>}
                 </div>
@@ -449,7 +450,7 @@ const Dams = () => {
               <div className="grid grid-cols-2 lg:grid-cols-5 gap-2.5">
                 <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-2.5">
                   <span className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Canal de Control</span>
-                  <div className={`text-base font-bold font-mono uppercase ${formData.canal_control === 'VERDE' ? 'text-emerald-400' : formData.canal_control === 'ROJO' ? 'text-rose-400' : 'text-orange-400'}`}>
+                  <div className={`text-base font-bold font-mono uppercase ${formData.canal_control === CANAL_CONTROL.VERDE ? 'text-emerald-400' : formData.canal_control === CANAL_CONTROL.ROJO ? 'text-rose-400' : 'text-orange-400'}`}>
                     {formData.canal_control}
                   </div>
                 </div>
@@ -468,7 +469,7 @@ const Dams = () => {
                 <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-2.5">
                   <span className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Régimen Maestro</span>
                   <div className="text-base font-bold font-mono text-teal-300">
-                    {maestroActual?.tipo_valor || 'DEFINITIVO'}
+                    {maestroActual?.tipo_valor || TIPO_VALOR.DEFINITIVO}
                   </div>
                 </div>
               </div>
@@ -528,9 +529,9 @@ const Dams = () => {
                         onChange={e => handleFormChange('canal_control', e.target.value)}
                         className="w-full bg-slate-900 border border-slate-600 focus:border-teal-500 text-slate-100 text-xs rounded px-2.5 py-2 font-bold"
                       >
-                        <option value="VERDE">VERDE</option>
-                        <option value="NARANJA">NARANJA</option>
-                        <option value="ROJO">ROJO</option>
+                        <option value={CANAL_CONTROL.VERDE}>VERDE</option>
+                        <option value={CANAL_CONTROL.NARANJA}>NARANJA</option>
+                        <option value={CANAL_CONTROL.ROJO}>ROJO</option>
                       </select>
                     </div>
 
@@ -569,55 +570,55 @@ const Dams = () => {
                     <span className="text-[10px] font-mono text-slate-400">Estado Actual: <strong className="text-white">{formData.estado_dam}</strong></span>
                   </div>
                   <div className="flex flex-wrap gap-2 pt-1">
-                    {formData.estado_dam === 'PENDIENTE DE AFORO' && (
+                    {formData.estado_dam === ESTADO_DAM.PENDIENTE_AFORO && (
                       <>
-                        <button type="button" onClick={() => handleCambiarEstadoDam('CON LEVANTE')} className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded text-xs font-bold transition-all shadow-sm flex items-center gap-1.5">
+                        <button type="button" onClick={() => handleCambiarEstadoDam(ESTADO_DAM.CON_LEVANTE)} className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded text-xs font-bold transition-all shadow-sm flex items-center gap-1.5">
                           <CheckCircle2 size={14} className="inline-block shrink-0" /> Aforo Conforme (Otorgar Levante)
                         </button>
-                        <button type="button" onClick={() => handleCambiarEstadoDam('OBSERVADA / NOTIFICADA')} className="px-3 py-1.5 bg-rose-700 hover:bg-rose-600 text-white rounded text-xs font-bold transition-all shadow-sm flex items-center gap-1.5">
+                        <button type="button" onClick={() => handleCambiarEstadoDam(ESTADO_DAM.OBSERVADA)} className="px-3 py-1.5 bg-rose-700 hover:bg-rose-600 text-white rounded text-xs font-bold transition-all shadow-sm flex items-center gap-1.5">
                           <AlertTriangle size={14} className="inline-block shrink-0" /> Reportar Observación SUNAT
                         </button>
                       </>
                     )}
 
-                    {formData.estado_dam === 'OBSERVADA / NOTIFICADA' && (
+                    {formData.estado_dam === ESTADO_DAM.OBSERVADA && (
                       <>
-                        {maestroActual?.tipo_valor === 'GARANTIZADO' ? (
-                          <button type="button" onClick={() => handleCambiarEstadoDam('CON LEVANTE (GARANTÍA ACTIVA)')} className="px-3 py-1.5 bg-cyan-700 hover:bg-cyan-600 text-white rounded text-xs font-bold transition-all shadow-sm flex items-center gap-1.5">
+                        {maestroActual?.tipo_valor === TIPO_VALOR.GARANTIZADO ? (
+                          <button type="button" onClick={() => handleCambiarEstadoDam(ESTADO_DAM.CON_LEVANTE_GARANTIA_ACTIVA)} className="px-3 py-1.5 bg-cyan-700 hover:bg-cyan-600 text-white rounded text-xs font-bold transition-all shadow-sm flex items-center gap-1.5">
                             <Unlock size={14} className="inline-block shrink-0" /> Otorgar Levante con Garantía (Art. 160)
                           </button>
                         ) : (
-                          <button type="button" onClick={() => handleCambiarEstadoDam('EN REVISIÓN')} className="px-3 py-1.5 bg-amber-700 hover:bg-amber-600 text-white rounded text-xs font-bold transition-all shadow-sm flex items-center gap-1.5">
+                          <button type="button" onClick={() => handleCambiarEstadoDam(ESTADO_DAM.EN_REVISION)} className="px-3 py-1.5 bg-amber-700 hover:bg-amber-600 text-white rounded text-xs font-bold transition-all shadow-sm flex items-center gap-1.5">
                             <Clock size={14} className="inline-block shrink-0" /> Subir Sustento (Pasar a En Revisión)
                           </button>
                         )}
                       </>
                     )}
 
-                    {formData.estado_dam === 'EN REVISIÓN' && (
-                      <button type="button" onClick={() => handleCambiarEstadoDam('CON LEVANTE')} className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded text-xs font-bold transition-all shadow-sm flex items-center gap-1.5">
+                    {formData.estado_dam === ESTADO_DAM.EN_REVISION && (
+                      <button type="button" onClick={() => handleCambiarEstadoDam(ESTADO_DAM.CON_LEVANTE)} className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded text-xs font-bold transition-all shadow-sm flex items-center gap-1.5">
                         <CheckCircle2 size={14} className="inline-block shrink-0" /> Diligencia Conforme (Otorgar Levante)
                       </button>
                     )}
 
-                    {formData.estado_dam === 'CON LEVANTE (GARANTÍA ACTIVA)' && (
+                    {formData.estado_dam === ESTADO_DAM.CON_LEVANTE_GARANTIA_ACTIVA && (
                       <>
-                        <button type="button" onClick={() => handleCambiarEstadoDam('EN REVISIÓN OMC (POST-LEVANTE)')} className="px-3 py-1.5 bg-orange-700 hover:bg-orange-600 text-white rounded text-xs font-bold transition-all shadow-sm flex items-center gap-1.5">
+                        <button type="button" onClick={() => handleCambiarEstadoDam(ESTADO_DAM.EN_REVISION_OMC)} className="px-3 py-1.5 bg-orange-700 hover:bg-orange-600 text-white rounded text-xs font-bold transition-all shadow-sm flex items-center gap-1.5">
                           <Search size={14} className="inline-block shrink-0" /> Iniciar Revisión OMC SUNAT
                         </button>
-                        <button type="button" onClick={() => handleCambiarEstadoDam('GARANTÍA CERRADA / LIQUIDADA')} className="px-3 py-1.5 bg-emerald-800 hover:bg-emerald-700 text-white rounded text-xs font-bold transition-all shadow-sm flex items-center gap-1.5">
+                        <button type="button" onClick={() => handleCambiarEstadoDam(ESTADO_DAM.GARANTIA_CERRADA)} className="px-3 py-1.5 bg-emerald-800 hover:bg-emerald-700 text-white rounded text-xs font-bold transition-all shadow-sm flex items-center gap-1.5">
                           <CheckCircle2 size={14} className="inline-block shrink-0" /> Cerrar Garantía (Sin Observación)
                         </button>
                       </>
                     )}
 
-                    {formData.estado_dam === 'EN REVISIÓN OMC (POST-LEVANTE)' && (
-                      <button type="button" onClick={() => handleCambiarEstadoDam('GARANTÍA CERRADA / LIQUIDADA')} className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded text-xs font-bold transition-all shadow-sm flex items-center gap-1.5">
+                    {formData.estado_dam === ESTADO_DAM.EN_REVISION_OMC && (
+                      <button type="button" onClick={() => handleCambiarEstadoDam(ESTADO_DAM.GARANTIA_CERRADA)} className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded text-xs font-bold transition-all shadow-sm flex items-center gap-1.5">
                         <CheckCircle2 size={14} className="inline-block shrink-0" /> Descarte OMC / Garantía Liberada
                       </button>
                     )}
 
-                    {!['PENDIENTE DE AFORO', 'OBSERVADA / NOTIFICADA', 'EN REVISIÓN', 'CON LEVANTE (GARANTÍA ACTIVA)', 'EN REVISIÓN OMC (POST-LEVANTE)'].includes(formData.estado_dam) && (
+                    {![ESTADO_DAM.PENDIENTE_AFORO, ESTADO_DAM.OBSERVADA, ESTADO_DAM.EN_REVISION, ESTADO_DAM.CON_LEVANTE_GARANTIA_ACTIVA, ESTADO_DAM.EN_REVISION_OMC].includes(formData.estado_dam) && (
                       <p className="text-xs text-slate-400 italic">No se requieren acciones aduaneras manuales para este estado (Esperando pagos o procesos automáticos).</p>
                     )}
                   </div>
@@ -672,12 +673,12 @@ const Dams = () => {
                               <td className="px-3 py-2 text-right font-mono font-bold text-slate-200">{parseFloat(g.monto_original || 0).toFixed(2)}</td>
                               <td className="px-3 py-2 text-center font-bold text-slate-400">{g.moneda}</td>
                               <td className="px-3 py-2 text-center">
-                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${g.estado_pago === 'PAGADO' ? 'bg-emerald-900/30 text-emerald-400 border-emerald-800' : g.estado_pago === 'PENDIENTE' ? 'bg-rose-900/30 text-rose-400 border-rose-800' : 'bg-amber-900/30 text-amber-400 border-amber-800'}`}>
+                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${g.estado_pago === ESTADO_PAGO.PAGADO ? 'bg-emerald-900/30 text-emerald-400 border-emerald-800' : g.estado_pago === ESTADO_PAGO.PENDIENTE ? 'bg-rose-900/30 text-rose-400 border-rose-800' : 'bg-amber-900/30 text-amber-400 border-amber-800'}`}>
                                   {g.estado_pago}
                                 </span>
                               </td>
                               <td className="px-3 py-2 text-center">
-                                {g.estado_pago !== 'PAGADO' ? (
+                                {g.estado_pago !== ESTADO_PAGO.PAGADO ? (
                                   <button 
                                     onClick={(e) => { e.stopPropagation(); navigate(`/app/pagos?gasto_id=${g.id_gasto}`); }}
                                     className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded border transition-all duration-150 shadow-sm bg-purple-50 text-purple-700 border-purple-300 hover:bg-purple-700 hover:text-white hover:border-purple-700 dark:bg-purple-600/30 dark:text-purple-300 dark:border-purple-500/40 dark:hover:bg-purple-600 dark:hover:text-white cursor-pointer"

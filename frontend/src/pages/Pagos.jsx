@@ -7,6 +7,7 @@ import Select from 'react-select';
 import Paginador from '../components/Paginador';
 import useDebounce from '../hooks/useDebounce';
 import { Scale, FileText, Landmark, Banknote, Search, CreditCard, Zap, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { ESTADO_PAGO, MONEDA, ROL } from '../constants';
 
 const selectDarkStyles = {
   control: (base, state) => ({
@@ -79,7 +80,7 @@ const Pagos = () => {
   const [form, setForm] = useState({
     voucher_id: null,
     fecha_pago: new Date().toISOString().split('T')[0],
-    moneda: 'USD',
+    moneda: MONEDA.USD,
     tipo_cambio: '1.00',
     importe: '',
     pago_moneda_cruzada: false,
@@ -108,7 +109,7 @@ const Pagos = () => {
   const userRole = obtenerRol();
 
   // Solo Admin (1) y Tesorería (3) liquidan pagos; Logística (2) y Auditoría (4) quedan en modo consulta
-  const esUsuarioOperaciones = ![1, 3].includes(userRole);
+  const esUsuarioOperaciones = ![ROL.SUPERADMIN, ROL.FINANZAS].includes(userRole);
 
   // TC oficial SUNAT del día (lo usa el backend para validar pagos en moneda cruzada)
   const [tcOficial, setTcOficial] = useState(null);
@@ -226,13 +227,13 @@ const Pagos = () => {
     setIdempotencyKey(uuid);
 
     const saldoPendienteNum = parseFloat(gasto.saldo_pendiente ?? gasto.monto_original);
-    const monedaGasto = gasto.moneda || 'USD';
+    const monedaGasto = gasto.moneda || MONEDA.USD;
 
     setForm({
       voucher_id: null,
       fecha_pago: new Date().toISOString().split('T')[0],
       moneda: monedaGasto,
-      tipo_cambio: monedaGasto === 'USD' ? '1.00' : tcSugerido,
+      tipo_cambio: monedaGasto === MONEDA.USD ? '1.00' : tcSugerido,
       importe: saldoPendienteNum > 0 ? saldoPendienteNum.toFixed(2) : '0.00',
       pago_moneda_cruzada: false,
       monto_moneda_origen: ''
@@ -405,10 +406,10 @@ const Pagos = () => {
   // Débito teórico en la MONEDA DEL VOUCHER (misma regla que aplica el servidor)
   const voucherSeleccionado = opcionesVouchers.find(op => op.value === form.voucher_id)?.voucher || null;
   const monedaVoucher = voucherSeleccionado?.moneda || form.moneda;
-  const convertirMoneda = (monto, de, a, tc) => (de === a ? monto : (de === 'USD' && a === 'PEN' ? monto * tc : monto / tc));
+  const convertirMoneda = (monto, de, a, tc) => (de === a ? monto : (de === MONEDA.USD && a === MONEDA.PEN ? monto * tc : monto / tc));
   const montoConvertido = convertirMoneda(importeNum, form.moneda, monedaVoucher, tcNum);
   const diferenciaCambioCalculada = form.pago_moneda_cruzada ? Math.max(0, montoOrigenNum - montoConvertido) : 0;
-  const simboloVoucher = monedaVoucher === 'PEN' ? 'S/' : '$';
+  const simboloVoucher = monedaVoucher === MONEDA.PEN ? 'S/' : '$';
   // El TC solo interviene si alguna de las tres monedas (pago, gasto, voucher) difiere
   const requiereTipoCambio = new Set([form.moneda, selectedGasto?.moneda || form.moneda, monedaVoucher]).size > 1;
 
@@ -449,7 +450,7 @@ const Pagos = () => {
           {esUsuarioOperaciones && (
             <div className="px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center gap-1.5">
               <AlertTriangle size={14} className="inline-block shrink-0" />
-              <span>Modo Consulta ({userRole === 4 ? 'Rol Auditoría' : 'Rol Logística'})</span>
+              <span>Modo Consulta ({userRole === ROL.AUDITOR ? 'Rol Auditoría' : 'Rol Logística'})</span>
             </div>
           )}
           <button
@@ -554,8 +555,8 @@ const Pagos = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setEstadoFiltro('PAGADO'); setPage(1); }}
-                  className={`px-2.5 py-1 rounded-md font-semibold transition-colors ${estadoFiltro === 'PAGADO'
+                  onClick={() => { setEstadoFiltro(ESTADO_PAGO.PAGADO); setPage(1); }}
+                  className={`px-2.5 py-1 rounded-md font-semibold transition-colors ${estadoFiltro === ESTADO_PAGO.PAGADO
                       ? 'bg-purple-600 text-white shadow'
                       : 'bg-slate-800 text-slate-400 hover:text-slate-200'
                     }`}
@@ -581,7 +582,7 @@ const Pagos = () => {
                   const isSelected = selectedGasto?.id_gasto === g.id_gasto;
                   const saldoNum = parseFloat(g.saldo_pendiente ?? g.monto_original);
                   const originalNum = parseFloat(g.monto_original);
-                  const simboloMoneda = g.moneda === 'PEN' ? 'S/' : '$';
+                  const simboloMoneda = g.moneda === MONEDA.PEN ? 'S/' : '$';
 
                   return (
                     <div
@@ -595,9 +596,9 @@ const Pagos = () => {
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex items-center gap-2">
                           <span className="font-mono font-bold text-xs text-purple-400">#{g.id_gasto}</span>
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${g.estado_pago === 'PENDIENTE'
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${g.estado_pago === ESTADO_PAGO.PENDIENTE
                               ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
-                              : g.estado_pago === 'PARCIAL'
+                              : g.estado_pago === ESTADO_PAGO.PARCIAL
                                 ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
                                 : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                             }`}>
@@ -707,9 +708,9 @@ const Pagos = () => {
                       <h2 className="text-base font-bold text-white tracking-tight">
                         Gasto #{selectedGasto.id_gasto} · {selectedGasto.concepto_nombre || 'Gasto General'}
                       </h2>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${selectedGasto.estado_pago === 'PENDIENTE'
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${selectedGasto.estado_pago === ESTADO_PAGO.PENDIENTE
                           ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
-                          : selectedGasto.estado_pago === 'PARCIAL'
+                          : selectedGasto.estado_pago === ESTADO_PAGO.PARCIAL
                             ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
                             : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                         }`}>
@@ -758,7 +759,7 @@ const Pagos = () => {
                   <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
                     <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Monto Facturado</span>
                     <div className="mt-1 font-mono font-bold text-sm text-slate-100 tabular-nums">
-                      {selectedGasto.moneda === 'PEN' ? 'S/' : '$'} {montoFacturado.toFixed(2)}
+                      {selectedGasto.moneda === MONEDA.PEN ? 'S/' : '$'} {montoFacturado.toFixed(2)}
                     </div>
                     <span className="text-[10px] text-slate-500 mt-0.5 block">Deuda total inicial</span>
                   </div>
@@ -766,7 +767,7 @@ const Pagos = () => {
                   <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
                     <span className="text-[10px] uppercase font-bold text-emerald-400 block tracking-wider">Amortizado</span>
                     <div className="mt-1 font-mono font-bold text-sm text-emerald-400 tabular-nums">
-                      {selectedGasto.moneda === 'PEN' ? 'S/' : '$'} {amortizadoAcumulado.toFixed(2)}
+                      {selectedGasto.moneda === MONEDA.PEN ? 'S/' : '$'} {amortizadoAcumulado.toFixed(2)}
                     </div>
                     <div className="w-full bg-slate-800 rounded-full h-1 mt-1.5 overflow-hidden">
                       <div className="bg-emerald-500 h-full rounded-full transition-all duration-500" style={{ width: `${porcentajeAmortizado}%` }}></div>
@@ -776,7 +777,7 @@ const Pagos = () => {
                   <div className="bg-rose-950/20 border border-rose-500/30 rounded-xl p-3">
                     <span className="text-[10px] uppercase font-bold text-rose-400 block tracking-wider">Saldo Pendiente</span>
                     <div className="mt-1 font-mono font-bold text-sm text-rose-400 tabular-nums">
-                      {selectedGasto.moneda === 'PEN' ? 'S/' : '$'} {saldoPendiente.toFixed(2)}
+                      {selectedGasto.moneda === MONEDA.PEN ? 'S/' : '$'} {saldoPendiente.toFixed(2)}
                     </div>
                     <span className="text-[10px] text-rose-300/70 mt-0.5 block">Exigible a pagar</span>
                   </div>
@@ -850,8 +851,8 @@ const Pagos = () => {
                           })}
                           className="w-full text-xs bg-slate-900 border border-slate-700 rounded-lg p-2 font-bold text-white focus:outline-none focus:border-purple-500"
                         >
-                          <option value="USD">USD ($)</option>
-                          <option value="PEN">PEN (S/)</option>
+                          <option value={MONEDA.USD}>USD ($)</option>
+                          <option value={MONEDA.PEN}>PEN (S/)</option>
                         </select>
                       </div>
 
@@ -1087,7 +1088,7 @@ const Pagos = () => {
                         </td>
                         <td className="py-3 px-4 text-right">
                           <div className="font-mono font-bold text-emerald-400 text-sm">
-                            {pago.moneda === 'PEN' ? 'S/' : '$'} {parseFloat(pago.importe).toFixed(2)}
+                            {pago.moneda === MONEDA.PEN ? 'S/' : '$'} {parseFloat(pago.importe).toFixed(2)}
                           </div>
                           {pago.pago_moneda_cruzada && (
                             <div className="text-[10px] text-amber-400 font-mono">
@@ -1160,7 +1161,7 @@ const Pagos = () => {
                 <div className="flex justify-between">
                   <span className="text-slate-400">Importe a Reversar:</span>
                   <span className="font-mono font-bold text-emerald-400">
-                    {modalEliminarPago.pago?.moneda === 'PEN' ? 'S/' : '$'} {parseFloat(modalEliminarPago.pago?.importe || 0).toFixed(2)}
+                    {modalEliminarPago.pago?.moneda === MONEDA.PEN ? 'S/' : '$'} {parseFloat(modalEliminarPago.pago?.importe || 0).toFixed(2)}
                   </span>
                 </div>
                 <div className="flex justify-between">
