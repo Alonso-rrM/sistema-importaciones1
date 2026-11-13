@@ -20,7 +20,7 @@ const reglaValoresFijos = valoresFijos.map(valor => ({
 }))
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  globalIgnores(['dist', 'dist-e2e', 'playwright-report', 'test-results']),
   {
     files: ['**/*.{js,jsx}'],
     extends: [
@@ -44,6 +44,12 @@ export default defineConfig([
       // Protección contra errores de digitación en estados, monedas, categorías, etc.
       'no-restricted-syntax': ['error', ...reglaValoresFijos],
     },
+  },
+  {
+    // Pruebas en navegador y configuración de Playwright: corren en Node, no en el navegador
+    files: ['e2e/**/*.js', 'playwright.config.js'],
+    languageOptions: { globals: { ...globals.node, ...globals.browser } },
+    rules: { 'react-hooks/rules-of-hooks': 'off', 'no-restricted-syntax': 'off' },
   },
   {
     // El propio archivo de constantes es el único lugar donde esos textos se escriben.

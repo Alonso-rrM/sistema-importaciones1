@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Pruebas de extremo a extremo
+/dist-e2e
+/test-results
+/playwright-report
+/e2e/.sesion
