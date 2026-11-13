@@ -23,6 +23,7 @@ from sqlalchemy import event, inspect
 from sqlalchemy.orm import Session
 
 import models
+from constantes import AccionAuditoria
 
 # Tablas de negocio auditadas -> nombre legible
 MODELOS_AUDITADOS = {
@@ -854,7 +855,7 @@ def enriquecer_bitacora(db: Session, filas: list) -> list[dict]:
                     resumen = identificador
 
             # Caso 2: CAMBIO ESTADO DAM
-            elif f.accion == "CAMBIO ESTADO DAM" or ("estado_anterior" in d and "id_dam" in d and "motivo" not in d):
+            elif f.accion == AccionAuditoria.CAMBIO_ESTADO_DAM or ("estado_anterior" in d and "id_dam" in d and "motivo" not in d):
                 dam_s = fmt_dam(d.get("id_dam"))
                 identificador = f"DAM {dam_s}"
                 partes_c = []
@@ -873,7 +874,7 @@ def enriquecer_bitacora(db: Session, filas: list) -> list[dict]:
                 resumen = f"{identificador} · " + " | ".join(partes_c) if partes_c else identificador
 
             # Caso 3: REVERSION AUTOMATICA DAM
-            elif f.accion == "REVERSION AUTOMATICA DAM" or ("motivo" in d and "estado_anterior" in d):
+            elif f.accion == AccionAuditoria.REVERSION_AUTOMATICA_DAM or ("motivo" in d and "estado_anterior" in d):
                 num_dam = d.get("numero_de_dam") or fmt_dam(d.get("id_dam"))
                 cont = d.get("contenedor")
                 identificador = f"DAM {num_dam}" + (f" (Fact. {cont})" if cont else "")
@@ -887,7 +888,7 @@ def enriquecer_bitacora(db: Session, filas: list) -> list[dict]:
                 resumen = f"{identificador} · {d.get('estado_anterior')} → {d.get('estado_nuevo')}" + (f" · {d.get('motivo')}" if d.get("motivo") else "")
 
             # Caso 4: EDICION FECHA PAGO
-            elif f.accion == "EDICION FECHA PAGO" or ("id_pago" in d and "fecha_nueva" in d):
+            elif f.accion == AccionAuditoria.EDICION_FECHA_PAGO or ("id_pago" in d and "fecha_nueva" in d):
                 pago_s = fmt_pago(d.get("id_pago"))
                 identificador = f"Pago {pago_s}"
                 cambios_legibles.append({
@@ -914,13 +915,13 @@ def enriquecer_bitacora(db: Session, filas: list) -> list[dict]:
                     resumen = f"{identificador} · Compra: {nue.get('compra')} / Venta: {nue.get('venta')}"
 
             # Caso 6: CREACION GASTO (histórico / manual)
-            elif f.accion == "CREACION GASTO" or ("id_concepto" in d and "monto_original" in d):
+            elif f.accion == AccionAuditoria.CREACION_GASTO or ("id_concepto" in d and "monto_original" in d):
                 identificador = construir_identificador_tabla("registro_gastos", None, d)
                 datos_legibles = construir_lista_datos("registro_gastos", d)
                 resumen = identificador
 
             # Caso 7: CREACION PAGO (histórico / manual)
-            elif f.accion == "CREACION PAGO" or ("id_gasto" in d and "importe" in d):
+            elif f.accion == AccionAuditoria.CREACION_PAGO or ("id_gasto" in d and "importe" in d):
                 identificador = construir_identificador_tabla("registro_pagos", None, d)
                 datos_legibles = construir_lista_datos("registro_pagos", d)
                 resumen = identificador

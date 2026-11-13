@@ -18,6 +18,21 @@ from services.excel_exporter import (
     generar_excel_dams,
     generar_excel_liquidacion_contenedor
 )
+from constantes import (
+    AccionAuditoria,
+    CanalControl,
+    EstadoDam,
+    EstadoDocumentario,
+    EstadoLevante,
+    EstadoPago,
+    EstadoRegistro,
+    Moneda,
+    ROLES_OPERACIONES,
+    Rol,
+    StatusLlegada,
+    TipoGasto,
+    TipoValor,
+)
 
 router = APIRouter(tags=["Operaciones"])
 
@@ -36,9 +51,9 @@ def validar_dam_garantizada(dam: schemas.DetalleDamCreate):
     return dam
 
 ESTRATEGIAS_VALIDACION_DAM = {
-    "DEFINITIVO": validar_dam_definitiva,
-    "GARANTIZADO": validar_dam_garantizada,
-    "PROVISIONAL": validar_dam_garantizada  # Retrocompatibilidad
+    TipoValor.DEFINITIVO: validar_dam_definitiva,
+    TipoValor.GARANTIZADO: validar_dam_garantizada,
+    TipoValor.PROVISIONAL: validar_dam_garantizada  # Retrocompatibilidad
 }
 
 # --- MÁQUINA DE ESTADOS DAM: TRANSICIONES MANUALES PERMITIDAS ---
@@ -46,23 +61,23 @@ ESTRATEGIAS_VALIDACION_DAM = {
 # (services/state_machine.py) y nunca se aceptan desde el cliente.
 # Formato: estado_origen -> {estado_destino: tipos_valor permitidos (None = cualquiera)}
 TRANSICIONES_MANUALES_DAM = {
-    "PENDIENTE DE AFORO": {
-        "CON LEVANTE": None,                       # Aforo conforme
-        "OBSERVADA / NOTIFICADA": None,            # Reportar observación SUNAT
+    EstadoDam.PENDIENTE_AFORO: {
+        EstadoDam.CON_LEVANTE: None,                       # Aforo conforme
+        EstadoDam.OBSERVADA: None,            # Reportar observación SUNAT
     },
-    "OBSERVADA / NOTIFICADA": {
-        "EN REVISIÓN": {"DEFINITIVO"},             # Subir sustento (definitivo)
-        "CON LEVANTE (GARANTÍA ACTIVA)": {"GARANTIZADO", "PROVISIONAL"},  # Art. 160 LGA
+    EstadoDam.OBSERVADA: {
+        EstadoDam.EN_REVISION: {TipoValor.DEFINITIVO},             # Subir sustento (definitivo)
+        EstadoDam.CON_LEVANTE_GARANTIA_ACTIVA: {TipoValor.GARANTIZADO, TipoValor.PROVISIONAL},  # Art. 160 LGA
     },
-    "EN REVISIÓN": {
-        "CON LEVANTE": None,                       # Diligencia conforme
+    EstadoDam.EN_REVISION: {
+        EstadoDam.CON_LEVANTE: None,                       # Diligencia conforme
     },
-    "CON LEVANTE (GARANTÍA ACTIVA)": {
-        "EN REVISIÓN OMC (POST-LEVANTE)": None,
-        "GARANTÍA CERRADA / LIQUIDADA": None,
+    EstadoDam.CON_LEVANTE_GARANTIA_ACTIVA: {
+        EstadoDam.EN_REVISION_OMC: None,
+        EstadoDam.GARANTIA_CERRADA: None,
     },
-    "EN REVISIÓN OMC (POST-LEVANTE)": {
-        "GARANTÍA CERRADA / LIQUIDADA": None,
+    EstadoDam.EN_REVISION_OMC: {
+        EstadoDam.GARANTIA_CERRADA: None,
     },
 }
 
@@ -74,7 +89,7 @@ def validar_transicion_dam(estado_actual: str, estado_nuevo: str, tipo_valor: st
     destinos = TRANSICIONES_MANUALES_DAM.get(estado_actual or "", {})
     if estado_nuevo in destinos:
         tipos = destinos[estado_nuevo]
-        if tipos is None or (tipo_valor or "DEFINITIVO") in tipos:
+        if tipos is None or (tipo_valor or TipoValor.DEFINITIVO) in tipos:
             return
     if es_admin:
         return
@@ -89,11 +104,11 @@ def validar_transicion_dam(estado_actual: str, estado_nuevo: str, tipo_valor: st
 # ==========================================
 
 @router.post("/maestros/", response_model=schemas.MaestroImportacion)
-def crear_maestro(maestro: schemas.MaestroImportacionCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1, 2]))):
+def crear_maestro(maestro: schemas.MaestroImportacionCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_OPERACIONES))):
     datos = maestro.model_dump()
     # Campos calculados por la máquina de estados: nunca se aceptan del cliente al crear
-    datos.update({"estado_documentario": "SIN NUMERAR", "estado_levante": "SIN LEVANTE", "fecha_levante_maestro": None, "version": 1})
-    if datos.get("status_llegada") == "EN ALMACÉN" and not datos.get("fecha_recepcion_almacen"):
+    datos.update({"estado_documentario": EstadoDocumentario.SIN_NUMERAR, "estado_levante": EstadoLevante.SIN_LEVANTE, "fecha_levante_maestro": None, "version": 1})
+    if datos.get("status_llegada") == StatusLlegada.EN_ALMACEN and not datos.get("fecha_recepcion_almacen"):
         raise HTTPException(status_code=400, detail="Para registrar el contenedor EN ALMACÉN debe indicar la fecha de recepción en almacén.")
     nuevo_maestro = models.MaestroImportacion(**datos)
     
@@ -113,14 +128,14 @@ def crear_maestro(maestro: schemas.MaestroImportacionCreate, db: Session = Depen
     return nuevo_maestro
 
 @router.put("/maestros/{id_maestro}", response_model=schemas.MaestroImportacion)
-def actualizar_maestro(id_maestro: int, maestro_editado: schemas.MaestroImportacionUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1, 2]))):
+def actualizar_maestro(id_maestro: int, maestro_editado: schemas.MaestroImportacionUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_OPERACIONES))):
     db_maestro = db.query(models.MaestroImportacion).filter(models.MaestroImportacion.id_maestro == id_maestro).first()
     
     if not db_maestro:
         raise HTTPException(status_code=404, detail="Maestro de importación no encontrado")
         
     # Regla Crítica: Si ya está en ATE. TOTAL, se bloquea la edición normal
-    if db_maestro.estado_documentario == "ATE. TOTAL" and current_user.id_rol != 1:
+    if db_maestro.estado_documentario == EstadoDocumentario.ATENCION_TOTAL and current_user.id_rol != Rol.SUPERADMIN:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, 
             detail="Operación Denegada: Los registros con ATENCIÓN TOTAL están blindados. Solicita desbloqueo al Administrador."
@@ -129,11 +144,11 @@ def actualizar_maestro(id_maestro: int, maestro_editado: schemas.MaestroImportac
     update_data = maestro_editado.model_dump(exclude_unset=True)
     
     # Prevención de Bypass: estado_documentario y estado_levante son calculados reactivamente por la máquina de estados
-    if "estado_documentario" in update_data and current_user.id_rol != 1:
+    if "estado_documentario" in update_data and current_user.id_rol != Rol.SUPERADMIN:
         del update_data["estado_documentario"]
-    if "estado_levante" in update_data and current_user.id_rol != 1:
+    if "estado_levante" in update_data and current_user.id_rol != Rol.SUPERADMIN:
         del update_data["estado_levante"]
-    if "fecha_levante_maestro" in update_data and current_user.id_rol != 1:
+    if "fecha_levante_maestro" in update_data and current_user.id_rol != Rol.SUPERADMIN:
         del update_data["fecha_levante_maestro"]  # La sella el cronómetro logístico de la máquina de estados
 
     # Bloqueo optimista real: la versión que el cliente leyó debe coincidir con la actual.
@@ -148,13 +163,13 @@ def actualizar_maestro(id_maestro: int, maestro_editado: schemas.MaestroImportac
     # Integridad física: EN ALMACÉN exige fecha de recepción
     status_final = update_data.get("status_llegada", db_maestro.status_llegada)
     fecha_recepcion_final = update_data["fecha_recepcion_almacen"] if "fecha_recepcion_almacen" in update_data else db_maestro.fecha_recepcion_almacen
-    if status_final == "EN ALMACÉN" and not fecha_recepcion_final:
+    if status_final == StatusLlegada.EN_ALMACEN and not fecha_recepcion_final:
         raise HTTPException(status_code=400, detail="Para pasar el contenedor a EN ALMACÉN debe indicar la fecha de recepción en almacén.")
 
     # El tipo de valor (DEFINITIVO/GARANTIZADO) define qué levantes son legales: no puede cambiarse
     # cuando alguna DAM ya avanzó en su trámite aduanero (salvo Administrador).
-    if "tipo_valor" in update_data and update_data["tipo_valor"] != db_maestro.tipo_valor and current_user.id_rol != 1:
-        dams_avanzadas = [d for d in db_maestro.dams if d.estado_dam not in (None, "NUMERADA / EN EVALUACIÓN")]
+    if "tipo_valor" in update_data and update_data["tipo_valor"] != db_maestro.tipo_valor and current_user.id_rol != Rol.SUPERADMIN:
+        dams_avanzadas = [d for d in db_maestro.dams if d.estado_dam not in (None, EstadoDam.NUMERADA)]
         if dams_avanzadas:
             raise HTTPException(status_code=400, detail="No se puede cambiar el tipo de valor: hay DAMs con trámite aduanero en curso. Solicítelo al Administrador.")
 
@@ -189,7 +204,7 @@ async def desbloquear_maestro_con_levante(
     db: Session = Depends(get_db),
     current_user: models.Usuario = Depends(get_current_user)
 ):
-    if current_user.id_rol != 1:
+    if current_user.id_rol != Rol.SUPERADMIN:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, 
             detail="Acceso Restringido: Solo el Administrador del Sistema puede abrir un candado post-levante."
@@ -200,14 +215,14 @@ async def desbloquear_maestro_con_levante(
         raise HTTPException(status_code=404, detail="Maestro de importación no encontrado")
 
     try:
-        maestro.estado_levante = "SIN LEVANTE"
+        maestro.estado_levante = EstadoLevante.SIN_LEVANTE
         db.flush()
         
         await registrar_auditoria(
             db=db,
             id_usuario=current_user.id_usuario,
             endpoint=request.url.path,
-            accion="DESBLOQUEO LEVANTE",
+            accion=AccionAuditoria.DESBLOQUEO_LEVANTE,
             detalles=f'{{"id_maestro": {id_maestro}, "nuevo_estado": "SIN LEVANTE"}}',
             ip_address=request.client.host if request.client else "IP Desconocida"
         )
@@ -226,7 +241,7 @@ async def autorizar_levante(
     id_maestro: int, 
     request: Request,
     db: Session = Depends(get_db), 
-    current_user: models.Usuario = Depends(RoleChecker([1, 2])) # 1: Admin, 2: Logística
+    current_user: models.Usuario = Depends(RoleChecker(ROLES_OPERACIONES)) # 1: Admin, 2: Logística
 ):
     # 1. Buscar el maestro
     maestro = db.query(models.MaestroImportacion).filter(models.MaestroImportacion.id_maestro == id_maestro).first()
@@ -239,7 +254,7 @@ async def autorizar_levante(
 
     # 2. Máquina de Estados: Matriz de Canales
     for dam in maestro.dams:
-        if dam.canal_control == 'ROJO' and maestro.tipo_valor == 'DEFINITIVO':
+        if dam.canal_control == CanalControl.ROJO and maestro.tipo_valor == TipoValor.DEFINITIVO:
             if not dam.aforo_realizado:
                 raise HTTPException(
                     status_code=400, 
@@ -248,7 +263,7 @@ async def autorizar_levante(
 
     # 3. Aplicar el Levante y Auditoría Atómica
     try:
-        maestro.estado_levante = 'CON LEVANTE'
+        maestro.estado_levante = EstadoLevante.CON_LEVANTE
         db.flush()
 
         # 4. Bitácora de Auditoría
@@ -258,7 +273,7 @@ async def autorizar_levante(
             db=db,
             id_usuario=current_user.id_usuario,
             endpoint=request.url.path,
-            accion="AUTORIZACION LEVANTE",
+            accion=AccionAuditoria.AUTORIZACION_LEVANTE,
             detalles=detalles_auditoria,
             ip_address=request.client.host if request.client else "IP Desconocida"
         )
@@ -276,7 +291,7 @@ async def autorizar_levante(
 def lookup_maestros(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     # Retorna solo las columnas necesarias (hasta 2000 activos) sin join pesado
     query = db.query(models.MaestroImportacion.id_maestro, models.MaestroImportacion.numero_factura, models.MaestroImportacion.n_cont_fisico, models.MaestroImportacion.tipo_valor)\
-              .filter(models.MaestroImportacion.estado_registro == "ACTIVO")\
+              .filter(models.MaestroImportacion.estado_registro == EstadoRegistro.ACTIVO)\
               .order_by(models.MaestroImportacion.id_maestro.desc())\
               .limit(2000).all()
     return query
@@ -293,7 +308,7 @@ def listar_facturas(
     db: Session = Depends(get_db), 
     current_user: models.Usuario = Depends(get_current_user)
 ):
-    filtros = [models.MaestroImportacion.estado_registro == "ACTIVO"]
+    filtros = [models.MaestroImportacion.estado_registro == EstadoRegistro.ACTIVO]
     if search:
         termino = f"%{search.strip()}%"
         filtros.append(
@@ -340,7 +355,7 @@ def exportar_maestros_excel(
     db: Session = Depends(get_db),
     current_user: models.Usuario = Depends(get_current_user)
 ):
-    filtros = [models.MaestroImportacion.estado_registro == "ACTIVO"]
+    filtros = [models.MaestroImportacion.estado_registro == EstadoRegistro.ACTIVO]
     if search:
         termino = f"%{search.strip()}%"
         filtros.append(
@@ -408,21 +423,21 @@ def estado_cuenta_factura(
 
         # 1. Sumar gastos de la DAM
         for gasto in dam.gastos:
-            if gasto.estado_registro == "ACTIVO":
+            if gasto.estado_registro == EstadoRegistro.ACTIVO:
                 monto_original = Decimal(str(gasto.monto_original)) if gasto.monto_original else Decimal("0.00")
-                if gasto.moneda == "USD":
+                if gasto.moneda == Moneda.USD:
                     total_gastos_dam_pen += monto_original * tipo_cambio_referencial
                 else:
                     total_gastos_dam_pen += monto_original
 
         # 2. Sumar pagos de la DAM
         for pago in dam.pagos:
-            if pago.estado_registro == "ACTIVO":
+            if pago.estado_registro == EstadoRegistro.ACTIVO:
                 importe = Decimal(str(pago.importe)) if pago.importe else Decimal("0.00")
-                if pago.moneda == "USD":
+                if pago.moneda == Moneda.USD:
                     tc_pago = Decimal(str(pago.tipo_cambio)) if pago.tipo_cambio else Decimal("1.00")
                     total_pagado_dam_pen += importe * tc_pago
-                elif pago.moneda == "PEN":
+                elif pago.moneda == Moneda.PEN:
                     total_pagado_dam_pen += importe
 
         saldo_pendiente_dam_pen = total_gastos_dam_pen - total_pagado_dam_pen
@@ -496,19 +511,19 @@ def obtener_datos_liquidacion_contenedor(id_maestro: int, db: Session, tc_ref: D
     total_pen_pagado = Decimal("0.00")
 
     subtotales_etapa = {
-        "FIJO_DESPACHO": {"usd": Decimal("0.00"), "pen": Decimal("0.00")},
-        "POST_LEVANTE": {"usd": Decimal("0.00"), "pen": Decimal("0.00")},
-        "EXTRAORDINARIO": {"usd": Decimal("0.00"), "pen": Decimal("0.00")},
+        TipoGasto.FIJO_DESPACHO: {"usd": Decimal("0.00"), "pen": Decimal("0.00")},
+        TipoGasto.POST_LEVANTE: {"usd": Decimal("0.00"), "pen": Decimal("0.00")},
+        TipoGasto.EXTRAORDINARIO: {"usd": Decimal("0.00"), "pen": Decimal("0.00")},
     }
 
     for dam in maestro.dams:
         for g in dam.gastos:
-            if g.estado_registro != "ACTIVO":
+            if g.estado_registro != EstadoRegistro.ACTIVO:
                 continue
 
             monto_orig = Decimal(str(g.monto_original)) if g.monto_original else Decimal("0.00")
-            moneda_g = g.moneda or "USD"
-            etapa = g.concepto_rel.tipo_gasto if (g.concepto_rel and g.concepto_rel.tipo_gasto) else "FIJO_DESPACHO"
+            moneda_g = g.moneda or Moneda.USD
+            etapa = g.concepto_rel.tipo_gasto if (g.concepto_rel and g.concepto_rel.tipo_gasto) else TipoGasto.FIJO_DESPACHO
             if etapa not in subtotales_etapa:
                 subtotales_etapa[etapa] = {"usd": Decimal("0.00"), "pen": Decimal("0.00")}
 
@@ -516,7 +531,7 @@ def obtener_datos_liquidacion_contenedor(id_maestro: int, db: Session, tc_ref: D
             pagos_detalle = []
             if g.pagos:
                 for p in g.pagos:
-                    if p.estado_registro == "ACTIVO" and p.importe:
+                    if p.estado_registro == EstadoRegistro.ACTIVO and p.importe:
                         imp = Decimal(str(p.importe))
                         tc_p = Decimal(str(p.tipo_cambio_aplicado or p.tipo_cambio or "1.00"))
                         if tc_p <= Decimal("0.00"):
@@ -524,9 +539,9 @@ def obtener_datos_liquidacion_contenedor(id_maestro: int, db: Session, tc_ref: D
                         
                         if moneda_g == p.moneda:
                             pagado_linea = imp
-                        elif moneda_g == "USD" and p.moneda == "PEN":
+                        elif moneda_g == Moneda.USD and p.moneda == Moneda.PEN:
                             pagado_linea = imp / tc_p
-                        elif moneda_g == "PEN" and p.moneda == "USD":
+                        elif moneda_g == Moneda.PEN and p.moneda == Moneda.USD:
                             pagado_linea = imp * tc_p
                         else:
                             pagado_linea = imp
@@ -547,7 +562,7 @@ def obtener_datos_liquidacion_contenedor(id_maestro: int, db: Session, tc_ref: D
 
             saldo = max(Decimal("0.00"), monto_orig - total_pagado)
 
-            if moneda_g == "USD":
+            if moneda_g == Moneda.USD:
                 total_usd_orig += monto_orig
                 total_usd_pagado += total_pagado
                 subtotales_etapa[etapa]["usd"] += monto_orig
@@ -573,13 +588,13 @@ def obtener_datos_liquidacion_contenedor(id_maestro: int, db: Session, tc_ref: D
                 "monto_original": float(monto_orig),
                 "total_pagado": float(total_pagado),
                 "saldo_pendiente": float(saldo),
-                "estado_pago": g.estado_pago or "PENDIENTE",
+                "estado_pago": g.estado_pago or EstadoPago.PENDIENTE,
                 "tipo_cambio_ref": float(tc_ref),
                 "equivalente_usd": round(float(equiv_usd), 2),
                 "pagos_detalle": pagos_detalle
             })
 
-    orden_etapas = {"FIJO_DESPACHO": 1, "POST_LEVANTE": 2, "EXTRAORDINARIO": 3}
+    orden_etapas = {TipoGasto.FIJO_DESPACHO: 1, TipoGasto.POST_LEVANTE: 2, TipoGasto.EXTRAORDINARIO: 3}
     gastos_list.sort(key=lambda x: (orden_etapas.get(x["tipo_gasto"], 99), x["fecha_vencimiento"] or "", x["id_gasto"]))
 
     saldo_usd = max(Decimal("0.00"), total_usd_orig - total_usd_pagado)
@@ -605,7 +620,7 @@ def obtener_datos_liquidacion_contenedor(id_maestro: int, db: Session, tc_ref: D
         "fecha_arribo": str(maestro.fecha_arribo) if maestro.fecha_arribo else "-",
         "status_llegada": maestro.status_llegada or "-",
         "estado_levante": maestro.estado_levante or "-",
-        "tipo_valor": maestro.tipo_valor or "DEFINITIVO",
+        "tipo_valor": maestro.tipo_valor or TipoValor.DEFINITIVO,
         "fob_usd": float(maestro.fob_usd or 0.0),
         "flete_usd": float(maestro.flete_usd or 0.0),
         "cfr_usd": float(cfr_usd),
@@ -662,7 +677,7 @@ def exportar_liquidacion_gastos_excel_api(
     )
 
 @router.delete("/maestros/{id_maestro}")
-def eliminar_maestro(id_maestro: int, req: schemas.EliminacionRequest, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1, 2]))):
+def eliminar_maestro(id_maestro: int, req: schemas.EliminacionRequest, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_OPERACIONES))):
     maestro = db.query(models.MaestroImportacion).filter(models.MaestroImportacion.id_maestro == id_maestro).first()
     if not maestro:
         raise HTTPException(status_code=404, detail="Maestro de importación no encontrado")
@@ -802,13 +817,13 @@ def exportar_dams_excel(
     )
 
 @router.post("/dams/", response_model=schemas.DetalleDam)
-def crear_dam(dam: schemas.DetalleDamCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1, 2]))):
+def crear_dam(dam: schemas.DetalleDamCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_OPERACIONES))):
     maestro = db.query(models.MaestroImportacion).filter(models.MaestroImportacion.id_maestro == dam.id_maestro).first()
     if not maestro:
         raise HTTPException(status_code=404, detail="El Maestro de Importación asociado no existe en la base de datos.")
-    if maestro.estado_levante == "CON LEVANTE" and current_user.id_rol != 1:
+    if maestro.estado_levante == EstadoLevante.CON_LEVANTE and current_user.id_rol != Rol.SUPERADMIN:
         raise HTTPException(status_code=403, detail="Operación Denegada: No se pueden agregar DAMs a un contenedor que ya cuenta con LEVANTE autorizado.")
-    if maestro.estado_documentario == "ATE. TOTAL" and current_user.id_rol != 1:
+    if maestro.estado_documentario == EstadoDocumentario.ATENCION_TOTAL and current_user.id_rol != Rol.SUPERADMIN:
         raise HTTPException(status_code=403, detail="Operación Denegada: El contenedor está en ATENCIÓN TOTAL.")
 
     estrategia = ESTRATEGIAS_VALIDACION_DAM.get(maestro.tipo_valor)
@@ -817,7 +832,7 @@ def crear_dam(dam: schemas.DetalleDamCreate, db: Session = Depends(get_db), curr
 
     datos_dam = dam.model_dump()
     # Toda DAM nace en el estado inicial: el levante/aforo NUNCA se declara desde el cliente
-    datos_dam["estado_dam"] = "NUMERADA / EN EVALUACIÓN"
+    datos_dam["estado_dam"] = EstadoDam.NUMERADA
     datos_dam["aforo_realizado"] = False
     datos_dam["fecha_levante"] = None
 
@@ -837,27 +852,27 @@ def actualizar_dam(
     dam_editada: schemas.DetalleDamUpdate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: models.Usuario = Depends(RoleChecker([1, 2]))  # 1: Admin, 2: Logística
+    current_user: models.Usuario = Depends(RoleChecker(ROLES_OPERACIONES))  # 1: Admin, 2: Logística
 ):
     db_dam = db.query(models.DetalleDam).filter(models.DetalleDam.id_dam == id_dam).first()
 
     if not db_dam:
         raise HTTPException(status_code=404, detail="DAM no encontrada")
 
-    es_admin = current_user.id_rol == 1
+    es_admin = current_user.id_rol == Rol.SUPERADMIN
     update_data = dam_editada.model_dump(exclude_unset=True)
     maestro_actual = db_dam.maestro
 
     # Candado ATE. TOTAL (contenedor actual y, si se reasigna, el contenedor destino)
     if not es_admin:
-        if maestro_actual and maestro_actual.estado_documentario == "ATE. TOTAL":
+        if maestro_actual and maestro_actual.estado_documentario == EstadoDocumentario.ATENCION_TOTAL:
             raise HTTPException(status_code=403, detail="Operación Denegada: El contenedor de esta DAM está en ATENCIÓN TOTAL. Solicita desbloqueo al Administrador.")
         nuevo_id_maestro = update_data.get("id_maestro")
         if nuevo_id_maestro and nuevo_id_maestro != db_dam.id_maestro:
             destino = db.query(models.MaestroImportacion).filter(models.MaestroImportacion.id_maestro == nuevo_id_maestro).first()
             if not destino:
                 raise HTTPException(status_code=404, detail="El contenedor destino no existe.")
-            if destino.estado_documentario == "ATE. TOTAL":
+            if destino.estado_documentario == EstadoDocumentario.ATENCION_TOTAL:
                 raise HTTPException(status_code=403, detail="Operación Denegada: El contenedor destino está en ATENCIÓN TOTAL.")
         # La fecha de levante la sella el motor de estados, no el usuario
         update_data.pop("fecha_levante", None)
@@ -871,10 +886,10 @@ def actualizar_dam(
         if nuevo_estado is None:
             update_data.pop("estado_dam")
         else:
-            tipo_valor = maestro_actual.tipo_valor if maestro_actual else "DEFINITIVO"
+            tipo_valor = maestro_actual.tipo_valor if maestro_actual else TipoValor.DEFINITIVO
             validar_transicion_dam(estado_anterior, nuevo_estado, tipo_valor, es_admin)
             # "Aforo conforme" certifica el aforo físico
-            if estado_anterior == "PENDIENTE DE AFORO" and nuevo_estado == "CON LEVANTE":
+            if estado_anterior == EstadoDam.PENDIENTE_AFORO and nuevo_estado == EstadoDam.CON_LEVANTE:
                 update_data["aforo_realizado"] = True
 
     for key, value in update_data.items():
@@ -890,7 +905,7 @@ def actualizar_dam(
             db=db,
             id_usuario=current_user.id_usuario,
             endpoint=request.url.path,
-            accion="CAMBIO ESTADO DAM",
+            accion=AccionAuditoria.CAMBIO_ESTADO_DAM,
             detalles=json.dumps({
                 "id_dam": id_dam,
                 "estado_anterior": estado_anterior, "estado_nuevo": db_dam.estado_dam,
@@ -908,12 +923,12 @@ def actualizar_dam(
     return db_dam
 
 @router.delete("/dams/{id_dam}")
-def eliminar_dam(id_dam: int, req: schemas.EliminacionRequest, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1, 2]))):
+def eliminar_dam(id_dam: int, req: schemas.EliminacionRequest, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_OPERACIONES))):
     dam = db.query(models.DetalleDam).filter(models.DetalleDam.id_dam == id_dam).first()
     if not dam:
         raise HTTPException(status_code=404, detail="DAM no encontrada")
 
-    if dam.maestro and dam.maestro.estado_documentario == "ATE. TOTAL" and current_user.id_rol != 1:
+    if dam.maestro and dam.maestro.estado_documentario == EstadoDocumentario.ATENCION_TOTAL and current_user.id_rol != Rol.SUPERADMIN:
         raise HTTPException(status_code=403, detail="Operación Denegada: El contenedor está en ATENCIÓN TOTAL.")
 
     tiene_gastos = db.query(models.RegistroGasto).filter(models.RegistroGasto.id_dam == id_dam).first()
@@ -979,13 +994,13 @@ def kpi_gastos_maestro(
             joinedload(models.RegistroGasto.concepto_rel)
         ).filter(
             models.RegistroGasto.id_dam.in_(dam_ids),
-            models.RegistroGasto.estado_registro == "ACTIVO"
+            models.RegistroGasto.estado_registro == EstadoRegistro.ACTIVO
         ).all()
 
     # 3. Obtener Catálogo Completo de Conceptos Fijos Activos
     conceptos_fijos = db.query(models.CatConceptoPago).filter(
-        models.CatConceptoPago.tipo_gasto == "FIJO_DESPACHO",
-        models.CatConceptoPago.estado_registro == "ACTIVO"
+        models.CatConceptoPago.tipo_gasto == TipoGasto.FIJO_DESPACHO,
+        models.CatConceptoPago.estado_registro == EstadoRegistro.ACTIVO
     ).all()
     
     # Función auxiliar para resolver colores dinámicos del semáforo
@@ -1017,22 +1032,22 @@ def kpi_gastos_maestro(
                 "saldo_pendiente": 0.0
             })
         else:
-            if all(g.estado_pago == "PAGADO" for g in gastos_concepto):
+            if all(g.estado_pago == EstadoPago.PAGADO for g in gastos_concepto):
                 fijos_pagados += 1
                 fijos_checklist.append({
                     "nombre_concepto": concepto.nombre,
                     "concepto": concepto.nombre,
-                    "estado": "PAGADO",
+                    "estado": EstadoPago.PAGADO,
                     "saldo_pendiente": 0.0
                 })
             else:
                 fijos_pendientes += 1
                 # Calcular saldo pendiente estimado si existe
-                saldo_est = sum(float(g.monto_original) for g in gastos_concepto if g.estado_pago != "PAGADO")
+                saldo_est = sum(float(g.monto_original) for g in gastos_concepto if g.estado_pago != EstadoPago.PAGADO)
                 fijos_checklist.append({
                     "nombre_concepto": concepto.nombre,
                     "concepto": concepto.nombre,
-                    "estado": "PENDIENTE",
+                    "estado": EstadoPago.PENDIENTE,
                     "saldo_pendiente": saldo_est
                 })
                 
@@ -1042,13 +1057,13 @@ def kpi_gastos_maestro(
     def procesar_dinamico(tipo_gasto_str: str, titulo_str: str):
         gastos_filtrados = [g for g in gastos if g.concepto_rel and g.concepto_rel.tipo_gasto == tipo_gasto_str]
         total = len(gastos_filtrados)
-        pagados = sum(1 for g in gastos_filtrados if g.estado_pago == "PAGADO")
+        pagados = sum(1 for g in gastos_filtrados if g.estado_pago == EstadoPago.PAGADO)
         pendientes = total - pagados
         pct = int((pagados / total) * 100) if total > 0 else 100
         
         checklist = []
         for g in gastos_filtrados:
-            saldo_est = float(g.monto_original) if g.estado_pago != "PAGADO" else 0.0
+            saldo_est = float(g.monto_original) if g.estado_pago != EstadoPago.PAGADO else 0.0
             checklist.append({
                 "nombre_concepto": g.concepto_rel.nombre,
                 "concepto": g.concepto_rel.nombre,
@@ -1074,8 +1089,8 @@ def kpi_gastos_maestro(
             "checklist": checklist
         }
         
-    post_levante_data = procesar_dinamico("POST_LEVANTE", "Gastos Post-Levante")
-    extra_data = procesar_dinamico("EXTRAORDINARIO", "Gastos Extraordinarios")
+    post_levante_data = procesar_dinamico(TipoGasto.POST_LEVANTE, "Gastos Post-Levante")
+    extra_data = procesar_dinamico(TipoGasto.EXTRAORDINARIO, "Gastos Extraordinarios")
     
     # C) GLOBAL (Consolidado integral)
     global_total = fijos_total + post_levante_data["total"] + extra_data["total"]
@@ -1120,9 +1135,9 @@ def kpi_gastos_maestro(
     }
 
     payload_etapas = {
-        "FIJO_DESPACHO": fijo_data,
-        "POST_LEVANTE": post_levante_data,
-        "EXTRAORDINARIO": extra_data,
+        TipoGasto.FIJO_DESPACHO: fijo_data,
+        TipoGasto.POST_LEVANTE: post_levante_data,
+        TipoGasto.EXTRAORDINARIO: extra_data,
         "GLOBAL": global_data
     }
 

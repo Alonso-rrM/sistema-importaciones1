@@ -30,15 +30,16 @@ load_dotenv()
 from database import SessionLocal
 from security import get_password_hash
 import models
+from constantes import Rol
 
 # -----------------------------------------------------------
 # CONFIGURACION: Roles del sistema
 # -----------------------------------------------------------
 ROLES_INICIALES = [
-    {"id_rol": 1, "nombre": "SuperAdmin",   "descripcion": "Acceso total al sistema. Gestion de usuarios y configuracion."},
-    {"id_rol": 2, "nombre": "Operaciones",  "descripcion": "Gestion de maestros, DAMs y gastos logisticos."},
-    {"id_rol": 3, "nombre": "Finanzas",     "descripcion": "Gestion de pagos, vouchers y reportes financieros."},
-    {"id_rol": 4, "nombre": "Auditor",      "descripcion": "Solo lectura. Acceso a logs de auditoria y reportes."},
+    {"id_rol": Rol.SUPERADMIN, "nombre": "SuperAdmin", "descripcion": "Acceso total al sistema. Gestion de usuarios y configuracion."},
+    {"id_rol": Rol.OPERACIONES, "nombre": "Operaciones", "descripcion": "Gestion de maestros, DAMs y gastos logisticos."},
+    {"id_rol": Rol.FINANZAS, "nombre": "Finanzas", "descripcion": "Gestion de pagos, vouchers y reportes financieros."},
+    {"id_rol": Rol.AUDITOR, "nombre": "Auditor", "descripcion": "Solo lectura. Acceso a logs de auditoria y reportes."},
 ]
 
 # -----------------------------------------------------------
@@ -83,7 +84,7 @@ def run():
             print(f"   --  El usuario '{ADMIN_USERNAME}' ya existe. No se modifico.")
         else:
             admin = models.Usuario(
-                id_rol=1,
+                id_rol=Rol.SUPERADMIN,
                 username=ADMIN_USERNAME,
                 email=ADMIN_EMAIL,
                 hashed_password=get_password_hash(ADMIN_PASSWORD),

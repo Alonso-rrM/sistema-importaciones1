@@ -17,6 +17,7 @@ from security import get_password_hash, COOKIE_SESION, CSRF_HEADER
 from dependencies import get_db, get_current_user, RoleChecker, limiter
 from services.audit_trail import enriquecer_bitacora
 from routers import auth, catalogos, operaciones, finanzas, reportes
+from constantes import AccionAuditoria, ROLES_AUDITORIA, ROLES_SOLO_ADMIN
 
 # La documentación interactiva (/docs, /redoc, /openapi.json) expone el mapa completo de la API.
 # Desactivada por defecto; para desarrollo, definir ENABLE_DOCS=true en el .env
@@ -80,7 +81,7 @@ def ruta_principal():
 def crear_usuario(
     usuario: schemas.UsuarioCreate, 
     db: Session = Depends(get_db),
-    current_user: models.Usuario = Depends(RoleChecker([1]))
+    current_user: models.Usuario = Depends(RoleChecker(ROLES_SOLO_ADMIN))
 ):
     if db.query(models.Usuario).filter(models.Usuario.username == usuario.username).first():
         raise HTTPException(status_code=400, detail="El username ya está registrado")
@@ -147,7 +148,7 @@ def consultar_ruc_sunat(request: Request, ruc: str, current_user: models.Usuario
                 raise HTTPException(status_code=404, detail="RUC no encontrado en SUNAT.")
             data = res_json.get("data", {})
             estado, condicion = data.get("estado"), data.get("condicion")
-            if estado != "ACTIVO":
+            if estado != "ACTIVO":  # literal-permitido: estado del contribuyente según SUNAT, no del sistema
                 raise HTTPException(status_code=400, detail=f"El RUC está {estado}. No se puede operar.")
             if condicion != "HABIDO":
                 raise HTTPException(status_code=400, detail=f"El RUC tiene condición {condicion}.")
@@ -177,7 +178,7 @@ def listar_auditoria(
     fecha_desde: Optional[date] = None,
     fecha_hasta: Optional[date] = None,
     db: Session = Depends(get_db),
-    current_user: models.Usuario = Depends(RoleChecker([1, 4]))
+    current_user: models.Usuario = Depends(RoleChecker(ROLES_AUDITORIA))
 ):
     """Bitácora de eventos con filtros. Permite reconstruir la historia completa de un registro."""
     q = db.query(models.AuditLog)
@@ -189,11 +190,11 @@ def listar_auditoria(
         if id_registro is not None:
             q = q.filter(models.AuditLog.detalles.like(f'%"tabla": "{tabla}", "id": {id_registro},%'))
         elif tabla == "registro_gastos":
-            q = q.filter(models.AuditLog.detalles.like(f'%"tabla": "{tabla}"%') | (models.AuditLog.accion == "CREACION GASTO"))
+            q = q.filter(models.AuditLog.detalles.like(f'%"tabla": "{tabla}"%') | (models.AuditLog.accion == AccionAuditoria.CREACION_GASTO))
         elif tabla == "registro_pagos":
-            q = q.filter(models.AuditLog.detalles.like(f'%"tabla": "{tabla}"%') | models.AuditLog.accion.in_(["CREACION PAGO", "EDICION FECHA PAGO"]))
+            q = q.filter(models.AuditLog.detalles.like(f'%"tabla": "{tabla}"%') | models.AuditLog.accion.in_([AccionAuditoria.CREACION_PAGO, AccionAuditoria.EDICION_FECHA_PAGO]))
         elif tabla == "detalle_dams":
-            q = q.filter(models.AuditLog.detalles.like(f'%"tabla": "{tabla}"%') | models.AuditLog.accion.in_(["CAMBIO ESTADO DAM", "REVERSION AUTOMATICA DAM"]))
+            q = q.filter(models.AuditLog.detalles.like(f'%"tabla": "{tabla}"%') | models.AuditLog.accion.in_([AccionAuditoria.CAMBIO_ESTADO_DAM, AccionAuditoria.REVERSION_AUTOMATICA_DAM]))
         elif tabla == "historial_tipo_cambio":
             q = q.filter(models.AuditLog.detalles.like(f'%"tabla": "{tabla}"%') | models.AuditLog.accion.like("%TIPO CAMBIO%"))
         else:
@@ -221,17 +222,17 @@ def listar_auditoria(
         ]
     return enriquecidos
 @app.get("/auditoria/maestros/", response_model=List[schemas.MaestroEliminadoResponse], tags=["Auditoria"])
-def listar_auditoria_maestros(db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1, 4]))):
+def listar_auditoria_maestros(db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_AUDITORIA))):
     return db.query(models.MaestroEliminado).order_by(models.MaestroEliminado.fecha_eliminacion.desc()).all()
 @app.get("/auditoria/dams/", response_model=List[schemas.DamEliminadaResponse], tags=["Auditoria"])
-def listar_auditoria_dams(db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1, 4]))):
+def listar_auditoria_dams(db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_AUDITORIA))):
     return db.query(models.DamEliminada).order_by(models.DamEliminada.fecha_eliminacion.desc()).all()
 @app.get("/auditoria/gastos/", response_model=List[schemas.GastoEliminadoResponse], tags=["Auditoria"])
-def listar_auditoria_gastos(db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1, 4]))):
+def listar_auditoria_gastos(db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_AUDITORIA))):
     return db.query(models.GastoEliminado).order_by(models.GastoEliminado.fecha_eliminacion.desc()).all()
 @app.get("/auditoria/pagos/", response_model=List[schemas.PagoEliminadoResponse], tags=["Auditoria"])
-def listar_auditoria_pagos(db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1, 4]))):
+def listar_auditoria_pagos(db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_AUDITORIA))):
     return db.query(models.PagoEliminado).order_by(models.PagoEliminado.fecha_eliminacion.desc()).all()
 @app.get("/auditoria/vouchers/", response_model=List[schemas.VoucherEliminadoResponse], tags=["Auditoria"])
-def listar_auditoria_vouchers(db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1, 4]))):
+def listar_auditoria_vouchers(db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_AUDITORIA))):
     return db.query(models.VoucherEliminado).order_by(models.VoucherEliminado.fecha_eliminacion.desc()).all()

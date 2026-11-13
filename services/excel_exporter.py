@@ -6,6 +6,7 @@ from decimal import Decimal
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
+from constantes import EstadoPago, EstadoRegistro, Moneda, TipoGasto, TipoValor
 
 # Generador de tickets correlativos únicos sin fecha para nombres de archivos
 def generar_ticket_reporte(prefijo: str = "REP") -> str:
@@ -183,7 +184,7 @@ def generar_excel_maestros(maestros) -> tuple[io.BytesIO, str]:
             m.fecha_arribo if m.fecha_arribo else None,
             m.status_llegada or "-",
             m.estado_levante or "-",
-            m.tipo_valor or "DEFINITIVO",
+            m.tipo_valor or TipoValor.DEFINITIVO,
             m.venta_sucesiva or "NO",
             float(m.fob_usd) if m.fob_usd is not None else 0.00,
             float(m.flete_usd) if m.flete_usd is not None else 0.00,
@@ -245,7 +246,7 @@ def generar_excel_dams(dams) -> tuple[io.BytesIO, str]:
             m.importador_rel.nombre if m and m.importador_rel else "-",
             d.canal_control or "-",
             "SÍ" if d.aforo_realizado else "NO",
-            m.tipo_valor if m and m.tipo_valor else "DEFINITIVO",
+            m.tipo_valor if m and m.tipo_valor else TipoValor.DEFINITIVO,
             float(d.monto_valor_provisional_usd) if d.monto_valor_provisional_usd is not None else 0.00,
             m.estado_levante if m and m.estado_levante else "-",
             d.created_at if d.created_at else None
@@ -321,7 +322,7 @@ def generar_excel_gastos(gastos) -> tuple[io.BytesIO, str]:
         total_pagado = Decimal("0.00")
         if g.pagos:
             for p in g.pagos:
-                if p.estado_registro == "ACTIVO" and p.importe:
+                if p.estado_registro == EstadoRegistro.ACTIVO and p.importe:
                     total_pagado += Decimal(str(p.importe))
         
         monto_orig = Decimal(str(g.monto_original)) if g.monto_original is not None else Decimal("0.00")
@@ -330,7 +331,7 @@ def generar_excel_gastos(gastos) -> tuple[io.BytesIO, str]:
             saldo = Decimal("0.00")
 
         # Situación de vencimiento
-        if g.estado_pago == "PAGADO":
+        if g.estado_pago == EstadoPago.PAGADO:
             situacion = "LIQUIDADO"
         elif g.fecha_vencimiento:
             dias = (g.fecha_vencimiento - hoy).days
@@ -353,14 +354,14 @@ def generar_excel_gastos(gastos) -> tuple[io.BytesIO, str]:
             tipo_doc.nombre_documento if tipo_doc else "-",
             concepto.nombre if concepto else "-",
             g.observaciones or "-",
-            concepto.tipo_gasto if concepto and concepto.tipo_gasto else "FIJO_DESPACHO",
+            concepto.tipo_gasto if concepto and concepto.tipo_gasto else TipoGasto.FIJO_DESPACHO,
             proveedor.nombre if proveedor else "-",
             proveedor.ruc if proveedor and proveedor.ruc else "-",
-            g.moneda or "USD",
+            g.moneda or Moneda.USD,
             float(monto_orig),
             float(total_pagado),
             float(saldo),
-            g.estado_pago or "PENDIENTE",
+            g.estado_pago or EstadoPago.PENDIENTE,
             g.fecha_vencimiento if g.fecha_vencimiento else None,
             situacion
         ])
@@ -445,18 +446,18 @@ def generar_excel_liquidacion_contenedor(liq_data: dict) -> tuple[io.BytesIO, st
             contenedor,
             bl,
             g.get("numero_de_dam") or "-",
-            g.get("tipo_gasto") or "FIJO_DESPACHO",
+            g.get("tipo_gasto") or TipoGasto.FIJO_DESPACHO,
             g.get("proveedor_nombre") or "-",
             g.get("proveedor_ruc") or "-",
             g.get("tipo_doc_nombre") or "-",
             g.get("numero_documento") or "-",
             g.get("concepto_nombre") or "-",
             g.get("fecha_vencimiento") if g.get("fecha_vencimiento") else None,
-            g.get("moneda") or "USD",
+            g.get("moneda") or Moneda.USD,
             float(g.get("monto_original") or 0.0),
             float(g.get("total_pagado") or 0.0),
             float(g.get("saldo_pendiente") or 0.0),
-            g.get("estado_pago") or "PENDIENTE",
+            g.get("estado_pago") or EstadoPago.PENDIENTE,
             float(g.get("tipo_cambio_ref") or tc_global),
             float(g.get("equivalente_usd") or 0.0),
             vouchers_str
@@ -548,7 +549,7 @@ def generar_excel_sabana_global(filas_sabana: list[dict]) -> tuple[io.BytesIO, s
             f.get("estado_levante") or "-",
             f.get("fecha_arribo") if f.get("fecha_arribo") else None,
             f.get("numero_de_dam") or "-",
-            f.get("tipo_gasto") or "FIJO_DESPACHO",
+            f.get("tipo_gasto") or TipoGasto.FIJO_DESPACHO,
             f.get("proveedor_nombre") or "-",
             f.get("proveedor_ruc") or "-",
             f.get("tipo_doc_nombre") or "-",
@@ -556,11 +557,11 @@ def generar_excel_sabana_global(filas_sabana: list[dict]) -> tuple[io.BytesIO, s
             f.get("concepto_nombre") or "-",
             f.get("observaciones") or "-",
             f.get("fecha_vencimiento") if f.get("fecha_vencimiento") else None,
-            f.get("moneda") or "USD",
+            f.get("moneda") or Moneda.USD,
             float(f.get("monto_original") or 0.0),
             float(f.get("total_pagado") or 0.0),
             float(f.get("saldo_pendiente") or 0.0),
-            f.get("estado_pago") or "PENDIENTE",
+            f.get("estado_pago") or EstadoPago.PENDIENTE,
             float(f.get("tipo_cambio_ref") or 3.80),
             float(f.get("equivalente_usd") or 0.0),
             f.get("vouchers_str") or "-"

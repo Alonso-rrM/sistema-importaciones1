@@ -7,6 +7,7 @@ from typing import Optional
 import secrets
 
 import models
+from constantes import Rol
 from schemas import Username, PasswordSegura, Email
 from services.errores import error_interno
 from fastapi.responses import JSONResponse
@@ -65,10 +66,10 @@ def inicializar_sistema(payload: SetupInicialRequest, db: Session = Depends(get_
     try:
         # 1. Crear los 4 roles del sistema
         roles = [
-            models.CatRol(id_rol=1, nombre="Administrador", descripcion="Acceso total. Gestión de usuarios y configuración."),
-            models.CatRol(id_rol=2, nombre="Logistica",     descripcion="Gestión de maestros, DAMs y gastos logísticos."),
-            models.CatRol(id_rol=3, nombre="Tesoreria",     descripcion="Gestión de pagos, vouchers y reportes financieros."),
-            models.CatRol(id_rol=4, nombre="Auditor",       descripcion="Solo lectura. Acceso a logs y reportes."),
+            models.CatRol(id_rol=Rol.SUPERADMIN, nombre="Administrador", descripcion="Acceso total. Gestión de usuarios y configuración."),
+            models.CatRol(id_rol=Rol.OPERACIONES, nombre="Logistica", descripcion="Gestión de maestros, DAMs y gastos logísticos."),
+            models.CatRol(id_rol=Rol.FINANZAS, nombre="Tesoreria", descripcion="Gestión de pagos, vouchers y reportes financieros."),
+            models.CatRol(id_rol=Rol.AUDITOR, nombre="Auditor", descripcion="Solo lectura. Acceso a logs y reportes."),
         ]
         for rol in roles:
             if not db.query(models.CatRol).filter(models.CatRol.id_rol == rol.id_rol).first():
@@ -77,7 +78,7 @@ def inicializar_sistema(payload: SetupInicialRequest, db: Session = Depends(get_
 
         # 2. Crear el usuario SuperAdmin
         admin = models.Usuario(
-            id_rol=1,
+            id_rol=Rol.SUPERADMIN,
             username=payload.username.strip(),
             email=payload.email.strip(),
             hashed_password=get_password_hash(payload.password),

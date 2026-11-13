@@ -7,11 +7,14 @@ import io
 import models
 import schemas
 from dependencies import get_db, get_current_user, RoleChecker
+from constantes import (
+    EstadoRegistro, ROLES_FINANZAS, ROLES_OPERACIONES, ROLES_OPERACIONES_Y_FINANZAS, ROLES_SOLO_ADMIN, TipoGasto,
+)
 
 # Matriz RBAC de escritura en catálogos (1: Admin, 2: Logística, 3: Tesorería, 4: Auditoría = solo lectura)
-ROLES_OPERATIVOS = [1, 2, 3]   # importadores, proveedores, agentes, almacenes
-ROLES_TESORERIA = [1, 3]       # bancos
-ROLES_CONFIG = [1, 2]          # conceptos y tipos de documento (alimentan la máquina de estados y el motor financiero)
+ROLES_OPERATIVOS = ROLES_OPERACIONES_Y_FINANZAS   # importadores, proveedores, agentes, almacenes
+ROLES_TESORERIA = ROLES_FINANZAS                 # bancos
+ROLES_CONFIG = ROLES_OPERACIONES                 # conceptos y tipos de documento (alimentan la máquina de estados y el motor financiero)
 
 router = APIRouter(tags=["Catalogos"])
 
@@ -22,7 +25,7 @@ router = APIRouter(tags=["Catalogos"])
 def crear_rol(
     rol: schemas.CatRolCreate, 
     db: Session = Depends(get_db),
-    current_user: models.Usuario = Depends(RoleChecker([1]))
+    current_user: models.Usuario = Depends(RoleChecker(ROLES_SOLO_ADMIN))
 ):
     nuevo_rol = models.CatRol(**rol.model_dump())
     db.add(nuevo_rol)
@@ -45,7 +48,7 @@ def crear_banco(banco: schemas.CatBancoCreate, db: Session = Depends(get_db), cu
 def listar_bancos(mostrar_inactivos: bool = False, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     query = db.query(models.CatBanco)
     if not mostrar_inactivos:
-        query = query.filter(models.CatBanco.estado_registro == "ACTIVO")
+        query = query.filter(models.CatBanco.estado_registro == EstadoRegistro.ACTIVO)
     return query.order_by(models.CatBanco.id_banco.asc()).all()
 
 @router.put("/bancos/{id_banco}", response_model=schemas.CatBanco)
@@ -67,7 +70,7 @@ def eliminar_banco(id_banco: int, db: Session = Depends(get_db), current_user: m
     banco = db.query(models.CatBanco).filter(models.CatBanco.id_banco == id_banco).first()
     if not banco:
         raise HTTPException(status_code=404, detail="Banco no encontrado")
-    banco.estado_registro = "INACTIVO"
+    banco.estado_registro = EstadoRegistro.INACTIVO
     db.commit()
     return {"mensaje": f"El banco '{banco.nombre}' ha sido desactivado correctamente."}
 
@@ -76,13 +79,13 @@ def restaurar_bancos(id_banco: int, db: Session = Depends(get_db), current_user:
     db_item = db.query(models.CatBanco).filter(models.CatBanco.id_banco == id_banco).first()
     if not db_item:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
-    db_item.estado_registro = "ACTIVO"
+    db_item.estado_registro = EstadoRegistro.ACTIVO
     db.commit()
     db.refresh(db_item)
     return db_item
 
 @router.delete("/bancos/{id_banco}/fisico")
-def eliminar_bancos_fisico(id_banco: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1]))):
+def eliminar_bancos_fisico(id_banco: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_SOLO_ADMIN))):
     db_item = db.query(models.CatBanco).filter(models.CatBanco.id_banco == id_banco).first()
     if not db_item:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
@@ -109,7 +112,7 @@ def crear_agente(agente: schemas.CatAgenteCreate, db: Session = Depends(get_db),
 def listar_agentes(mostrar_inactivos: bool = False, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     query = db.query(models.CatAgente)
     if not mostrar_inactivos:
-        query = query.filter(models.CatAgente.estado_registro == "ACTIVO")
+        query = query.filter(models.CatAgente.estado_registro == EstadoRegistro.ACTIVO)
     return query.order_by(models.CatAgente.id_agente.asc()).all()
 
 @router.put("/agentes/{id_agente}", response_model=schemas.CatAgente)
@@ -135,7 +138,7 @@ def eliminar_agente(id_agente: int, db: Session = Depends(get_db), current_user:
     agente = db.query(models.CatAgente).filter(models.CatAgente.id_agente == id_agente).first()
     if not agente:
         raise HTTPException(status_code=404, detail="Agente no encontrado")
-    agente.estado_registro = "INACTIVO"
+    agente.estado_registro = EstadoRegistro.INACTIVO
     db.commit()
     return {"mensaje": f"El agente '{agente.nombre}' ha sido desactivado correctamente."}
 
@@ -144,13 +147,13 @@ def restaurar_agentes(id_agente: int, db: Session = Depends(get_db), current_use
     db_item = db.query(models.CatAgente).filter(models.CatAgente.id_agente == id_agente).first()
     if not db_item:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
-    db_item.estado_registro = "ACTIVO"
+    db_item.estado_registro = EstadoRegistro.ACTIVO
     db.commit()
     db.refresh(db_item)
     return db_item
 
 @router.delete("/agentes/{id_agente}/fisico")
-def eliminar_agentes_fisico(id_agente: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1]))):
+def eliminar_agentes_fisico(id_agente: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_SOLO_ADMIN))):
     db_item = db.query(models.CatAgente).filter(models.CatAgente.id_agente == id_agente).first()
     if not db_item:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
@@ -187,7 +190,7 @@ def crear_proveedor(proveedor: schemas.CatProveedorCreate, db: Session = Depends
 def listar_proveedores(mostrar_inactivos: bool = False, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     query = db.query(models.CatProveedor)
     if not mostrar_inactivos:
-        query = query.filter(models.CatProveedor.estado_registro == "ACTIVO")
+        query = query.filter(models.CatProveedor.estado_registro == EstadoRegistro.ACTIVO)
     return query.order_by(models.CatProveedor.id_proveedor.asc()).all()
 
 @router.put("/proveedores/{id_proveedor}", response_model=schemas.CatProveedor)
@@ -213,7 +216,7 @@ def eliminar_proveedor(id_proveedor: int, db: Session = Depends(get_db), current
     proveedor = db.query(models.CatProveedor).filter(models.CatProveedor.id_proveedor == id_proveedor).first()
     if not proveedor:
         raise HTTPException(status_code=404, detail="Proveedor no encontrado")
-    proveedor.estado_registro = "INACTIVO"
+    proveedor.estado_registro = EstadoRegistro.INACTIVO
     db.commit()
     return {"mensaje": f"El proveedor '{proveedor.nombre}' ha sido desactivado correctamente."}
 
@@ -222,13 +225,13 @@ def restaurar_proveedores(id_proveedor: int, db: Session = Depends(get_db), curr
     db_item = db.query(models.CatProveedor).filter(models.CatProveedor.id_proveedor == id_proveedor).first()
     if not db_item:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
-    db_item.estado_registro = "ACTIVO"
+    db_item.estado_registro = EstadoRegistro.ACTIVO
     db.commit()
     db.refresh(db_item)
     return db_item
 
 @router.delete("/proveedores/{id_proveedor}/fisico")
-def eliminar_proveedores_fisico(id_proveedor: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1]))):
+def eliminar_proveedores_fisico(id_proveedor: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_SOLO_ADMIN))):
     db_item = db.query(models.CatProveedor).filter(models.CatProveedor.id_proveedor == id_proveedor).first()
     if not db_item:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
@@ -255,7 +258,7 @@ def crear_almacen(almacen: schemas.CatAlmacenCreate, db: Session = Depends(get_d
 def listar_almacenes(mostrar_inactivos: bool = False, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     query = db.query(models.CatAlmacen)
     if not mostrar_inactivos:
-        query = query.filter(models.CatAlmacen.estado_registro == "ACTIVO")
+        query = query.filter(models.CatAlmacen.estado_registro == EstadoRegistro.ACTIVO)
     return query.order_by(models.CatAlmacen.id_almacen.asc()).all()
 
 @router.put("/almacenes/{id_almacen}", response_model=schemas.CatAlmacen)
@@ -277,7 +280,7 @@ def eliminar_almacen(id_almacen: int, db: Session = Depends(get_db), current_use
     almacen = db.query(models.CatAlmacen).filter(models.CatAlmacen.id_almacen == id_almacen).first()
     if not almacen:
         raise HTTPException(status_code=404, detail="Almacén no encontrado")
-    almacen.estado_registro = "INACTIVO"
+    almacen.estado_registro = EstadoRegistro.INACTIVO
     db.commit()
     return {"mensaje": f"El almacén '{almacen.nombre}' ha sido desactivado correctamente."}
 
@@ -286,13 +289,13 @@ def restaurar_almacenes(id_almacen: int, db: Session = Depends(get_db), current_
     db_item = db.query(models.CatAlmacen).filter(models.CatAlmacen.id_almacen == id_almacen).first()
     if not db_item:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
-    db_item.estado_registro = "ACTIVO"
+    db_item.estado_registro = EstadoRegistro.ACTIVO
     db.commit()
     db.refresh(db_item)
     return db_item
 
 @router.delete("/almacenes/{id_almacen}/fisico")
-def eliminar_almacenes_fisico(id_almacen: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1]))):
+def eliminar_almacenes_fisico(id_almacen: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_SOLO_ADMIN))):
     db_item = db.query(models.CatAlmacen).filter(models.CatAlmacen.id_almacen == id_almacen).first()
     if not db_item:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
@@ -319,7 +322,7 @@ def crear_importador(importador: schemas.CatImportadorCreate, db: Session = Depe
 def listar_importadores(mostrar_inactivos: bool = False, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     query = db.query(models.CatImportador)
     if not mostrar_inactivos:
-        query = query.filter(models.CatImportador.estado_registro == "ACTIVO")
+        query = query.filter(models.CatImportador.estado_registro == EstadoRegistro.ACTIVO)
     return query.order_by(models.CatImportador.id_importador.asc()).all()
 
 @router.put("/importadores/{id_importador}", response_model=schemas.CatImportador)
@@ -345,7 +348,7 @@ def eliminar_importador(id_importador: int, db: Session = Depends(get_db), curre
     importador = db.query(models.CatImportador).filter(models.CatImportador.id_importador == id_importador).first()
     if not importador:
         raise HTTPException(status_code=404, detail="Importador no encontrado")
-    importador.estado_registro = "INACTIVO"
+    importador.estado_registro = EstadoRegistro.INACTIVO
     db.commit()
     return {"mensaje": f"El importador '{importador.nombre}' ha sido desactivado correctamente."}
 
@@ -354,13 +357,13 @@ def restaurar_importadores(id_importador: int, db: Session = Depends(get_db), cu
     db_item = db.query(models.CatImportador).filter(models.CatImportador.id_importador == id_importador).first()
     if not db_item:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
-    db_item.estado_registro = "ACTIVO"
+    db_item.estado_registro = EstadoRegistro.ACTIVO
     db.commit()
     db.refresh(db_item)
     return db_item
 
 @router.delete("/importadores/{id_importador}/fisico")
-def eliminar_importadores_fisico(id_importador: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1]))):
+def eliminar_importadores_fisico(id_importador: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_SOLO_ADMIN))):
     db_item = db.query(models.CatImportador).filter(models.CatImportador.id_importador == id_importador).first()
     if not db_item:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
@@ -391,7 +394,7 @@ def crear_concepto(concepto: schemas.CatConceptoPagoCreate, db: Session = Depend
 def listar_conceptos(mostrar_inactivos: bool = False, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     query = db.query(models.CatConceptoPago)
     if not mostrar_inactivos:
-        query = query.filter(models.CatConceptoPago.estado_registro == "ACTIVO")
+        query = query.filter(models.CatConceptoPago.estado_registro == EstadoRegistro.ACTIVO)
     return query.order_by(models.CatConceptoPago.id_concepto.asc()).all()
 
 @router.put("/conceptos/{id_concepto}", response_model=schemas.CatConceptoPago)
@@ -418,7 +421,7 @@ def eliminar_concepto(id_concepto: int, db: Session = Depends(get_db), current_u
     if not concepto:
         raise HTTPException(status_code=404, detail="Concepto no encontrado")
     
-    concepto.estado_registro = "INACTIVO"
+    concepto.estado_registro = EstadoRegistro.INACTIVO
     db.commit()
     return {"mensaje": f"El concepto '{concepto.nombre}' ha sido desactivado correctamente."}
 
@@ -427,13 +430,13 @@ def restaurar_conceptos(id_concepto: int, db: Session = Depends(get_db), current
     db_item = db.query(models.CatConceptoPago).filter(models.CatConceptoPago.id_concepto == id_concepto).first()
     if not db_item:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
-    db_item.estado_registro = "ACTIVO"
+    db_item.estado_registro = EstadoRegistro.ACTIVO
     db.commit()
     db.refresh(db_item)
     return db_item
 
 @router.delete("/conceptos/{id_concepto}/fisico")
-def eliminar_conceptos_fisico(id_concepto: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1]))):
+def eliminar_conceptos_fisico(id_concepto: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_SOLO_ADMIN))):
     db_item = db.query(models.CatConceptoPago).filter(models.CatConceptoPago.id_concepto == id_concepto).first()
     if not db_item:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
@@ -452,7 +455,7 @@ def eliminar_conceptos_fisico(id_concepto: int, db: Session = Depends(get_db), c
 def listar_tipos_documento(mostrar_inactivos: bool = False, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     query = db.query(models.CatalogoDocumentoPago)
     if not mostrar_inactivos:
-        query = query.filter(models.CatalogoDocumentoPago.estado_registro == "ACTIVO")
+        query = query.filter(models.CatalogoDocumentoPago.estado_registro == EstadoRegistro.ACTIVO)
     return query.order_by(models.CatalogoDocumentoPago.id_tipo_doc.asc()).all()
 
 @router.post("/tipos-documento/", response_model=schemas.CatalogoDocumentoPago)
@@ -491,7 +494,7 @@ def eliminar_tipo_documento_logico(id: int, db: Session = Depends(get_db), curre
     if not doc_bd:
         raise HTTPException(status_code=404, detail="Documento no encontrado")
     
-    doc_bd.estado_registro = "INACTIVO"
+    doc_bd.estado_registro = EstadoRegistro.INACTIVO
     db.commit()
     return {"mensaje": "Documento desactivado lógicamente"}
 
@@ -501,12 +504,12 @@ def restaurar_tipo_documento(id: int, db: Session = Depends(get_db), current_use
     if not doc_bd:
         raise HTTPException(status_code=404, detail="Documento no encontrado")
     
-    doc_bd.estado_registro = "ACTIVO"
+    doc_bd.estado_registro = EstadoRegistro.ACTIVO
     db.commit()
     return {"mensaje": "Documento restaurado exitosamente"}
 
 @router.delete("/tipos-documento/{id}/fisico")
-def eliminar_tipo_documento_fisico(id: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1]))):
+def eliminar_tipo_documento_fisico(id: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_SOLO_ADMIN))):
     doc_bd = db.query(models.CatalogoDocumentoPago).filter(models.CatalogoDocumentoPago.id_tipo_doc == id).first()
     if not doc_bd:
         raise HTTPException(status_code=404, detail="Documento no encontrado")
@@ -542,7 +545,7 @@ async def carga_masiva_excel(
     catalogo: str,
     archivo: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: models.Usuario = Depends(RoleChecker([1]))
+    current_user: models.Usuario = Depends(RoleChecker(ROLES_SOLO_ADMIN))
 ):
     """
     Carga masiva de catálogos desde Excel. Solo SuperAdmin (Rol 1).
@@ -603,7 +606,7 @@ async def carga_masiva_excel(
                 obj = models.CatConceptoPago(
                     nombre=str(data["nombre"]),
                     descripcion=data.get("descripcion"),
-                    tipo_gasto=str(data.get("tipo_gasto") or "FIJO_DESPACHO")
+                    tipo_gasto=str(data.get("tipo_gasto") or TipoGasto.FIJO_DESPACHO)
                 )
             elif catalogo == "proveedores":
                 if not data.get("nombre"):

@@ -1,13 +1,25 @@
 import re as _re
-from typing import List, Optional, Dict, Any, Generic, TypeVar, Literal, Annotated
+from typing import List, Optional, Dict, Any, Generic, TypeVar, Annotated
 from pydantic import BaseModel, ConfigDict, Field, AfterValidator
 
 from datetime import date, datetime
 from decimal import Decimal
-from enum import Enum
+from constantes import (
+    CategoriaProveedor,
+    EstadoDam,
+    EstadoDocumentario,
+    EstadoLevante,
+    EstadoPago,
+    EstadoRegistro,
+    Moneda,
+    Rol,
+    StatusLlegada,
+    TipoGasto,
+    TipoValor,
+)
 
-# Tipos financieros validados (blindaje contra montos negativos/cero y divisas inválidas)
-Moneda = Literal["USD", "PEN"]
+# Tipos financieros validados (blindaje contra montos negativos/cero y divisas inválidas).
+# Las monedas admitidas se definen una sola vez en constantes.Moneda.
 MontoPositivo = Annotated[Decimal, Field(gt=0, max_digits=15, decimal_places=2)]
 
 # --- Tipos de seguridad para cuentas de usuario ---
@@ -56,7 +68,7 @@ class CatBancoCreate(BaseModel):
 class CatBanco(BaseModel):
     id_banco: int
     nombre: str
-    estado_registro: str = "ACTIVO"
+    estado_registro: str = EstadoRegistro.ACTIVO
     model_config = ConfigDict(from_attributes=True)
 
 class CatBancoUpdate(BaseModel):
@@ -70,7 +82,7 @@ class CatAgente(BaseModel):
     id_agente: int
     nombre: str
     ruc: Optional[str] = None
-    estado_registro: str = "ACTIVO"
+    estado_registro: str = EstadoRegistro.ACTIVO
     model_config = ConfigDict(from_attributes=True)
 
 class CatAgenteUpdate(BaseModel):
@@ -80,14 +92,14 @@ class CatAgenteUpdate(BaseModel):
 class CatProveedorCreate(BaseModel):
     nombre: str
     ruc: Optional[str] = None
-    categoria: str = "NACIONAL"
+    categoria: str = CategoriaProveedor.NACIONAL
 
 class CatProveedor(BaseModel):
     id_proveedor: int
     nombre: str
     ruc: Optional[str] = None
-    categoria: str = "NACIONAL"
-    estado_registro: str = "ACTIVO"
+    categoria: str = CategoriaProveedor.NACIONAL
+    estado_registro: str = EstadoRegistro.ACTIVO
     model_config = ConfigDict(from_attributes=True)
 
 class CatProveedorUpdate(BaseModel):
@@ -101,7 +113,7 @@ class CatAlmacenCreate(BaseModel):
 class CatAlmacen(BaseModel):
     id_almacen: int
     nombre: str
-    estado_registro: str = "ACTIVO"
+    estado_registro: str = EstadoRegistro.ACTIVO
     model_config = ConfigDict(from_attributes=True)
 
 class CatAlmacenUpdate(BaseModel):
@@ -115,7 +127,7 @@ class CatImportador(BaseModel):
     id_importador: int
     nombre: str
     ruc: Optional[str] = None
-    estado_registro: str = "ACTIVO"
+    estado_registro: str = EstadoRegistro.ACTIVO
     model_config = ConfigDict(from_attributes=True)
 
 class CatImportadorUpdate(BaseModel):
@@ -127,12 +139,12 @@ class CatImportadorUpdate(BaseModel):
 class CatConceptoPagoCreate(BaseModel):
     nombre: str
     descripcion: Optional[str] = None
-    tipo_gasto: Optional[str] = "FIJO_DESPACHO"
+    tipo_gasto: Optional[str] = TipoGasto.FIJO_DESPACHO
 
 class CatConceptoPago(CatConceptoPagoCreate):
     id_concepto: int
     estado_registro: str
-    tipo_gasto: str = "FIJO_DESPACHO"
+    tipo_gasto: str = TipoGasto.FIJO_DESPACHO
     model_config = ConfigDict(from_attributes=True)
 
 class CatConceptoPagoUpdate(BaseModel):
@@ -216,9 +228,9 @@ class MaestroImportacionBase(BaseModel):
     documento_transporte: Optional[str] = None
     fecha_embarque: Optional[date] = None
     fecha_arribo: Optional[date] = None
-    status_llegada: Optional[str] = "EN TRÁNSITO"
-    estado_levante: Optional[str] = "SIN LEVANTE"
-    estado_documentario: Optional[str] = "SIN NUMERAR"
+    status_llegada: Optional[str] = StatusLlegada.EN_TRANSITO
+    estado_levante: Optional[str] = EstadoLevante.SIN_LEVANTE
+    estado_documentario: Optional[str] = EstadoDocumentario.SIN_NUMERAR
     fecha_levante_maestro: Optional[date] = None
     fecha_recepcion_almacen: Optional[date] = None
     id_almacen: Optional[int] = None
@@ -226,7 +238,7 @@ class MaestroImportacionBase(BaseModel):
     flete_usd: Optional[Decimal] = None
     cfr_usd: Optional[Decimal] = None
     venta_sucesiva: Optional[str] = None
-    tipo_valor: Optional[str] = "DEFINITIVO"
+    tipo_valor: Optional[str] = TipoValor.DEFINITIVO
     version: int = 1
 
 class MaestroImportacionCreate(MaestroImportacionBase):
@@ -277,7 +289,7 @@ class DetalleDamBase(BaseModel):
     canal_control: Optional[str] = None
     monto_valor_provisional_usd: Optional[Decimal] = None
     aforo_realizado: bool = False  # <--- NUEVO
-    estado_dam: Optional[str] = "NUMERADA / EN EVALUACIÓN"
+    estado_dam: Optional[str] = EstadoDam.NUMERADA
     fecha_levante: Optional[date] = None
 
 class DamLookup(BaseModel):
@@ -315,7 +327,7 @@ class RegistroGastoCreate(BaseModel):
     numero_documento: Optional[str] = None
     fecha_vencimiento: Optional[date] = None
     monto_original: MontoPositivo
-    moneda: Moneda = "USD"
+    moneda: Moneda = Moneda.USD
     observaciones: Optional[str] = None
 
 class PagoDetalleSimple(BaseModel):
@@ -334,7 +346,7 @@ class PagoDetalleSimple(BaseModel):
 class RegistroGasto(RegistroGastoCreate):
     # La respuesta debe poder serializar registros históricos aunque no cumplan las validaciones nuevas
     monto_original: Decimal
-    moneda: str = "USD"
+    moneda: str = Moneda.USD
     id_gasto: int
     estado_pago: str
     estado_registro: str
@@ -369,10 +381,6 @@ class RegistroGastoUpdate(BaseModel):
 
 # --- 5. ESQUEMAS PARA REGISTRO_PAGOS ---
 
-class MonedaEnum(str, Enum):
-    USD = "USD"
-    PEN = "PEN"
-
 class RegistroPagoCreate(BaseModel):
     """
     Entrada de un pago. Solo se confía en: gasto, voucher, moneda, importe, TC, fecha y
@@ -397,7 +405,7 @@ class RegistroPago(BaseModel):
     moneda: str
     importe: Decimal
     tipo_cambio: Decimal
-    estado_pago: Optional[str] = "PAGADO"
+    estado_pago: Optional[str] = EstadoPago.PAGADO
     fecha_pago: Optional[date] = None
     id_importador: Optional[int] = None
     id_gasto: Optional[int] = None
@@ -484,7 +492,7 @@ class UsuarioBase(BaseModel):
     is_active: bool = True
 
 class UsuarioCreate(UsuarioBase):
-    id_rol: Literal[1, 2, 3, 4]
+    id_rol: Rol
     username: Username
     email: Email
     password: PasswordSegura  # Recibido en texto plano, jamás devuelto
@@ -569,7 +577,7 @@ class GastoEliminadoResponse(AuditoriaBaseResponse):
     id_dam: int
     id_concepto: int
     monto_original: Decimal
-    moneda: str = "USD"
+    moneda: str = Moneda.USD
     estado_pago: Optional[str] = None
     estado_registro: Optional[str] = None
     created_at: Optional[datetime] = None

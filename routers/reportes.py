@@ -8,6 +8,15 @@ from sqlalchemy.orm import Session, joinedload
 import models
 from dependencies import get_db, get_current_user
 from services.excel_exporter import generar_excel_sabana_global
+from constantes import (
+    EstadoDocumentario,
+    EstadoLevante,
+    EstadoPago,
+    EstadoRegistro,
+    Moneda,
+    StatusLlegada,
+    TipoGasto,
+)
 
 router = APIRouter(prefix="/reportes", tags=["Reportes"])
 
@@ -37,7 +46,7 @@ def obtener_analytics_cockpit(
     hoy = date.today()
 
     # --- 1. PIPELINE DEL EMBUDO LOGÍSTICO ---
-    m_filtros = [models.MaestroImportacion.estado_registro == "ACTIVO"]
+    m_filtros = [models.MaestroImportacion.estado_registro == EstadoRegistro.ACTIVO]
     if id_importador:
         m_filtros.append(models.MaestroImportacion.id_importador == id_importador)
     if fecha_inicio:
@@ -56,20 +65,20 @@ def obtener_analytics_cockpit(
 
     for m in maestros:
         # Control Documentario: Evaluar si ya cuenta con levante legal
-        if m.estado_documentario in ["CON LEVANTE (PEND. INGRESO)", "ATE. TOTAL", "EN ALMACÉN (PEND. OMC)"] or m.estado_levante == "CON LEVANTE":
+        if m.estado_documentario in [EstadoDocumentario.CON_LEVANTE_PENDIENTE_INGRESO, EstadoDocumentario.ATENCION_TOTAL, EstadoDocumentario.EN_ALMACEN_PENDIENTE_OMC] or m.estado_levante == EstadoLevante.CON_LEVANTE:
             con_levante += 1
             
         # Control Físico: Cronómetro logístico
-        status = m.status_llegada or "EN TRÁNSITO"
-        if status == "EN TRÁNSITO":
+        status = m.status_llegada or StatusLlegada.EN_TRANSITO
+        if status == StatusLlegada.EN_TRANSITO:
             en_transito += 1
-        elif status == "EN PUERTO":
+        elif status == StatusLlegada.EN_PUERTO:
             en_puerto += 1
-        elif status == "EN ALMACÉN TEMPORAL":
+        elif status == StatusLlegada.EN_ALMACEN_TEMPORAL:
             en_almacen_temporal += 1
-        elif status == "PENDIENTE DESCARGA":
+        elif status == StatusLlegada.PENDIENTE_DESCARGA:
             pendiente_descarga += 1
-        elif status == "EN ALMACÉN":
+        elif status == StatusLlegada.EN_ALMACEN:
             en_almacen += 1
         else:
             en_transito += 1
@@ -94,7 +103,7 @@ def obtener_analytics_cockpit(
             joinedload(models.RegistroGasto.pagos),
             joinedload(models.RegistroGasto.concepto_rel)
         )
-        .filter(models.RegistroGasto.estado_registro == "ACTIVO")
+        .filter(models.RegistroGasto.estado_registro == EstadoRegistro.ACTIVO)
     )
     if id_importador:
         g_query = g_query.filter(models.MaestroImportacion.id_importador == id_importador)
@@ -111,22 +120,22 @@ def obtener_analytics_cockpit(
 
     # Acumuladores de Universos de Gasto
     etapas = {
-        "FIJO_DESPACHO": {"usd": Decimal("0.00"), "pen": Decimal("0.00")},
-        "POST_LEVANTE": {"usd": Decimal("0.00"), "pen": Decimal("0.00")},
-        "EXTRAORDINARIO": {"usd": Decimal("0.00"), "pen": Decimal("0.00")}
+        TipoGasto.FIJO_DESPACHO: {"usd": Decimal("0.00"), "pen": Decimal("0.00")},
+        TipoGasto.POST_LEVANTE: {"usd": Decimal("0.00"), "pen": Decimal("0.00")},
+        TipoGasto.EXTRAORDINARIO: {"usd": Decimal("0.00"), "pen": Decimal("0.00")}
     }
 
     limite_7d = hoy + timedelta(days=7)
 
     for g in gastos:
         monto_orig = Decimal(str(g.monto_original)) if g.monto_original else Decimal("0.00")
-        moneda_g = g.moneda or "USD"
-        etapa = g.concepto_rel.tipo_gasto if (g.concepto_rel and g.concepto_rel.tipo_gasto) else "FIJO_DESPACHO"
+        moneda_g = g.moneda or Moneda.USD
+        etapa = g.concepto_rel.tipo_gasto if (g.concepto_rel and g.concepto_rel.tipo_gasto) else TipoGasto.FIJO_DESPACHO
         if etapa not in etapas:
             etapas[etapa] = {"usd": Decimal("0.00"), "pen": Decimal("0.00")}
 
         # Acumular a la etapa
-        if moneda_g == "USD":
+        if moneda_g == Moneda.USD:
             etapas[etapa]["usd"] += monto_orig
         else:
             etapas[etapa]["pen"] += monto_orig
@@ -134,16 +143,16 @@ def obtener_analytics_cockpit(
         # Calcular saldo pendiente real
         total_pagado = Decimal("0.00")
         for p in g.pagos:
-            if p.estado_registro == "ACTIVO" and p.importe:
+            if p.estado_registro == EstadoRegistro.ACTIVO and p.importe:
                 imp = Decimal(str(p.importe))
                 tc_p = Decimal(str(p.tipo_cambio_aplicado or p.tipo_cambio or "1.00"))
                 if tc_p <= Decimal("0.00"):
                     tc_p = Decimal("1.00")
                 if moneda_g == p.moneda:
                     total_pagado += imp
-                elif moneda_g == "USD" and p.moneda == "PEN":
+                elif moneda_g == Moneda.USD and p.moneda == Moneda.PEN:
                     total_pagado += imp / tc_p
-                elif moneda_g == "PEN" and p.moneda == "USD":
+                elif moneda_g == Moneda.PEN and p.moneda == Moneda.USD:
                     total_pagado += imp * tc_p
                 else:
                     total_pagado += imp
@@ -151,8 +160,8 @@ def obtener_analytics_cockpit(
         saldo = max(Decimal("0.00"), monto_orig - total_pagado)
 
         # Si hay saldo pendiente, clasificar en el semáforo de tesorería
-        if saldo > Decimal("0.00") and g.estado_pago != "PAGADO":
-            sem_target = semaforo_usd if moneda_g == "USD" else semaforo_pen
+        if saldo > Decimal("0.00") and g.estado_pago != EstadoPago.PAGADO:
+            sem_target = semaforo_usd if moneda_g == Moneda.USD else semaforo_pen
             sem_target["total_deuda"] += saldo
 
             if g.fecha_vencimiento:
@@ -219,7 +228,7 @@ def exportar_sabana_liquidaciones(
             joinedload(models.RegistroGasto.tipo_doc_rel),
             joinedload(models.RegistroGasto.pagos).joinedload(models.RegistroPago.voucher_rel).joinedload(models.VoucherBancario.banco_rel)
         )
-        .filter(models.RegistroGasto.estado_registro == "ACTIVO")
+        .filter(models.RegistroGasto.estado_registro == EstadoRegistro.ACTIVO)
     )
 
     if id_importador:
@@ -245,14 +254,14 @@ def exportar_sabana_liquidaciones(
         almacen = maestro.almacen_rel if maestro else None
 
         monto_orig = Decimal(str(g.monto_original)) if g.monto_original else Decimal("0.00")
-        moneda_g = g.moneda or "USD"
+        moneda_g = g.moneda or Moneda.USD
 
         # Pagos
         total_pagado = Decimal("0.00")
         vouchers_list = []
         if g.pagos:
             for p in g.pagos:
-                if p.estado_registro == "ACTIVO" and p.importe:
+                if p.estado_registro == EstadoRegistro.ACTIVO and p.importe:
                     imp_p = Decimal(str(p.importe))
                     tc_p = Decimal(str(p.tipo_cambio_aplicado or p.tipo_cambio or "1.00"))
                     if tc_p <= Decimal("0.00"):
@@ -260,9 +269,9 @@ def exportar_sabana_liquidaciones(
 
                     if moneda_g == p.moneda:
                         total_pagado += imp_p
-                    elif moneda_g == "USD" and p.moneda == "PEN":
+                    elif moneda_g == Moneda.USD and p.moneda == Moneda.PEN:
                         total_pagado += imp_p / tc_p
-                    elif moneda_g == "PEN" and p.moneda == "USD":
+                    elif moneda_g == Moneda.PEN and p.moneda == Moneda.USD:
                         total_pagado += imp_p * tc_p
                     else:
                         total_pagado += imp_p
@@ -273,7 +282,7 @@ def exportar_sabana_liquidaciones(
                     vouchers_list.append(f"{banco_nom}: OP-{op_num} ({p.moneda} {float(imp_p):,.2f})")
 
         saldo = max(Decimal("0.00"), monto_orig - total_pagado)
-        equiv_usd = monto_orig if moneda_g == "USD" else (monto_orig / tc_ref)
+        equiv_usd = monto_orig if moneda_g == Moneda.USD else (monto_orig / tc_ref)
 
         filas.append({
             "numero_factura": maestro.numero_factura if maestro else "-",
@@ -287,7 +296,7 @@ def exportar_sabana_liquidaciones(
             "estado_levante": maestro.estado_levante if maestro else "-",
             "fecha_arribo": maestro.fecha_arribo if maestro else None,
             "numero_de_dam": dam.numero_de_dam if dam else "-",
-            "tipo_gasto": g.concepto_rel.tipo_gasto if (g.concepto_rel and g.concepto_rel.tipo_gasto) else "FIJO_DESPACHO",
+            "tipo_gasto": g.concepto_rel.tipo_gasto if (g.concepto_rel and g.concepto_rel.tipo_gasto) else TipoGasto.FIJO_DESPACHO,
             "proveedor_nombre": g.proveedor_rel.nombre if g.proveedor_rel else "-",
             "proveedor_ruc": g.proveedor_rel.ruc if (g.proveedor_rel and g.proveedor_rel.ruc) else "-",
             "tipo_doc_nombre": g.tipo_doc_rel.nombre_documento if g.tipo_doc_rel else "-",
@@ -299,7 +308,7 @@ def exportar_sabana_liquidaciones(
             "monto_original": float(monto_orig),
             "total_pagado": float(total_pagado),
             "saldo_pendiente": float(saldo),
-            "estado_pago": g.estado_pago or "PENDIENTE",
+            "estado_pago": g.estado_pago or EstadoPago.PENDIENTE,
             "tipo_cambio_ref": float(tc_ref),
             "equivalente_usd": round(float(equiv_usd), 2),
             "vouchers_str": "; ".join(vouchers_list) if vouchers_list else "-"

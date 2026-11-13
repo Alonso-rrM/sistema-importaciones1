@@ -3,6 +3,18 @@ import datetime
 from sqlalchemy import Column, Integer, String, Numeric, Date, ForeignKey, DateTime, Text, Boolean, JSON, Index
 from sqlalchemy.orm import relationship
 from database import Base
+from constantes import (
+    CategoriaProveedor,
+    EstadoDam,
+    EstadoDocumentario,
+    EstadoLevante,
+    EstadoPago,
+    EstadoRegistro,
+    Moneda,
+    StatusLlegada,
+    TipoGasto,
+    TipoValor,
+)
 
 # --- 1. TABLAS CATÁLOGO ---
 
@@ -12,7 +24,7 @@ class CatalogoDocumentoPago(Base):
     id_tipo_doc = Column(Integer, primary_key=True, index=True)
     nombre_documento = Column(String(50), unique=True, nullable=False)
     multiplicador_financiero = Column(Integer, nullable=False)
-    estado_registro = Column(String(20), default="ACTIVO")
+    estado_registro = Column(String(20), default=EstadoRegistro.ACTIVO)
     
     gastos = relationship("RegistroGasto", back_populates="tipo_doc_rel")
 
@@ -28,8 +40,8 @@ class CatConceptoPago(Base):
     id_concepto = Column(Integer, primary_key=True, index=True)
     nombre = Column(String(100), unique=True, nullable=False)
     descripcion = Column(Text)
-    tipo_gasto = Column(String(30), default="FIJO_DESPACHO", nullable=False)
-    estado_registro = Column(String(20), default="ACTIVO")
+    tipo_gasto = Column(String(30), default=TipoGasto.FIJO_DESPACHO, nullable=False)
+    estado_registro = Column(String(20), default=EstadoRegistro.ACTIVO)
     pagos = relationship("RegistroPago", back_populates="concepto_rel")
     gastos = relationship("RegistroGasto", back_populates="concepto_rel")
     
@@ -39,8 +51,8 @@ class CatProveedor(Base):
     nombre = Column(String(200), unique=True, nullable=False)
     ruc = Column(String(11), unique=True)
     # [NUEVO] Clasificación del proveedor
-    categoria = Column(String(30), default="NACIONAL")
-    estado_registro = Column(String(20), default="ACTIVO")
+    categoria = Column(String(30), default=CategoriaProveedor.NACIONAL)
+    estado_registro = Column(String(20), default=EstadoRegistro.ACTIVO)
     
     gastos = relationship("RegistroGasto", back_populates="proveedor_rel")
 
@@ -48,13 +60,13 @@ class CatAlmacen(Base):
     __tablename__ = "cat_almacenes"
     id_almacen = Column(Integer, primary_key=True, index=True)
     nombre = Column(String(100), unique=True, nullable=False)
-    estado_registro = Column(String(20), default="ACTIVO")
+    estado_registro = Column(String(20), default=EstadoRegistro.ACTIVO)
 
 class CatBanco(Base):
     __tablename__ = "cat_bancos"
     id_banco = Column(Integer, primary_key=True, index=True)
     nombre = Column(String(100), unique=True, nullable=False)
-    estado_registro = Column(String(20), default="ACTIVO")
+    estado_registro = Column(String(20), default=EstadoRegistro.ACTIVO)
 
 
 
@@ -63,14 +75,14 @@ class CatAgente(Base):
     id_agente = Column(Integer, primary_key=True, index=True)
     nombre = Column(String(100), unique=True, nullable=False)
     ruc = Column(String(11), unique=True)
-    estado_registro = Column(String(20), default="ACTIVO")
+    estado_registro = Column(String(20), default=EstadoRegistro.ACTIVO)
 
 class CatImportador(Base):
     __tablename__ = "cat_importadores"
     id_importador = Column(Integer, primary_key=True, index=True)
     nombre = Column(String(150), unique=True, nullable=False)
     ruc = Column(String(11), unique=True)
-    estado_registro = Column(String(20), default="ACTIVO")
+    estado_registro = Column(String(20), default=EstadoRegistro.ACTIVO)
 
 # --- 1.5 VOUCHERS BANCARIOS ---
 
@@ -85,7 +97,7 @@ class VoucherBancario(Base):
     saldo_disponible = Column(Numeric(15, 2), nullable=False)
     moneda = Column(String(3), nullable=False) # 'USD' o 'PEN'
     fecha_transferencia = Column(Date, nullable=False)
-    estado_registro = Column(String(20), default="ACTIVO")
+    estado_registro = Column(String(20), default=EstadoRegistro.ACTIVO)
 
     __table_args__ = (
         Index("idx_voucher_fecha_estado", "fecha_transferencia", "estado_registro"),
@@ -114,10 +126,10 @@ class MaestroImportacion(Base):
     documento_transporte = Column(String(100))
     fecha_embarque = Column(Date)
     fecha_arribo = Column(Date, nullable=True)
-    status_llegada = Column(String(50), nullable=True, default="EN TRÁNSITO")
-    estado_levante = Column(String(50), nullable=True, default="SIN LEVANTE")
+    status_llegada = Column(String(50), nullable=True, default=StatusLlegada.EN_TRANSITO)
+    estado_levante = Column(String(50), nullable=True, default=EstadoLevante.SIN_LEVANTE)
     # [NUEVO] Máquina de Estados Dual y Cronómetro Logístico
-    estado_documentario = Column(String(50), server_default="SIN NUMERAR", default="SIN NUMERAR", nullable=False)
+    estado_documentario = Column(String(50), server_default=EstadoDocumentario.SIN_NUMERAR, default=EstadoDocumentario.SIN_NUMERAR, nullable=False)
     fecha_levante_maestro = Column(Date, nullable=True)
     fecha_recepcion_almacen = Column(Date, nullable=True)
     id_almacen = Column(Integer, ForeignKey("cat_almacenes.id_almacen"), nullable=True)
@@ -125,14 +137,14 @@ class MaestroImportacion(Base):
     flete_usd = Column(Numeric(15, 2))
     cfr_usd = Column(Numeric(15, 2))
     venta_sucesiva = Column(String(50))
-    tipo_valor = Column(String(50), default="DEFINITIVO")
+    tipo_valor = Column(String(50), default=TipoValor.DEFINITIVO)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     dams = relationship("DetalleDam", back_populates="maestro")
     agente_rel = relationship("CatAgente")
     importador_rel = relationship("CatImportador")
     proveedor_rel = relationship("CatProveedor")
     almacen_rel = relationship("CatAlmacen")
-    estado_registro = Column(String(20), default="ACTIVO")
+    estado_registro = Column(String(20), default=EstadoRegistro.ACTIVO)
     
     # [NUEVO] Bloqueo Optimista
     version = Column(Integer, default=1, nullable=False)
@@ -153,7 +165,7 @@ class DetalleDam(Base):
     # [NUEVO] Control de Aforo Físico
     aforo_realizado = Column(Boolean, default=False)
     # [NUEVO] Máquina de Estados Individual de la DAM
-    estado_dam = Column(String(50), server_default="NUMERADA / EN EVALUACIÓN", default="NUMERADA / EN EVALUACIÓN", nullable=False)
+    estado_dam = Column(String(50), server_default=EstadoDam.NUMERADA, default=EstadoDam.NUMERADA, nullable=False)
     fecha_levante = Column(Date, nullable=True)
     
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
@@ -171,9 +183,9 @@ class RegistroGasto(Base):
     id_dam = Column(Integer, ForeignKey("detalle_dams.id_dam"), nullable=False)
     id_concepto = Column(Integer, ForeignKey("cat_conceptos_pagos.id_concepto"), nullable=False)
     monto_original = Column(Numeric(15, 2), nullable=False)
-    moneda = Column(String(3), default="USD", nullable=False)
-    estado_pago = Column(String(50), default="PENDIENTE")
-    estado_registro = Column(String(20), default="ACTIVO")
+    moneda = Column(String(3), default=Moneda.USD, nullable=False)
+    estado_pago = Column(String(50), default=EstadoPago.PENDIENTE)
+    estado_registro = Column(String(20), default=EstadoRegistro.ACTIVO)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     # [NUEVO] Control Documental y Proveedores
@@ -205,7 +217,7 @@ class RegistroPago(Base):
     id_importador = Column(Integer, ForeignKey("cat_importadores.id_importador"))
     id_gasto = Column(Integer, ForeignKey("registro_gastos.id_gasto"), nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    estado_registro = Column(String(20), default="ACTIVO")
+    estado_registro = Column(String(20), default=EstadoRegistro.ACTIVO)
     
     # Parches de Auditoría
     es_ajuste_sistema = Column(Boolean, default=False)
@@ -231,7 +243,7 @@ class CatRol(Base):
     id_rol = Column(Integer, primary_key=True, index=True)
     nombre = Column(String(50), unique=True, nullable=False)
     descripcion = Column(Text)
-    estado_registro = Column(String(20), default="ACTIVO")
+    estado_registro = Column(String(20), default=EstadoRegistro.ACTIVO)
     
     usuarios = relationship("Usuario", back_populates="rol")
 
@@ -286,16 +298,16 @@ class MaestroEliminado(AuditoriaMixin, Base):
     documento_transporte = Column(String(100))
     fecha_embarque = Column(Date)
     fecha_arribo = Column(Date, nullable=True)
-    status_llegada = Column(String(50), nullable=True, default="EN TRÁNSITO")
-    estado_levante = Column(String(50), nullable=True, default="SIN LEVANTE")
+    status_llegada = Column(String(50), nullable=True, default=StatusLlegada.EN_TRANSITO)
+    estado_levante = Column(String(50), nullable=True, default=EstadoLevante.SIN_LEVANTE)
     id_almacen = Column(Integer, nullable=True)
     fob_usd = Column(Numeric(15, 2))
     flete_usd = Column(Numeric(15, 2))
     cfr_usd = Column(Numeric(15, 2))
     venta_sucesiva = Column(String(50))
-    tipo_valor = Column(String(50), default="DEFINITIVO")
+    tipo_valor = Column(String(50), default=TipoValor.DEFINITIVO)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    estado_registro = Column(String(20), default="ACTIVO")
+    estado_registro = Column(String(20), default=EstadoRegistro.ACTIVO)
     version = Column(Integer, default=1, nullable=False)
 
 class DamEliminada(AuditoriaMixin, Base):
@@ -317,9 +329,9 @@ class GastoEliminado(AuditoriaMixin, Base):
     id_dam = Column(Integer, nullable=False)
     id_concepto = Column(Integer, nullable=False)
     monto_original = Column(Numeric(15, 2), nullable=False)
-    moneda = Column(String(3), default="USD", nullable=False)
-    estado_pago = Column(String(50), default="PENDIENTE")
-    estado_registro = Column(String(20), default="ACTIVO")
+    moneda = Column(String(3), default=Moneda.USD, nullable=False)
+    estado_pago = Column(String(50), default=EstadoPago.PENDIENTE)
+    estado_registro = Column(String(20), default=EstadoRegistro.ACTIVO)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     id_proveedor = Column(Integer)
     id_tipo_doc = Column(Integer)
@@ -341,7 +353,7 @@ class PagoEliminado(AuditoriaMixin, Base):
     id_importador = Column(Integer)
     id_gasto = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    estado_registro = Column(String(20), default="ACTIVO")
+    estado_registro = Column(String(20), default=EstadoRegistro.ACTIVO)
     es_ajuste_sistema = Column(Boolean, default=False)
     tipo_cambio_aplicado = Column(Numeric(15, 4))
     # [SPRINT 1] Columnas de Voucher

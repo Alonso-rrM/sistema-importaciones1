@@ -2,6 +2,16 @@ import datetime
 from sqlalchemy.orm import Session
 import json
 from models import MaestroImportacion, DetalleDam, AuditLog
+from constantes import (
+    AccionAuditoria,
+    CanalControl,
+    EstadoDam,
+    EstadoDocumentario,
+    EstadoPago,
+    EstadoRegistro,
+    StatusLlegada,
+    TipoValor,
+)
 
 def sincronizar_estado_maestro(db: Session, id_maestro: int):
     """
@@ -14,8 +24,8 @@ def sincronizar_estado_maestro(db: Session, id_maestro: int):
 
     dams = maestro.dams
     if not dams:
-        if maestro.estado_documentario != "SIN NUMERAR":
-            maestro.estado_documentario = "SIN NUMERAR"
+        if maestro.estado_documentario != EstadoDocumentario.SIN_NUMERAR:
+            maestro.estado_documentario = EstadoDocumentario.SIN_NUMERAR
             db.commit()
         return
 
@@ -26,17 +36,17 @@ def sincronizar_estado_maestro(db: Session, id_maestro: int):
 
     # Estados que físicamente permiten el retiro del contenedor
     estados_levante_fisico = [
-        "CON LEVANTE",
-        "CON LEVANTE (GARANTÍA ACTIVA)",
-        "EN REVISIÓN OMC (POST-LEVANTE)",
-        "PENDIENTE PAGO OMC",
-        "GARANTÍA CERRADA / LIQUIDADA"
+        EstadoDam.CON_LEVANTE,
+        EstadoDam.CON_LEVANTE_GARANTIA_ACTIVA,
+        EstadoDam.EN_REVISION_OMC,
+        EstadoDam.PENDIENTE_PAGO_OMC,
+        EstadoDam.GARANTIA_CERRADA
     ]
 
     for dam in dams:
         if dam.estado_dam in estados_levante_fisico:
             # Excepción: En DEFINITIVO, PENDIENTE PAGO OMC bloquea el levante físico
-            if maestro.tipo_valor == "DEFINITIVO" and dam.estado_dam == "PENDIENTE PAGO OMC":
+            if maestro.tipo_valor == TipoValor.DEFINITIVO and dam.estado_dam == EstadoDam.PENDIENTE_PAGO_OMC:
                 pass # No suma a dams_con_levante
             else:
                 dams_con_levante += 1
@@ -44,24 +54,24 @@ def sincronizar_estado_maestro(db: Session, id_maestro: int):
                     if not max_fecha_levante or dam.fecha_levante > max_fecha_levante:
                         max_fecha_levante = dam.fecha_levante
         
-        if dam.estado_dam in ["EN REVISIÓN OMC (POST-LEVANTE)", "PENDIENTE PAGO OMC"]:
+        if dam.estado_dam in [EstadoDam.EN_REVISION_OMC, EstadoDam.PENDIENTE_PAGO_OMC]:
             tiene_omc_pendiente = True
 
     nuevo_estado = maestro.estado_documentario
 
     # Matemática de Consolidación (Regla 0/N, Parcial/N, Total/N)
     if dams_con_levante == 0:
-        nuevo_estado = "EN PROCESO"
+        nuevo_estado = EstadoDocumentario.EN_PROCESO
     elif 0 < dams_con_levante < total_dams:
-        nuevo_estado = "ATE. PARCIAL"
+        nuevo_estado = EstadoDocumentario.ATENCION_PARCIAL
     elif dams_con_levante == total_dams:
-        if maestro.status_llegada == "EN ALMACÉN":
+        if maestro.status_llegada == StatusLlegada.EN_ALMACEN:
             if tiene_omc_pendiente:
-                nuevo_estado = "EN ALMACÉN (PEND. OMC)"
+                nuevo_estado = EstadoDocumentario.EN_ALMACEN_PENDIENTE_OMC
             else:
-                nuevo_estado = "ATE. TOTAL"
+                nuevo_estado = EstadoDocumentario.ATENCION_TOTAL
         else:
-            nuevo_estado = "CON LEVANTE (PEND. INGRESO)"
+            nuevo_estado = EstadoDocumentario.CON_LEVANTE_PENDIENTE_INGRESO
 
     # Actualización atómica del Maestro
     if maestro.estado_documentario != nuevo_estado:
@@ -84,19 +94,19 @@ def sincronizar_estado_maestro(db: Session, id_maestro: int):
 
 # Estados posteriores al pago de la proforma (no pueden sostenerse si la proforma ya no está pagada)
 ESTADOS_POST_PROFORMA = {
-    "PENDIENTE DE AFORO", "CON LEVANTE", "CON LEVANTE (GARANTÍA ACTIVA)", "OBSERVADA / NOTIFICADA",
-    "EN REVISIÓN", "EN REVISIÓN OMC (POST-LEVANTE)", "PENDIENTE PAGO OMC", "GARANTÍA CERRADA / LIQUIDADA",
+    EstadoDam.PENDIENTE_AFORO, EstadoDam.CON_LEVANTE, EstadoDam.CON_LEVANTE_GARANTIA_ACTIVA, EstadoDam.OBSERVADA,
+    EstadoDam.EN_REVISION, EstadoDam.EN_REVISION_OMC, EstadoDam.PENDIENTE_PAGO_OMC, EstadoDam.GARANTIA_CERRADA,
 }
 # Estados que el sistema concede automáticamente al pagarse la OMC
-ESTADOS_POR_PAGO_OMC = {"CON LEVANTE", "GARANTÍA CERRADA / LIQUIDADA"}
+ESTADOS_POR_PAGO_OMC = {EstadoDam.CON_LEVANTE, EstadoDam.GARANTIA_CERRADA}
 
 
 def resultado_automatico_proforma(dam) -> set:
     """Estados a los que llega una DAM SOLO por el pago de la proforma (sin diligencias manuales)."""
-    tipo_valor = dam.maestro.tipo_valor if dam.maestro else "DEFINITIVO"
-    if dam.canal_control == "VERDE":
-        return {"CON LEVANTE (GARANTÍA ACTIVA)" if tipo_valor == "GARANTIZADO" else "CON LEVANTE"}
-    return {"PENDIENTE DE AFORO"}
+    tipo_valor = dam.maestro.tipo_valor if dam.maestro else TipoValor.DEFINITIVO
+    if dam.canal_control == CanalControl.VERDE:
+        return {EstadoDam.CON_LEVANTE_GARANTIA_ACTIVA if tipo_valor == TipoValor.GARANTIZADO else EstadoDam.CON_LEVANTE}
+    return {EstadoDam.PENDIENTE_AFORO}
 
 
 def clasificar_gastos_dam(dam) -> dict:
@@ -106,7 +116,7 @@ def clasificar_gastos_dam(dam) -> dict:
     """
     grupos = {"tributos": [], "percepcion": [], "omc": []}
     for g in dam.gastos:
-        if g.estado_registro != "ACTIVO" or not g.concepto_rel:
+        if g.estado_registro != EstadoRegistro.ACTIVO or not g.concepto_rel:
             continue
         nombre = g.concepto_rel.nombre.upper()
         if "TRIBUTO" in nombre:
@@ -116,7 +126,7 @@ def clasificar_gastos_dam(dam) -> dict:
         elif "OMC" in nombre:
             grupos["omc"].append(g)
     def pagado(lista):
-        return bool(lista) and all(g.estado_pago == "PAGADO" for g in lista)
+        return bool(lista) and all(g.estado_pago == EstadoPago.PAGADO for g in lista)
 
     return {
         "tiene_proforma": bool(grupos["tributos"]) and bool(grupos["percepcion"]),
@@ -139,53 +149,53 @@ def evaluar_gatillos_gastos_dam(db: Session, id_dam: int):
     c = clasificar_gastos_dam(dam)
     estado_actual = dam.estado_dam
     nuevo_estado = estado_actual
-    tipo_valor = dam.maestro.tipo_valor if dam.maestro else "DEFINITIVO"
+    tipo_valor = dam.maestro.tipo_valor if dam.maestro else TipoValor.DEFINITIVO
     motivo_reversion = None
 
     # ===== REVERSIONES (tienen prioridad: primero se corrige lo que perdió sustento) =====
     # R1: La proforma dejó de estar pagada -> todo lo posterior al pago de la proforma se deshace
     if c["tiene_proforma"] and not c["proforma_pagada"] and estado_actual in ESTADOS_POST_PROFORMA:
-        nuevo_estado = "PENDIENTE PAGO PROFORMA"
+        nuevo_estado = EstadoDam.PENDIENTE_PAGO_PROFORMA
         dam.fecha_levante = None
         motivo_reversion = "El pago de la proforma (tributos/percepción) fue anulado o quedó incompleto."
     # R1b: Se eliminaron los gastos de la proforma -> vuelve al estado inicial
-    elif estado_actual == "PENDIENTE PAGO PROFORMA" and not c["tiene_proforma"]:
-        nuevo_estado = "NUMERADA / EN EVALUACIÓN"
+    elif estado_actual == EstadoDam.PENDIENTE_PAGO_PROFORMA and not c["tiene_proforma"]:
+        nuevo_estado = EstadoDam.NUMERADA
         motivo_reversion = "Ya no hay gastos de tributos y percepción registrados."
     # R2: La OMC dejó de estar pagada -> se deshace el levante/cierre que concedió su pago
     elif c["tiene_omc"] and not c["omc_pagado"] and estado_actual in ESTADOS_POR_PAGO_OMC:
-        nuevo_estado = "PENDIENTE PAGO OMC"
-        if tipo_valor != "GARANTIZADO":
+        nuevo_estado = EstadoDam.PENDIENTE_PAGO_OMC
+        if tipo_valor != TipoValor.GARANTIZADO:
             dam.fecha_levante = None  # En GARANTIZADO el levante con garantía previo sigue siendo válido
         motivo_reversion = "El pago de la OMC fue anulado o quedó incompleto."
 
     # ===== AVANCES =====
     # Gatillo 1: Proforma Registrada (AND estricto)
-    elif estado_actual == "NUMERADA / EN EVALUACIÓN":
+    elif estado_actual == EstadoDam.NUMERADA:
         if c["tiene_proforma"]:
-            nuevo_estado = "PENDIENTE PAGO PROFORMA"
+            nuevo_estado = EstadoDam.PENDIENTE_PAGO_PROFORMA
 
     # Gatillo 2: Pago de Proforma (Salto por Canal)
-    elif estado_actual == "PENDIENTE PAGO PROFORMA":
+    elif estado_actual == EstadoDam.PENDIENTE_PAGO_PROFORMA:
         if c["proforma_pagada"]:
-            if dam.canal_control == "VERDE":
-                nuevo_estado = "CON LEVANTE (GARANTÍA ACTIVA)" if tipo_valor == "GARANTIZADO" else "CON LEVANTE"
+            if dam.canal_control == CanalControl.VERDE:
+                nuevo_estado = EstadoDam.CON_LEVANTE_GARANTIA_ACTIVA if tipo_valor == TipoValor.GARANTIZADO else EstadoDam.CON_LEVANTE
                 dam.fecha_levante = dam.fecha_levante or datetime.date.today()
             else:
-                nuevo_estado = "PENDIENTE DE AFORO"
+                nuevo_estado = EstadoDam.PENDIENTE_AFORO
     
     # Gatillo 3: OMC Registrada en proceso
-    elif estado_actual in ["EN REVISIÓN", "EN REVISIÓN OMC (POST-LEVANTE)"]:
+    elif estado_actual in [EstadoDam.EN_REVISION, EstadoDam.EN_REVISION_OMC]:
         if c["tiene_omc"] and not c["omc_pagado"]:
-            nuevo_estado = "PENDIENTE PAGO OMC"
+            nuevo_estado = EstadoDam.PENDIENTE_PAGO_OMC
     
     # Gatillo 4: OMC Pagada en Tesorería
-    elif estado_actual == "PENDIENTE PAGO OMC":
+    elif estado_actual == EstadoDam.PENDIENTE_PAGO_OMC:
         if c["omc_pagado"]:
-            if tipo_valor == "GARANTIZADO":
-                nuevo_estado = "GARANTÍA CERRADA / LIQUIDADA"
+            if tipo_valor == TipoValor.GARANTIZADO:
+                nuevo_estado = EstadoDam.GARANTIA_CERRADA
             else:
-                nuevo_estado = "CON LEVANTE"
+                nuevo_estado = EstadoDam.CON_LEVANTE
                 dam.fecha_levante = dam.fecha_levante or datetime.date.today()
 
     if nuevo_estado != estado_actual:
@@ -195,7 +205,7 @@ def evaluar_gatillos_gastos_dam(db: Session, id_dam: int):
             db.add(AuditLog(
                 id_usuario=db.info.get("audit_usuario"),
                 endpoint=(db.info.get("audit_endpoint") or "(proceso interno)")[:255],
-                accion="REVERSION AUTOMATICA DAM",
+                accion=AccionAuditoria.REVERSION_AUTOMATICA_DAM,
                 ip_address=db.info.get("audit_ip"),
                 detalles=json.dumps({
                     "id_dam": dam.id_dam, "numero_de_dam": dam.numero_de_dam,

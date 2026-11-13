@@ -19,6 +19,18 @@ from services.audit import registrar_auditoria, registrar_auditoria_sync
 from services.state_machine import evaluar_gatillos_gastos_dam, ESTADOS_POST_PROFORMA, resultado_automatico_proforma
 from services.excel_exporter import generar_excel_gastos
 from domain.finanzas import calcular_amortizacion_cruzada
+from constantes import (
+    AccionAuditoria,
+    CategoriaProveedor,
+    EstadoDocumentario,
+    EstadoPago,
+    EstadoRegistro,
+    Moneda,
+    ROLES_FINANZAS,
+    ROLES_OPERACIONES,
+    ROLES_OPERACIONES_Y_FINANZAS,
+    Rol,
+)
 
 router = APIRouter(tags=["Finanzas"])
 
@@ -39,9 +51,9 @@ def convertir_moneda(monto: Decimal, de: str, a: str, tc: Decimal) -> Decimal:
     """Convierte un monto entre USD y PEN con redondeo SUNAT (ROUND_HALF_UP)."""
     if de == a:
         resultado = monto
-    elif de == "USD" and a == "PEN":
+    elif de == Moneda.USD and a == Moneda.PEN:
         resultado = monto * tc
-    elif de == "PEN" and a == "USD":
+    elif de == Moneda.PEN and a == Moneda.USD:
         resultado = monto / tc
     else:
         raise HTTPException(status_code=400, detail=f"Conversión de moneda no soportada: {de} → {a}.")
@@ -67,7 +79,7 @@ def validar_voucher_unico(db: Session, banco_id: int, numero_operacion: str, exc
     q = db.query(models.VoucherBancario).filter(
         models.VoucherBancario.banco_id == banco_id,
         func.upper(func.trim(models.VoucherBancario.numero_operacion)) == (numero_operacion or "").strip().upper(),
-        models.VoucherBancario.estado_registro == "ACTIVO",
+        models.VoucherBancario.estado_registro == EstadoRegistro.ACTIVO,
     )
     if excluir_id is not None:
         q = q.filter(models.VoucherBancario.id_voucher != excluir_id)
@@ -79,7 +91,7 @@ def expediente_cerrado(gasto_o_dam) -> bool:
     """True si el contenedor asociado está en ATENCIÓN TOTAL."""
     dam_obj = getattr(gasto_o_dam, "dam", None) or gasto_o_dam
     maestro = getattr(dam_obj, "maestro", None)
-    return bool(maestro and maestro.estado_documentario == "ATE. TOTAL")
+    return bool(maestro and maestro.estado_documentario == EstadoDocumentario.ATENCION_TOTAL)
 
 
 def validar_tipo_cambio(db: Session, tc: Decimal, fecha: date):
@@ -108,7 +120,7 @@ async def crear_gasto(
     request: Request,
     gasto: schemas.RegistroGastoCreate, 
     db: Session = Depends(get_db), 
-    current_user: models.Usuario = Depends(RoleChecker([1, 2])) # 1: Admin, 2: Logística
+    current_user: models.Usuario = Depends(RoleChecker(ROLES_OPERACIONES)) # 1: Admin, 2: Logística
 ):
     # 1. Consultar información del Proveedor
     proveedor = db.query(models.CatProveedor).filter(models.CatProveedor.id_proveedor == gasto.id_proveedor).first()
@@ -117,11 +129,11 @@ async def crear_gasto(
 
     # Candado Asimétrico de Cierre: Solo se bloquea si el expediente culminó todo su ciclo físico en almacén
     dam_padre = db.query(models.DetalleDam).filter(models.DetalleDam.id_dam == gasto.id_dam).first()
-    if dam_padre and dam_padre.maestro and dam_padre.maestro.estado_documentario == "ATE. TOTAL" and current_user.id_rol != 1:
+    if dam_padre and dam_padre.maestro and dam_padre.maestro.estado_documentario == EstadoDocumentario.ATENCION_TOTAL and current_user.id_rol != Rol.SUPERADMIN:
         raise HTTPException(status_code=403, detail="Operación Denegada: El expediente se encuentra en ATENCIÓN TOTAL. No se pueden agregar nuevos gastos a una operación concluida.")
 
     # 2. Normalización Estricta del Número de Documento
-    if proveedor.categoria != "ESTADO_O_TRIBUTO" and gasto.numero_documento and "-" in gasto.numero_documento:
+    if proveedor.categoria != CategoriaProveedor.ESTADO_O_TRIBUTO and gasto.numero_documento and "-" in gasto.numero_documento:
         partes = gasto.numero_documento.split("-", 1)
         if len(partes) == 2:
             serie = partes[0]
@@ -134,7 +146,7 @@ async def crear_gasto(
             models.RegistroGasto.id_proveedor == gasto.id_proveedor,
             models.RegistroGasto.id_tipo_doc == gasto.id_tipo_doc,
             models.RegistroGasto.numero_documento == gasto.numero_documento,
-            models.RegistroGasto.estado_registro == "ACTIVO"
+            models.RegistroGasto.estado_registro == EstadoRegistro.ACTIVO
         ).first()
         
         if gasto_duplicado:
@@ -154,7 +166,7 @@ async def crear_gasto(
             db=db,
             id_usuario=current_user.id_usuario,
             endpoint=request.url.path,
-            accion="CREACION GASTO",
+            accion=AccionAuditoria.CREACION_GASTO,
             detalles=gasto.model_dump_json(), # Pydantic V2 convierte el payload a string JSON
             ip_address=request.client.host if request.client else "IP Desconocida"
         )
@@ -171,23 +183,23 @@ async def crear_gasto(
         raise error_interno("Error al crear gasto", e, 400)
 
 @router.put("/gastos/{id_gasto}", response_model=schemas.RegistroGasto)
-def actualizar_gasto(id_gasto: int, gasto_editado: schemas.RegistroGastoUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1, 2, 3]))):  # 1: Admin, 2: Logística, 3: Tesorería (solo observaciones)
+def actualizar_gasto(id_gasto: int, gasto_editado: schemas.RegistroGastoUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_OPERACIONES_Y_FINANZAS))):  # 1: Admin, 2: Logística, 3: Tesorería (solo observaciones)
     db_gasto = db.query(models.RegistroGasto).filter(models.RegistroGasto.id_gasto == id_gasto).first()
     if not db_gasto:
         raise HTTPException(status_code=404, detail="Gasto no encontrado")
 
     update_data = gasto_editado.model_dump(exclude_unset=True)
 
-    if current_user.id_rol == 3 and set(update_data) - {"observaciones"}:
+    if current_user.id_rol == Rol.FINANZAS and set(update_data) - {"observaciones"}:
         raise HTTPException(status_code=403, detail="Tesorería solo puede editar las observaciones de un gasto.")
 
     # Candado ATE. TOTAL
     maestro_gasto = db_gasto.dam.maestro if db_gasto.dam else None
-    if maestro_gasto and maestro_gasto.estado_documentario == "ATE. TOTAL" and current_user.id_rol != 1:
+    if maestro_gasto and maestro_gasto.estado_documentario == EstadoDocumentario.ATENCION_TOTAL and current_user.id_rol != Rol.SUPERADMIN:
         raise HTTPException(status_code=403, detail="Operación Denegada: El expediente se encuentra en ATENCIÓN TOTAL.")
 
     # Candado de Auditoría Financiera: con pagos aplicados (PARCIAL o PAGADO), solo se permite actualizar observaciones
-    if db_gasto.estado_pago in ("PAGADO", "PARCIAL"):
+    if db_gasto.estado_pago in (EstadoPago.PAGADO, EstadoPago.PARCIAL):
         campos_protegidos = ["id_dam", "id_concepto", "id_proveedor", "id_tipo_doc", "numero_documento", "fecha_vencimiento", "monto_original", "moneda"]
         cambio_protegido = False
         for campo in campos_protegidos:
@@ -240,7 +252,7 @@ def listar_gastos(
         .outerjoin(models.RegistroGasto.proveedor_rel)
     )
 
-    filtros = [models.RegistroGasto.estado_registro == "ACTIVO"]
+    filtros = [models.RegistroGasto.estado_registro == EstadoRegistro.ACTIVO]
     if estado_pago:
         if "," in estado_pago:
             estados = [e.strip() for e in estado_pago.split(",")]
@@ -265,14 +277,14 @@ def listar_gastos(
         if vencimiento == "VENCIDOS":
             filtros.append(
                 (models.RegistroGasto.fecha_vencimiento < hoy) &
-                (models.RegistroGasto.estado_pago != "PAGADO")
+                (models.RegistroGasto.estado_pago != EstadoPago.PAGADO)
             )
         elif vencimiento == "POR_VENCER_7D":
             limite_7d = hoy + timedelta(days=7)
             filtros.append(
                 (models.RegistroGasto.fecha_vencimiento >= hoy) &
                 (models.RegistroGasto.fecha_vencimiento <= limite_7d) &
-                (models.RegistroGasto.estado_pago != "PAGADO")
+                (models.RegistroGasto.estado_pago != EstadoPago.PAGADO)
             )
 
     if search:
@@ -316,7 +328,7 @@ def listar_gastos(
         total_pagado = Decimal("0.00")
         pagos_lista = []
         for p in g.pagos:
-            if p.estado_registro == "ACTIVO":
+            if p.estado_registro == EstadoRegistro.ACTIVO:
                 importe_db = Decimal(str(p.importe))
                 tc_db = Decimal(str(p.tipo_cambio_aplicado or p.tipo_cambio or "1.00"))
                 if tc_db <= Decimal("0.00"):
@@ -406,7 +418,7 @@ def exportar_gastos_excel(
         .outerjoin(models.RegistroGasto.tipo_doc_rel)
     )
 
-    filtros = [models.RegistroGasto.estado_registro == "ACTIVO"]
+    filtros = [models.RegistroGasto.estado_registro == EstadoRegistro.ACTIVO]
     if estado_pago:
         if "," in estado_pago:
             estados = [e.strip() for e in estado_pago.split(",")]
@@ -431,14 +443,14 @@ def exportar_gastos_excel(
         if vencimiento == "VENCIDOS":
             filtros.append(
                 (models.RegistroGasto.fecha_vencimiento < hoy) &
-                (models.RegistroGasto.estado_pago != "PAGADO")
+                (models.RegistroGasto.estado_pago != EstadoPago.PAGADO)
             )
         elif vencimiento == "POR_VENCER_7D":
             limite_7d = hoy + timedelta(days=7)
             filtros.append(
                 (models.RegistroGasto.fecha_vencimiento >= hoy) &
                 (models.RegistroGasto.fecha_vencimiento <= limite_7d) &
-                (models.RegistroGasto.estado_pago != "PAGADO")
+                (models.RegistroGasto.estado_pago != EstadoPago.PAGADO)
             )
 
     if search:
@@ -495,7 +507,7 @@ def obtener_pagos_de_gasto(
         db.query(models.RegistroPago)
         .filter(
             models.RegistroPago.id_gasto == id_gasto,
-            models.RegistroPago.estado_registro == "ACTIVO"
+            models.RegistroPago.estado_registro == EstadoRegistro.ACTIVO
         )
         .options(
             joinedload(models.RegistroPago.voucher_rel).joinedload(models.VoucherBancario.banco_rel)
@@ -529,20 +541,20 @@ def eliminar_gasto(
     req: schemas.EliminacionRequest, 
     forzar_reversion_pagos: bool = Query(False),
     db: Session = Depends(get_db), 
-    current_user: models.Usuario = Depends(RoleChecker([1, 2])) # 1: Admin, 2: Logística
+    current_user: models.Usuario = Depends(RoleChecker(ROLES_OPERACIONES)) # 1: Admin, 2: Logística
 ):
     gasto = db.query(models.RegistroGasto).filter(models.RegistroGasto.id_gasto == id_gasto).first()
     if not gasto:
         raise HTTPException(status_code=404, detail="Gasto no encontrado")
 
-    if expediente_cerrado(gasto) and current_user.id_rol != 1:
+    if expediente_cerrado(gasto) and current_user.id_rol != Rol.SUPERADMIN:
         raise HTTPException(status_code=403, detail="Operación Denegada: El expediente se encuentra en ATENCIÓN TOTAL. Solicite desbloqueo al Administrador.")
 
     pagos_asociados = (
         db.query(models.RegistroPago)
         .filter(
             models.RegistroPago.id_gasto == id_gasto,
-            models.RegistroPago.estado_registro == "ACTIVO"
+            models.RegistroPago.estado_registro == EstadoRegistro.ACTIVO
         )
         .options(
             joinedload(models.RegistroPago.voucher_rel).joinedload(models.VoucherBancario.banco_rel),
@@ -561,7 +573,7 @@ def eliminar_gasto(
                 detail=f"❌ Bloqueo: El gasto tiene {len(pagos_asociados)} pago(s) asociado(s) por un total de {total_amortizado} {gasto.moneda}. Puede eliminarlos individualmente o confirmar la eliminación con reversión de pagos."
             )
         # Segregación de funciones: revertir pagos es potestad de Tesorería; Logística no puede deshacer egresos.
-        if current_user.id_rol != 1:
+        if current_user.id_rol != Rol.SUPERADMIN:
             raise HTTPException(
                 status_code=403,
                 detail="Segregación de funciones: solo el Administrador puede eliminar un gasto revirtiendo sus pagos. Solicite a Tesorería anular primero los pagos."
@@ -627,7 +639,7 @@ def eliminar_gasto(
 # ==========================================
 
 @router.post("/vouchers/", response_model=schemas.VoucherBancarioResponse)
-def crear_voucher(voucher: schemas.VoucherBancarioCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1, 3]))): # 1: Admin, 3: Tesorería
+def crear_voucher(voucher: schemas.VoucherBancarioCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_FINANZAS))): # 1: Admin, 3: Tesorería
     validar_voucher_unico(db, voucher.banco_id, voucher.numero_operacion)
     if voucher.fecha_transferencia > date.today():
         raise HTTPException(status_code=400, detail="La fecha de transferencia no puede ser futura.")
@@ -656,7 +668,7 @@ def listar_vouchers(
     db: Session = Depends(get_db), 
     current_user: models.Usuario = Depends(get_current_user)
 ):
-    filtros = [models.VoucherBancario.estado_registro == "ACTIVO"]
+    filtros = [models.VoucherBancario.estado_registro == EstadoRegistro.ACTIVO]
     if saldo_mayor_cero:
         filtros.append(models.VoucherBancario.saldo_disponible > 0)
     if saldo_cero:
@@ -691,7 +703,7 @@ def actualizar_voucher(
     id_voucher: int, 
     voucher_editado: schemas.VoucherBancarioUpdate,
     db: Session = Depends(get_db),
-    current_user: models.Usuario = Depends(RoleChecker([1, 3]))  # 1: Admin, 3: Tesorería
+    current_user: models.Usuario = Depends(RoleChecker(ROLES_FINANZAS))  # 1: Admin, 3: Tesorería
 ):
     voucher = db.query(models.VoucherBancario).filter(models.VoucherBancario.id_voucher == id_voucher).first()
     if not voucher:
@@ -755,7 +767,7 @@ def actualizar_voucher(
         )
 
 @router.delete("/vouchers/{id_voucher}")
-def eliminar_voucher(id_voucher: int, req: schemas.EliminacionRequest, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1, 3]))): # 1: Admin, 3: Tesorería
+def eliminar_voucher(id_voucher: int, req: schemas.EliminacionRequest, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_FINANZAS))): # 1: Admin, 3: Tesorería
     voucher = db.query(models.VoucherBancario).filter(models.VoucherBancario.id_voucher == id_voucher).first()
     if not voucher:
         raise HTTPException(status_code=404, detail="Voucher no encontrado")
@@ -792,7 +804,7 @@ async def registrar_pago(
     request: Request,
     pago: schemas.RegistroPagoCreate, 
     db: Session = Depends(get_db), 
-    current_user: models.Usuario = Depends(RoleChecker([1, 3])) # 1: Admin, 3: Tesorería
+    current_user: models.Usuario = Depends(RoleChecker(ROLES_FINANZAS)) # 1: Admin, 3: Tesorería
 ):
     # 0. Verificación de Idempotencia (Evita cobros dobles).
     # La clave se aísla por usuario: un tercero no puede "secuestrar" ni anular el pago de otro reutilizando su clave.
@@ -819,10 +831,10 @@ async def registrar_pago(
         db.rollback()
         raise HTTPException(status_code=409, detail="El gasto está siendo liquidado por otro usuario y no se liberó a tiempo. Intente nuevamente.")
 
-    if not gasto or gasto.estado_registro != "ACTIVO":
+    if not gasto or gasto.estado_registro != EstadoRegistro.ACTIVO:
         raise HTTPException(status_code=404, detail="El gasto asociado no existe.")
 
-    if gasto.estado_pago == "PAGADO":
+    if gasto.estado_pago == EstadoPago.PAGADO:
         raise HTTPException(status_code=400, detail="Operación rechazada: El gasto ya se encuentra totalmente PAGADO.")
 
     id_importador_gasto = gasto.dam.maestro.id_importador if (gasto.dam and gasto.dam.maestro) else None
@@ -836,7 +848,7 @@ async def registrar_pago(
         db.rollback()
         raise HTTPException(status_code=409, detail="El voucher está siendo usado por otro pago y no se liberó a tiempo. Intente nuevamente.")
 
-    if not voucher or voucher.estado_registro != "ACTIVO":
+    if not voucher or voucher.estado_registro != EstadoRegistro.ACTIVO:
         raise HTTPException(status_code=404, detail="El voucher especificado no existe.")
 
     if voucher.id_importador != id_importador_gasto:
@@ -888,7 +900,7 @@ async def registrar_pago(
         "importe": Decimal(str(pago.importe)),
         "tipo_cambio": tc_aplicado,
         "tipo_cambio_aplicado": tc_aplicado,  # Numeric(15,4): conserva los 4 decimales para los recálculos
-        "estado_pago": "PAGADO",
+        "estado_pago": EstadoPago.PAGADO,
         "fecha_pago": fecha_pago,
         "es_ajuste_sistema": False,
         "pago_moneda_cruzada": pago.pago_moneda_cruzada,
@@ -904,7 +916,7 @@ async def registrar_pago(
     # 3. Validación Financiera Estricta con Cuantización SUNAT (ROUND_HALF_UP - Dominio Puro)
     pagos_existentes = db.query(models.RegistroPago).filter(
         models.RegistroPago.id_gasto == pago_dict["id_gasto"],
-        models.RegistroPago.estado_registro == "ACTIVO"
+        models.RegistroPago.estado_registro == EstadoRegistro.ACTIVO
     ).all()
 
     total_ya_pagado = Decimal("0.00")
@@ -945,7 +957,7 @@ async def registrar_pago(
 
         # Cerrar el gasto si el pago es exacto (o se pasa por centavos permitidos)
         if saldo_pendiente_nuevo <= Decimal("0.00"):
-            gasto.estado_pago = "PAGADO"
+            gasto.estado_pago = EstadoPago.PAGADO
             
         # 5. Cierre Automático ZD (Ajuste Ficticio por centavos restantes reales)
         elif Decimal("0.00") < saldo_pendiente_nuevo <= margen_tolerancia:
@@ -956,7 +968,7 @@ async def registrar_pago(
                 importe=saldo_pendiente_nuevo,
                 tipo_cambio=Decimal("1.00"),
                 tipo_cambio_aplicado=Decimal("1.00"),
-                estado_pago="PAGADO",
+                estado_pago=EstadoPago.PAGADO,
                 fecha_pago=date.today(),
                 id_importador=pago_dict.get("id_importador"),
                 id_gasto=gasto.id_gasto,
@@ -967,9 +979,9 @@ async def registrar_pago(
                 monto_moneda_origen=saldo_pendiente_nuevo
             )
             db.add(pago_ajuste)
-            gasto.estado_pago = "PAGADO"
+            gasto.estado_pago = EstadoPago.PAGADO
         else:
-            gasto.estado_pago = "PARCIAL"
+            gasto.estado_pago = EstadoPago.PARCIAL
 
         # db.flush() asigna los IDs autoincrementales sin cerrar la transacción física
         db.flush()
@@ -979,7 +991,7 @@ async def registrar_pago(
             db=db,
             id_usuario=current_user.id_usuario,
             endpoint=request.url.path,
-            accion="CREACION PAGO",
+            accion=AccionAuditoria.CREACION_PAGO,
             detalles=pago.model_dump_json(), # Pydantic V2
             ip_address=request.client.host if request.client else "IP Desconocida"
         )
@@ -1027,7 +1039,7 @@ def actualizar_pago(
     pago_editado: schemas.RegistroPagoUpdate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: models.Usuario = Depends(RoleChecker([1, 3]))  # 1: Admin, 3: Tesorería
+    current_user: models.Usuario = Depends(RoleChecker(ROLES_FINANZAS))  # 1: Admin, 3: Tesorería
 ):
     """
     Candado de Auditoría Financiera: el schema solo admite 'fecha_pago' (extra='forbid').
@@ -1048,7 +1060,7 @@ def actualizar_pago(
             db=db,
             id_usuario=current_user.id_usuario,
             endpoint=request.url.path,
-            accion="EDICION FECHA PAGO",
+            accion=AccionAuditoria.EDICION_FECHA_PAGO,
             detalles=json.dumps({"id_pago": id_pago, "fecha_anterior": str(fecha_anterior), "fecha_nueva": str(db_pago.fecha_pago)}),
             ip_address=request.client.host if request.client else "IP Desconocida"
         )
@@ -1067,7 +1079,7 @@ def obtener_pagos_de_voucher(
         db.query(models.RegistroPago)
         .filter(
             models.RegistroPago.voucher_id == id_voucher,
-            models.RegistroPago.estado_registro == "ACTIVO"
+            models.RegistroPago.estado_registro == EstadoRegistro.ACTIVO
         )
         .options(
             joinedload(models.RegistroPago.dam),
@@ -1129,7 +1141,7 @@ def listar_pagos(
         .outerjoin(models.RegistroPago.gasto_rel)
     )
 
-    filtros = [models.RegistroPago.estado_registro == "ACTIVO"]
+    filtros = [models.RegistroPago.estado_registro == EstadoRegistro.ACTIVO]
     if search:
         termino = f"%{search.strip()}%"
         filtros.append(
@@ -1203,12 +1215,12 @@ def listar_pagos(
     }
 
 @router.delete("/pagos/{id_pago}")
-def eliminar_pago(id_pago: int, req: schemas.EliminacionRequest, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker([1, 3]))): # 1: Admin, 3: Tesorería
+def eliminar_pago(id_pago: int, req: schemas.EliminacionRequest, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_FINANZAS))): # 1: Admin, 3: Tesorería
     pago = db.query(models.RegistroPago).filter(models.RegistroPago.id_pago == id_pago).first()
     if not pago:
         raise HTTPException(status_code=404, detail="Pago no encontrado")
 
-    if pago.dam and expediente_cerrado(pago.dam) and current_user.id_rol != 1:
+    if pago.dam and expediente_cerrado(pago.dam) and current_user.id_rol != Rol.SUPERADMIN:
         raise HTTPException(status_code=403, detail="Operación Denegada: El expediente se encuentra en ATENCIÓN TOTAL. Solicite desbloqueo al Administrador.")
 
     # Anular un pago de PROFORMA revierte la DAM a PENDIENTE PAGO PROFORMA. Si la DAM ya avanzó por
@@ -1218,7 +1230,7 @@ def eliminar_pago(id_pago: int, req: schemas.EliminacionRequest, db: Session = D
     concepto_pago = (pago.concepto_rel.nombre or "").upper() if pago.concepto_rel else ""
     es_pago_proforma = "TRIBUTO" in concepto_pago or "PERCEPCI" in concepto_pago
     if (
-        es_pago_proforma and dam_pago and current_user.id_rol != 1
+        es_pago_proforma and dam_pago and current_user.id_rol != Rol.SUPERADMIN
         and dam_pago.estado_dam in ESTADOS_POST_PROFORMA
         and dam_pago.estado_dam not in resultado_automatico_proforma(dam_pago)
     ):
@@ -1300,22 +1312,22 @@ def eliminar_pago(id_pago: int, req: schemas.EliminacionRequest, db: Session = D
                         db.flush() 
                 
                 # B. Cálculo de saldos dinámicos según la moneda del gasto
-                if gasto.moneda == "USD":
+                if gasto.moneda == Moneda.USD:
                     case_expr = case(
-                        (models.RegistroPago.moneda == "USD", models.RegistroPago.importe),
-                        (models.RegistroPago.moneda == "PEN", models.RegistroPago.importe / func.coalesce(models.RegistroPago.tipo_cambio_aplicado, models.RegistroPago.tipo_cambio, 1)),
+                        (models.RegistroPago.moneda == Moneda.USD, models.RegistroPago.importe),
+                        (models.RegistroPago.moneda == Moneda.PEN, models.RegistroPago.importe / func.coalesce(models.RegistroPago.tipo_cambio_aplicado, models.RegistroPago.tipo_cambio, 1)),
                         else_=0
                     )
                 else: # gasto.moneda == "PEN"
                     case_expr = case(
-                        (models.RegistroPago.moneda == "PEN", models.RegistroPago.importe),
-                        (models.RegistroPago.moneda == "USD", models.RegistroPago.importe * func.coalesce(models.RegistroPago.tipo_cambio_aplicado, models.RegistroPago.tipo_cambio, 1)),
+                        (models.RegistroPago.moneda == Moneda.PEN, models.RegistroPago.importe),
+                        (models.RegistroPago.moneda == Moneda.USD, models.RegistroPago.importe * func.coalesce(models.RegistroPago.tipo_cambio_aplicado, models.RegistroPago.tipo_cambio, 1)),
                         else_=0
                     )
 
                 total_pagado_base = db.query(func.sum(case_expr)).filter(
                     models.RegistroPago.id_gasto == id_gasto_afectado,
-                    models.RegistroPago.estado_registro == "ACTIVO"
+                    models.RegistroPago.estado_registro == EstadoRegistro.ACTIVO
                 ).scalar()
                 
                 total_pagado_base = (Decimal(str(total_pagado_base)) if total_pagado_base else Decimal("0.00")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
@@ -1326,11 +1338,11 @@ def eliminar_pago(id_pago: int, req: schemas.EliminacionRequest, db: Session = D
                 
                 # C. Asignación Dinámica del Estado
                 if saldo_pendiente >= monto_gasto_base:
-                    gasto.estado_pago = "PENDIENTE"
+                    gasto.estado_pago = EstadoPago.PENDIENTE
                 elif saldo_pendiente > margen_tolerancia:
-                    gasto.estado_pago = "PARCIAL"
+                    gasto.estado_pago = EstadoPago.PARCIAL
                 else:
-                    gasto.estado_pago = "PAGADO"
+                    gasto.estado_pago = EstadoPago.PAGADO
                     
         db.commit()
 
@@ -1383,7 +1395,7 @@ def registrar_tipo_cambio(
     datos: schemas.HistorialTipoCambioCreate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: models.Usuario = Depends(RoleChecker([1, 3]))  # 1: Admin, 3: Tesorería
+    current_user: models.Usuario = Depends(RoleChecker(ROLES_FINANZAS))  # 1: Admin, 3: Tesorería
 ):
     """Registra (o corrige) el TC oficial SUNAT de una fecha. Cada cambio queda en la bitácora."""
     compra = Decimal(str(datos.precio_compra)).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
@@ -1409,7 +1421,7 @@ def registrar_tipo_cambio(
         db=db,
         id_usuario=current_user.id_usuario,
         endpoint=request.url.path,
-        accion="CORRECCION TIPO CAMBIO" if existente else "REGISTRO TIPO CAMBIO",
+        accion=AccionAuditoria.CORRECCION_TIPO_CAMBIO if existente else AccionAuditoria.REGISTRO_TIPO_CAMBIO,
         detalles=json.dumps({"fecha": str(datos.fecha), "anterior": anterior, "nuevo": {"compra": str(compra), "venta": str(venta)}}),
         ip_address=request.client.host if request.client else "IP Desconocida"
     )

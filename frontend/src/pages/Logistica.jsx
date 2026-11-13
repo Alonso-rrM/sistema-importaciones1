@@ -280,23 +280,6 @@ const Logistica = () => {
     } finally { setIsGuardando(false); }
   };
 
-  // Micro-acción: Toggle certificación de aforo físico en DAM
-  // PENDIENTE: esta acción no está conectada a ningún botón. Decidir si se conecta o se elimina.
-  // eslint-disable-next-line no-unused-vars
-  const handleToggleAforo = async (e, dam) => {
-    e.stopPropagation();
-    if (userRole !== 1 && userRole !== 2) return alert("Solo Administradores o personal de Logística pueden certificar el Aforo Físico.");
-    const nuevoEstado = !dam.aforo_realizado;
-    if (!window.confirm(`¿Certificar aforo físico de la DAM ${dam.numero_de_dam} como ${nuevoEstado ? 'REALIZADO' : 'PENDIENTE'}?`)) return;
-    try {
-      await api.put(`/dams/${dam.id_dam}`, { aforo_realizado: nuevoEstado });
-      cargarSubRegistros(selectedId, formData.numero_factura);
-      cargarMaestros();
-    } catch (err) {
-      alert(`Error al actualizar aforo: ${err.response?.data?.detail || 'Error desconocido'}`);
-    }
-  };
-
   // Creación rápida inline: DAM
   const handleCrearDamInline = async (e) => {
     e.preventDefault();
