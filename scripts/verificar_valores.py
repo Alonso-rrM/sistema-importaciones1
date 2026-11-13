@@ -26,7 +26,10 @@ import constantes as C
 
 # tabla -> {columna: (catálogo, admite_vacío)}
 REGLAS = {
-    "cat_conceptos_pagos": {"tipo_gasto": (C.TipoGasto, False), "estado_registro": (C.EstadoRegistro, True)},
+    "cat_conceptos_pagos": {
+        "tipo_gasto": (C.TipoGasto, False), "clase_aduanera": (C.ClaseAduanera, False),
+        "estado_registro": (C.EstadoRegistro, True),
+    },
     "cat_proveedores": {"categoria": (C.CategoriaProveedor, True), "estado_registro": (C.EstadoRegistro, True)},
     "cat_almacenes": {"estado_registro": (C.EstadoRegistro, True)},
     "cat_bancos": {"estado_registro": (C.EstadoRegistro, True)},

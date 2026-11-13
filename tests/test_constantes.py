@@ -36,6 +36,7 @@ VALORES_ESPERADOS = {
         "PENDIENTE PAGO OMC", "GARANTÍA CERRADA / LIQUIDADA",
     ],
     "CategoriaProveedor": ["NACIONAL", "INTERNACIONAL", "ESTADO_O_TRIBUTO"],
+    "ClaseAduanera": ["NINGUNA", "TRIBUTO", "PERCEPCION", "OMC"],
     "TipoGasto": ["FIJO_DESPACHO", "POST_LEVANTE", "EXTRAORDINARIO"],
     "AccionAuditoria": [
         "CREACION GASTO", "CREACION PAGO", "EDICION FECHA PAGO", "REGISTRO TIPO CAMBIO", "CORRECCION TIPO CAMBIO",
@@ -147,6 +148,7 @@ def test_las_constantes_del_frontend_son_identicas_a_las_del_backend():
         "TIPO_VALOR": C.TipoValor, "ESTADO_DOCUMENTARIO": C.EstadoDocumentario, "ESTADO_LEVANTE": C.EstadoLevante,
         "STATUS_LLEGADA": C.StatusLlegada, "CANAL_CONTROL": C.CanalControl, "ESTADO_DAM": C.EstadoDam,
         "CATEGORIA_PROVEEDOR": C.CategoriaProveedor, "TIPO_GASTO": C.TipoGasto,
+        "CLASE_ADUANERA": C.ClaseAduanera,
     }
     frontend = _constantes_frontend()
     assert set(frontend) == set(equivalencias)

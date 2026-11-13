@@ -86,7 +86,7 @@ imp = models.CatImportador(nombre="IMP A", ruc="20000000001"); imp2 = models.Cat
 prov = models.CatProveedor(nombre="SUNAT", categoria="ESTADO_O_TRIBUTO")
 banco = models.CatBanco(nombre="BCP")
 doc = models.CatalogoDocumentoPago(nombre_documento="FACTURA", multiplicador_financiero=1)
-c_trib = models.CatConceptoPago(nombre="TRIBUTOS"); c_perc = models.CatConceptoPago(nombre="PERCEPCION"); c_otro = models.CatConceptoPago(nombre="FLETE LOCAL")
+c_trib = models.CatConceptoPago(nombre="TRIBUTOS", clase_aduanera="TRIBUTO"); c_perc = models.CatConceptoPago(nombre="PERCEPCION", clase_aduanera="PERCEPCION"); c_otro = models.CatConceptoPago(nombre="FLETE LOCAL")
 db.add_all([imp, imp2, prov, banco, doc, c_trib, c_perc, c_otro]); db.commit()
 
 def tok(n):
@@ -472,7 +472,7 @@ _lim.enabled = True
 print("\n=========== G) REVERSIÓN AUTOMÁTICA DE LEVANTE (caso GF-26522 / GF-26222) ===========")
 _c_omc = db.query(models.CatConceptoPago).filter_by(nombre="OMC").first()
 if not _c_omc:
-    _c_omc = models.CatConceptoPago(nombre="OMC"); db.add(_c_omc); db.commit()
+    _c_omc = models.CatConceptoPago(nombre="OMC", clase_aduanera="OMC"); db.add(_c_omc); db.commit()
 
 def maestro_estado(idm):
     db.expire_all(); mm = db.get(models.MaestroImportacion, idm); return mm.estado_documentario, mm.fecha_levante_maestro
@@ -534,6 +534,87 @@ v4 = mk_voucher(21, num="OP-DOBLE"); pagar2(ta, v4["id_voucher"], 10); pagar2(pp
 e_parcial = dam(d4).estado_dam
 pagar2(tb, v4["id_voucher"], 10)
 chk("G9", "Dos gastos de tributos: con uno solo pagado NO hay levante; con ambos sí", e_parcial == "PENDIENTE PAGO PROFORMA" and dam(d4).estado_dam == "CON LEVANTE", f"1 pagado={e_parcial} / 2 pagados={dam(d4).estado_dam}")
+
+
+# ==========================================
+# H) CLASE ADUANERA DEL CONCEPTO (el levante ya no depende del NOMBRE)
+# ==========================================
+print("\n=========== H) CLASE ADUANERA DEL CONCEPTO ===========")
+
+def concepto(idc):
+    db.expire_all(); return db.get(models.CatConceptoPago, idc)
+
+def mk_concepto(nombre, clase=None, who="admin"):
+    body = {"nombre": nombre}
+    if clase is not None:
+        body["clase_aduanera"] = clase
+    return c.post("/conceptos/", json=body, headers=H[who])
+
+# H1: al crear sin indicar la clase, el servidor la propone según el nombre (igual que antes de la migración)
+r1 = mk_concepto("TRIBUTOS ADUANEROS H1"); r2 = mk_concepto("Percepción IGV H1"); r3 = mk_concepto("AJUSTE OMC H1"); r4 = mk_concepto("ALMACENAJE H1")
+clases_h1 = [x.json().get("clase_aduanera") for x in (r1, r2, r3, r4)]
+chk("H1", "Concepto creado sin clase: se propone según el nombre", clases_h1 == ["TRIBUTO", "PERCEPCION", "OMC", "NINGUNA"], f"{clases_h1}")
+
+# H2: la clase enviada manda sobre el nombre, y un valor inválido se rechaza
+r_ok = mk_concepto("DERECHOS SUNAT H2", "TRIBUTO"); r_no = mk_concepto("TRIBUTOS MUNICIPALES H2", "NINGUNA"); r_mal = mk_concepto("CONCEPTO H2", "TRIBUTOS")
+chk("H2", "La clase explícita manda sobre el nombre; un valor fuera de catálogo se rechaza (422)",
+    r_ok.json().get("clase_aduanera") == "TRIBUTO" and r_no.json().get("clase_aduanera") == "NINGUNA" and r_mal.status_code == 422,
+    f"{r_ok.json().get('clase_aduanera')} / {r_no.json().get('clase_aduanera')} / {r_mal.status_code}")
+id_trib_h = r_ok.json()["id_concepto"]; id_falso_h = r_no.json()["id_concepto"]
+id_perc_h = mk_concepto("ADELANTO IGV H2", "PERCEPCION").json()["id_concepto"]
+
+# H3: conceptos cuyo NOMBRE no dice "tributo" ni "percepción" pero cuya CLASE sí -> dan levante al pagarse
+mh = mk_maestro("F-H3"); dh = mk_dam(mh, "DAM-H3", "VERDE")
+gth = mk_gasto(dh, id_trib_h, 40, doc_n="T-H3"); gph = mk_gasto(dh, id_perc_h, 4, doc_n="P-H3")
+e_reg = dam(dh).estado_dam
+vh = mk_voucher(44, num="OP-H3")
+pagar2(gth, vh["id_voucher"], 40); pagar2(gph, vh["id_voucher"], 4)
+chk("H3", "La proforma se reconoce por la CLASE del concepto, no por su nombre", e_reg == "PENDIENTE PAGO PROFORMA" and dam(dh).estado_dam == "CON LEVANTE", f"registro={e_reg} pago={dam(dh).estado_dam}")
+
+# H4: un concepto llamado "TRIBUTOS..." pero de clase NINGUNA no activa la proforma
+mh4 = mk_maestro("F-H4"); dh4 = mk_dam(mh4, "DAM-H4", "VERDE")
+mk_gasto(dh4, id_falso_h, 10, doc_n="X-H4"); mk_gasto(dh4, id_perc_h, 1, doc_n="P-H4")
+chk("H4", "Un nombre con la palabra TRIBUTOS y clase NINGUNA no activa la proforma", dam(dh4).estado_dam == "NUMERADA / EN EVALUACIÓN", f"{dam(dh4).estado_dam}")
+
+# H5: renombrar un concepto NO cambia su clase ni el levante de las DAMs que lo usan
+mh5 = mk_maestro("F-H5"); dh5 = mk_dam(mh5, "DAM-H5", "VERDE")
+gt5 = mk_gasto(dh5, id_trib_h, 30, doc_n="T-H5"); gp5 = mk_gasto(dh5, id_perc_h, 3, doc_n="P-H5")
+r_ren = c.put(f"/conceptos/{id_trib_h}", json={"nombre": "ARANCELES H5"}, headers=H["admin"])
+r_nul = c.put(f"/conceptos/{id_trib_h}", json={"clase_aduanera": None}, headers=H["admin"])
+v5 = mk_voucher(33, num="OP-H5"); pagar2(gt5, v5["id_voucher"], 30); pagar2(gp5, v5["id_voucher"], 3)
+chk("H5", "Renombrar el concepto (o enviar la clase vacía) conserva la clase y el levante sigue funcionando",
+    r_ren.status_code == 200 and r_nul.status_code == 200 and concepto(id_trib_h).nombre == "ARANCELES H5" and concepto(id_trib_h).clase_aduanera == "TRIBUTO" and dam(dh5).estado_dam == "CON LEVANTE",
+    f"{r_ren.status_code}/{r_nul.status_code} clase={concepto(id_trib_h).clase_aduanera} dam={dam(dh5).estado_dam}")
+
+# H6: cambiar la clase desde el catálogo; roles sin permiso no pueden
+r_cam = c.put(f"/conceptos/{id_falso_h}", json={"clase_aduanera": "OMC"}, headers=H["logi"])
+r_aud = c.put(f"/conceptos/{id_falso_h}", json={"clase_aduanera": "TRIBUTO"}, headers=H["audi"])
+chk("H6", "Logística puede cambiar la clase; Auditoría no (403)", r_cam.status_code == 200 and concepto(id_falso_h).clase_aduanera == "OMC" and r_aud.status_code == 403, f"{r_cam.status_code} clase={concepto(id_falso_h).clase_aduanera} audi={r_aud.status_code}")
+
+# H7: carga masiva por Excel, con y sin la columna clase_aduanera
+def subir_conceptos(filas, columnas):
+    libro = openpyxl.Workbook(); hoja = libro.active; hoja.append(columnas)
+    for f in filas:
+        hoja.append(f)
+    buf = io.BytesIO(); libro.save(buf); buf.seek(0)
+    return c.post("/admin/carga-masiva?catalogo=conceptos", files={"archivo": ("conceptos.xlsx", buf.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}, headers=H["admin"])
+
+r_sin = subir_conceptos([["TRIBUTOS H7", None, "FIJO_DESPACHO"], ["PERCEPCION OMC H7", None, "FIJO_DESPACHO"], ["MULTAS H7", None, "EXTRAORDINARIO"]], ["nombre_concepto", "descripcion", "tipo_gasto"])
+r_con = subir_conceptos([["LIQUIDACION H7", None, "FIJO_DESPACHO", "omc"], ["ERRADO H7", None, "FIJO_DESPACHO", "TRIBUTOS"]], ["nombre_concepto", "descripcion", "tipo_gasto", "clase_aduanera"])
+def clase_de(nombre):
+    db.expire_all(); x = db.query(models.CatConceptoPago).filter_by(nombre=nombre).first(); return x.clase_aduanera if x else None
+clases_h7 = [clase_de(n) for n in ("TRIBUTOS H7", "PERCEPCION OMC H7", "MULTAS H7", "LIQUIDACION H7", "ERRADO H7")]
+chk("H7", "Excel sin la columna: clase según el nombre; con la columna: se respeta y un valor inválido se reporta sin insertar",
+    r_sin.status_code == 200 and r_sin.json()["insertados"] == 3 and r_con.json()["insertados"] == 1 and r_con.json()["errores_count"] == 1
+    and clases_h7 == ["TRIBUTO", "PERCEPCION", "NINGUNA", "OMC", None],
+    f"sin={r_sin.json().get('insertados')} con={r_con.json().get('insertados')}/{r_con.json().get('errores_count')} clases={clases_h7}")
+
+# H8: una fila con error en el Excel no debe borrar las filas buenas anteriores
+r_dup = subir_conceptos([["BUENO UNO H8", None, "FIJO_DESPACHO"], ["TRIBUTOS H7", None, "FIJO_DESPACHO"], ["BUENO DOS H8", None, "FIJO_DESPACHO"]], ["nombre_concepto", "descripcion", "tipo_gasto"])
+existen_h8 = [clase_de(n) is not None for n in ("BUENO UNO H8", "BUENO DOS H8")]
+chk("H8", "Carga masiva: una fila duplicada se reporta y las demás filas SÍ quedan guardadas",
+    r_dup.json().get("insertados") == 2 and r_dup.json().get("errores_count") == 1 and existen_h8 == [True, True],
+    f"insertados={r_dup.json().get('insertados')} errores={r_dup.json().get('errores_count')} guardados={existen_h8}")
 
 
 # ==========================================

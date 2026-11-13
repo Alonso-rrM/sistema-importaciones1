@@ -6,6 +6,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from constantes import (
     CategoriaProveedor,
+    ClaseAduanera,
     EstadoDam,
     EstadoDocumentario,
     EstadoLevante,
@@ -140,17 +141,23 @@ class CatConceptoPagoCreate(BaseModel):
     nombre: str
     descripcion: Optional[str] = None
     tipo_gasto: Optional[str] = TipoGasto.FIJO_DESPACHO
+    # Papel en el despacho aduanero. Si no se envía, el servidor propone uno según el nombre.
+    clase_aduanera: Optional[ClaseAduanera] = None
 
-class CatConceptoPago(CatConceptoPagoCreate):
+class CatConceptoPago(BaseModel):
     id_concepto: int
+    nombre: str
+    descripcion: Optional[str] = None
     estado_registro: str
     tipo_gasto: str = TipoGasto.FIJO_DESPACHO
+    clase_aduanera: str = ClaseAduanera.NINGUNA
     model_config = ConfigDict(from_attributes=True)
 
 class CatConceptoPagoUpdate(BaseModel):
     nombre: Optional[str] = None
     descripcion: Optional[str] = None
     tipo_gasto: Optional[str] = None
+    clase_aduanera: Optional[ClaseAduanera] = None
 
 # --- NUEVOS CATÁLOGOS: DOCUMENTOS Y TIPO DE CAMBIO ---
 

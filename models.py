@@ -5,6 +5,7 @@ from sqlalchemy.orm import relationship
 from database import Base
 from constantes import (
     CategoriaProveedor,
+    ClaseAduanera,
     EstadoDam,
     EstadoDocumentario,
     EstadoLevante,
@@ -41,6 +42,8 @@ class CatConceptoPago(Base):
     nombre = Column(String(100), unique=True, nullable=False)
     descripcion = Column(Text)
     tipo_gasto = Column(String(30), default=TipoGasto.FIJO_DESPACHO, nullable=False)
+    # Papel del concepto en el despacho (TRIBUTO / PERCEPCION / OMC / NINGUNA). Lo lee la máquina de estados.
+    clase_aduanera = Column(String(20), server_default=ClaseAduanera.NINGUNA, default=ClaseAduanera.NINGUNA, nullable=False)
     estado_registro = Column(String(20), default=EstadoRegistro.ACTIVO)
     pagos = relationship("RegistroPago", back_populates="concepto_rel")
     gastos = relationship("RegistroGasto", back_populates="concepto_rel")

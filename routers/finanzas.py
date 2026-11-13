@@ -22,6 +22,7 @@ from domain.finanzas import calcular_amortizacion_cruzada
 from constantes import (
     AccionAuditoria,
     CategoriaProveedor,
+    ClaseAduanera,
     EstadoDocumentario,
     EstadoPago,
     EstadoRegistro,
@@ -1227,8 +1228,8 @@ def eliminar_pago(id_pago: int, req: schemas.EliminacionRequest, db: Session = D
     # diligencias MANUALES (aforo, observación, revisión, OMC), esa reversión borraría ese avance:
     # solo el Administrador puede autorizarla (queda en bitácora).
     dam_pago = pago.dam
-    concepto_pago = (pago.concepto_rel.nombre or "").upper() if pago.concepto_rel else ""
-    es_pago_proforma = "TRIBUTO" in concepto_pago or "PERCEPCI" in concepto_pago
+    clase_pago = pago.concepto_rel.clase_aduanera if pago.concepto_rel else None
+    es_pago_proforma = clase_pago in (ClaseAduanera.TRIBUTO, ClaseAduanera.PERCEPCION)
     if (
         es_pago_proforma and dam_pago and current_user.id_rol != Rol.SUPERADMIN
         and dam_pago.estado_dam in ESTADOS_POST_PROFORMA

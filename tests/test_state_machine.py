@@ -14,8 +14,18 @@ from services.state_machine import (
 )
 
 
-def gasto(concepto, pago="PENDIENTE", registro="ACTIVO"):
-    return NS(estado_registro=registro, estado_pago=pago, concepto_rel=NS(nombre=concepto) if concepto else None)
+from domain.conceptos import clase_aduanera_sugerida
+
+
+def gasto(concepto, pago="PENDIENTE", registro="ACTIVO", clase=None):
+    """
+    Gasto de prueba. `concepto` es el nombre; la clase aduanera se toma de `clase` o, si no se indica,
+    de la sugerencia por nombre (así se crean los conceptos cuando no se especifica la clase).
+    """
+    if not concepto:
+        return NS(estado_registro=registro, estado_pago=pago, concepto_rel=None)
+    clase = clase or clase_aduanera_sugerida(concepto)
+    return NS(estado_registro=registro, estado_pago=pago, concepto_rel=NS(nombre=concepto, clase_aduanera=clase))
 
 
 def dam(*gastos, canal="VERDE", tipo_valor="DEFINITIVO", con_maestro=True):
@@ -78,22 +88,22 @@ def test_otros_conceptos_no_afectan_la_clasificacion():
     assert c == {"tiene_proforma": False, "proforma_pagada": False, "tiene_omc": False, "omc_pagado": False}
 
 
-@pytest.mark.parametrize("nombre, clave", [
-    ("TRIBUTOS", "tributos"), ("tributos aduaneros", "tributos"), ("Pago de Tributo", "tributos"),
-    ("PERCEPCION", "percepcion"), ("PERCEPCIÓN IGV", "percepcion"), ("percepcion", "percepcion"),
-    ("OMC", "omc"), ("Ajuste omc", "omc"),
-])
-def test_clasificacion_actual_por_nombre_del_concepto(nombre, clave):
-    """
-    Deja constancia del comportamiento VIGENTE: hoy la clase del gasto se deduce del NOMBRE del concepto
-    (sin distinguir mayúsculas). La fase 2 del plan lo reemplaza por un campo explícito; esta prueba
-    garantiza que el cambio conserve el resultado para los nombres que ya existen.
-    """
-    c = clasificar_gastos_dam(dam(gasto(nombre, "PAGADO"), gasto("TRIBUTOS", "PAGADO"), gasto("PERCEPCION", "PAGADO")))
-    if clave == "omc":
-        assert c["tiene_omc"] is True
-    else:
-        assert c["tiene_proforma"] is True and c["proforma_pagada"] is True
+def test_la_clasificacion_depende_de_la_clase_y_no_del_nombre():
+    # Nombres que no mencionan tributo ni percepción, pero cuya clase sí lo es
+    c = clasificar_gastos_dam(dam(
+        gasto("ARANCELES", "PAGADO", clase="TRIBUTO"), gasto("ADELANTO IGV", "PAGADO", clase="PERCEPCION"),
+    ))
+    assert c["tiene_proforma"] is True and c["proforma_pagada"] is True
+    # Y al revés: el nombre dice TRIBUTOS, pero la clase es NINGUNA
+    c = clasificar_gastos_dam(dam(
+        gasto("TRIBUTOS MUNICIPALES", clase="NINGUNA"), gasto("PERCEPCION", clase="PERCEPCION"),
+    ))
+    assert c["tiene_proforma"] is False
+
+
+def test_clase_ninguna_o_desconocida_no_interviene_en_el_levante():
+    c = clasificar_gastos_dam(dam(gasto("OMC", clase="NINGUNA"), gasto("X", clase="OTRA_COSA")))
+    assert c == {"tiene_proforma": False, "proforma_pagada": False, "tiene_omc": False, "omc_pagado": False}
 
 
 # ---------- resultado_automatico_proforma ----------

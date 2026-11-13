@@ -7,8 +7,9 @@ import io
 import models
 import schemas
 from dependencies import get_db, get_current_user, RoleChecker
+from domain.conceptos import clase_aduanera_sugerida
 from constantes import (
-    EstadoRegistro, ROLES_FINANZAS, ROLES_OPERACIONES, ROLES_OPERACIONES_Y_FINANZAS, ROLES_SOLO_ADMIN, TipoGasto,
+    ClaseAduanera, EstadoRegistro, ROLES_FINANZAS, ROLES_OPERACIONES, ROLES_OPERACIONES_Y_FINANZAS, ROLES_SOLO_ADMIN, TipoGasto,
 )
 
 # Matriz RBAC de escritura en catálogos (1: Admin, 2: Logística, 3: Tesorería, 4: Auditoría = solo lectura)
@@ -381,7 +382,10 @@ def eliminar_importadores_fisico(id_importador: int, db: Session = Depends(get_d
 @router.post("/conceptos/", response_model=schemas.CatConceptoPago)
 def crear_concepto(concepto: schemas.CatConceptoPagoCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_CONFIG))):
     try:
-        nuevo_concepto = models.CatConceptoPago(**concepto.model_dump())
+        datos = concepto.model_dump()
+        if datos.get("clase_aduanera") is None:
+            datos["clase_aduanera"] = clase_aduanera_sugerida(datos.get("nombre"))
+        nuevo_concepto = models.CatConceptoPago(**datos)
         db.add(nuevo_concepto)
         db.commit()
         db.refresh(nuevo_concepto)
@@ -404,6 +408,9 @@ def actualizar_concepto(id_concepto: int, concepto_editado: schemas.CatConceptoP
         raise HTTPException(status_code=404, detail="Concepto no encontrado")
     
     update_data = concepto_editado.model_dump(exclude_unset=True)
+    if update_data.get("clase_aduanera") is None:
+        # La clase nunca queda vacía ni se recalcula al renombrar: solo cambia si se envía un valor
+        update_data.pop("clase_aduanera", None)
     for key, value in update_data.items():
         setattr(db_concepto, key, value)
         
@@ -603,10 +610,17 @@ async def carga_masiva_excel(
             elif catalogo == "conceptos":
                 if not data.get("nombre"):
                     continue
+                # Columna opcional en el Excel: si no viene, se propone según el nombre
+                clase_excel = str(data.get("clase_aduanera") or "").strip().upper()
+                if clase_excel and clase_excel not in {c.value for c in ClaseAduanera}:
+                    raise ValueError(
+                        f"clase_aduanera '{clase_excel}' no es válida. Use: " + ", ".join(c.value for c in ClaseAduanera)
+                    )
                 obj = models.CatConceptoPago(
                     nombre=str(data["nombre"]),
                     descripcion=data.get("descripcion"),
-                    tipo_gasto=str(data.get("tipo_gasto") or TipoGasto.FIJO_DESPACHO)
+                    tipo_gasto=str(data.get("tipo_gasto") or TipoGasto.FIJO_DESPACHO),
+                    clase_aduanera=clase_excel or clase_aduanera_sugerida(str(data["nombre"])),
                 )
             elif catalogo == "proveedores":
                 if not data.get("nombre"):
@@ -628,16 +642,17 @@ async def carga_masiva_excel(
                     continue
                 obj = models.CatAlmacen(nombre=str(data["nombre"]))
 
-            db.add(obj)
-            db.flush()  # detectar errores de integridad fila a fila
+            # Cada fila va en su propio punto de guardado: si una falla, se deshace SOLO esa fila.
+            # (Antes un rollback general borraba también las filas anteriores ya contadas como insertadas.)
+            with db.begin_nested():
+                db.add(obj)
+                db.flush()  # detectar errores de integridad fila a fila
             insertados += 1
 
         except IntegrityError:
-            db.rollback()
             nombre_val = row.get("nombre", f"Fila {fila_num}")
             errores.append(f"Fila {fila_num} '{nombre_val}': ya existe o viola una restricción única.")
         except Exception as e:
-            db.rollback()
             errores.append(f"Fila {fila_num}: {str(e)}")
 
     db.commit()

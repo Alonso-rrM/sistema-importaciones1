@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 import json
 from models import MaestroImportacion, DetalleDam, AuditLog
 from constantes import (
+    ClaseAduanera,
     AccionAuditoria,
     CanalControl,
     EstadoDam,
@@ -109,6 +110,15 @@ def resultado_automatico_proforma(dam) -> set:
     return {EstadoDam.PENDIENTE_AFORO}
 
 
+# A qué grupo de la DAM pertenece un gasto según la clase aduanera de su concepto.
+# Los conceptos de clase NINGUNA (fletes, almacenaje, multas...) no intervienen en el levante.
+GRUPO_POR_CLASE_ADUANERA = {
+    ClaseAduanera.TRIBUTO: "tributos",
+    ClaseAduanera.PERCEPCION: "percepcion",
+    ClaseAduanera.OMC: "omc",
+}
+
+
 def clasificar_gastos_dam(dam) -> dict:
     """
     Clasifica los gastos aduaneros de la DAM. Un grupo cuenta como pagado solo si TODOS sus gastos
@@ -118,13 +128,9 @@ def clasificar_gastos_dam(dam) -> dict:
     for g in dam.gastos:
         if g.estado_registro != EstadoRegistro.ACTIVO or not g.concepto_rel:
             continue
-        nombre = g.concepto_rel.nombre.upper()
-        if "TRIBUTO" in nombre:
-            grupos["tributos"].append(g)
-        elif "PERCEPCI" in nombre:
-            grupos["percepcion"].append(g)
-        elif "OMC" in nombre:
-            grupos["omc"].append(g)
+        grupo = GRUPO_POR_CLASE_ADUANERA.get(g.concepto_rel.clase_aduanera)
+        if grupo:
+            grupos[grupo].append(g)
     def pagado(lista):
         return bool(lista) and all(g.estado_pago == EstadoPago.PAGADO for g in lista)
 

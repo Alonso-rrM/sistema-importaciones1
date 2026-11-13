@@ -25,6 +25,10 @@ from sqlalchemy.orm import Session
 import models
 from constantes import AccionAuditoria
 
+# Solo para PRESENTACIÓN en la bitácora: si un concepto sin proveedor contiene alguna de estas palabras,
+# se muestra como pagado a SUNAT. No interviene en ninguna regla de negocio.
+PALABRAS_CONCEPTO_SUNAT = ("TRIBUTO", "PERCEPCI", "OMC", "MULTA", "ARANCEL")  # literal-permitido: palabras buscadas en el nombre
+
 # Tablas de negocio auditadas -> nombre legible
 MODELOS_AUDITADOS = {
     models.MaestroImportacion: "Contenedor",
@@ -216,6 +220,7 @@ ETIQUETAS_CAMPOS = {
     "categoria": "Categoría",
     "descripcion": "Descripción",
     "tipo_gasto": "Etapa de Gasto",
+    "clase_aduanera": "Clase Aduanera",
     "multiplicador_financiero": "Multiplicador Financiero",
     "username": "Usuario",
     "email": "Correo Electrónico",
@@ -263,7 +268,7 @@ ORDEN_PREFERIDO_CAMPOS = [
     "tipo_valor", "documento_transporte", "fecha_embarque", "fecha_arribo",
     "fob_usd", "flete_usd", "cfr_usd", "venta_sucesiva",
     "estado_pago", "fecha_pago", "fecha_vencimiento", "fecha_transferencia",
-    "nombre", "nombre_documento", "ruc", "categoria", "tipo_gasto", "descripcion",
+    "nombre", "nombre_documento", "ruc", "categoria", "tipo_gasto", "clase_aduanera", "descripcion",
     "username", "email", "id_rol", "is_active", "hashed_password",
     "fecha", "precio_compra", "precio_venta",
     "observaciones", "motivo", "es_ajuste_sistema", "estado_registro",
@@ -695,7 +700,7 @@ def enriquecer_bitacora(db: Session, filas: list) -> list[dict]:
             dam_s = fmt_dam(snap.get("id_dam")) if snap.get("id_dam") else None
             id_prov = _a_int(snap.get("id_proveedor"))
             prov_s = proveedores.get(id_prov) if id_prov else None
-            if not prov_s and any(p in conc.upper() for p in ("TRIBUTO", "PERCEPCI", "OMC", "MULTA", "ARANCEL")):
+            if not prov_s and any(p in conc.upper() for p in PALABRAS_CONCEPTO_SUNAT):
                 prov_s = "SUNAT"
             partes = []
             if dam_s and dam_s != "∅" and not dam_s.isdigit():
@@ -798,7 +803,7 @@ def enriquecer_bitacora(db: Session, filas: list) -> list[dict]:
                 datos["id_importador"] = v_info["id_importador"]
 
         conc_str = fmt_valor_campo("id_concepto", datos.get("id_concepto")).upper() if datos.get("id_concepto") else ""
-        es_concepto_sunat = any(p in conc_str for p in ("TRIBUTO", "PERCEPCI", "OMC", "MULTA", "ARANCEL"))
+        es_concepto_sunat = any(p in conc_str for p in PALABRAS_CONCEPTO_SUNAT)
 
         pk_propia = PK_POR_TABLA.get(tabla)
         items = []

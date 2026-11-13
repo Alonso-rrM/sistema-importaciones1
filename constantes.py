@@ -121,6 +121,18 @@ class CategoriaProveedor(StrEnum):
     ESTADO_O_TRIBUTO = "ESTADO_O_TRIBUTO"   # SUNAT y demás entidades del Estado
 
 
+class ClaseAduanera(StrEnum):
+    """
+    Papel del concepto en el despacho aduanero (cat_conceptos_pagos.clase_aduanera).
+    Es lo que usa la máquina de estados de la DAM para decidir levantes y reversiones:
+    la PROFORMA es TRIBUTO + PERCEPCION; la OMC se evalúa aparte. No depende del nombre del concepto.
+    """
+    NINGUNA = "NINGUNA"         # Fletes, almacenaje, multas, etc.: no intervienen en el levante
+    TRIBUTO = "TRIBUTO"
+    PERCEPCION = "PERCEPCION"
+    OMC = "OMC"
+
+
 class TipoGasto(StrEnum):
     """Etapa a la que pertenece un concepto de gasto (cat_conceptos_pagos.tipo_gasto)."""
     FIJO_DESPACHO = "FIJO_DESPACHO"

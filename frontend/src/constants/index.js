@@ -93,6 +93,14 @@ export const CATEGORIA_PROVEEDOR = Object.freeze({
   ESTADO_O_TRIBUTO: 'ESTADO_O_TRIBUTO',   // SUNAT y demás entidades del Estado
 });
 
+/** Papel del concepto en el despacho aduanero. Lo usa el backend para decidir levantes. */
+export const CLASE_ADUANERA = Object.freeze({
+  NINGUNA: 'NINGUNA',
+  TRIBUTO: 'TRIBUTO',
+  PERCEPCION: 'PERCEPCION',
+  OMC: 'OMC',
+});
+
 export const TIPO_GASTO = Object.freeze({
   FIJO_DESPACHO: 'FIJO_DESPACHO',
   POST_LEVANTE: 'POST_LEVANTE',
