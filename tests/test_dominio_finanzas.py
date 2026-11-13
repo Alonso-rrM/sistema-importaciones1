@@ -48,3 +48,32 @@ def test_el_resultado_siempre_tiene_dos_decimales():
     resultado = amortizar(D("100"), D("3.7"), "PEN", "USD")
     assert resultado == D("370.00")
     assert resultado.as_tuple().exponent == -2
+
+
+# ---------- Regla única de amortización sobre pagos registrados ----------
+from types import SimpleNamespace as Pago  # noqa: E402
+
+from domain.finanzas import amortizacion_de_pago, tipo_cambio_efectivo, total_amortizado  # noqa: E402
+
+
+@pytest.mark.parametrize("aplicado, registrado, esperado", [
+    # Valores como los devuelve la base de datos (Decimal o vacío)
+    (D("3.7525"), D("3.75"), "3.7525"),   # prevalece el TC aplicado (4 decimales)
+    (None, D("3.75"), "3.75"),
+    (None, None, "1.00"),
+    (D("0"), D("3.75"), "3.75"),          # 0 se trata como "sin dato"
+    (D("-1"), None, "1.00"),              # negativo: nunca se usa
+])
+def test_tipo_cambio_efectivo(aplicado, registrado, esperado):
+    assert tipo_cambio_efectivo(aplicado, registrado) == D(esperado)
+
+
+def test_cada_pago_se_redondea_por_separado():
+    """Tres pagos de S/ 1.00 a TC 3.00 sobre un gasto en dólares amortizan 0.33 + 0.33 + 0.33 = 0.99 (no 1.00)."""
+    pagos = [Pago(importe=D("1.00"), moneda="PEN", tipo_cambio_aplicado=D("3.0000"), tipo_cambio=D("3.00"))] * 3
+    assert amortizacion_de_pago(pagos[0], "USD") == D("0.33")
+    assert total_amortizado(pagos, "USD") == D("0.99")
+
+
+def test_total_sin_pagos_es_cero():
+    assert total_amortizado([], "USD") == D("0.00")

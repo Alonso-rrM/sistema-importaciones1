@@ -18,14 +18,14 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Optional
 
 from fastapi.encoders import jsonable_encoder
-from sqlalchemy import case, func, text
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
 import models
 import schemas
 from constantes import AccionAuditoria, ClaseAduanera, EstadoDocumentario, EstadoPago, EstadoRegistro, Moneda, Rol
-from domain.finanzas import calcular_amortizacion_cruzada
+from domain.finanzas import calcular_amortizacion_cruzada, total_amortizado
 from services.audit import registrar_auditoria_sync
 from services.errores import ErrorDeNegocio, error_interno_de_negocio
 from services.state_machine import ESTADOS_POST_PROFORMA, evaluar_gatillos_gastos_dam, resultado_automatico_proforma
@@ -209,18 +209,12 @@ def _descontar_del_voucher(voucher, monto: Decimal):
 
 
 def saldo_pendiente_gasto(db: Session, gasto) -> Decimal:
-    """Saldo del gasto en SU moneda: monto original menos lo amortizado por sus pagos activos (redondeo por pago)."""
+    """Saldo del gasto en SU moneda: monto original menos lo amortizado por sus pagos activos (regla única)."""
     pagos = db.query(models.RegistroPago).filter(
         models.RegistroPago.id_gasto == gasto.id_gasto,
         models.RegistroPago.estado_registro == EstadoRegistro.ACTIVO,
     ).all()
-    pagado = Decimal("0.00")
-    for p in pagos:
-        tc = Decimal(str(p.tipo_cambio_aplicado or p.tipo_cambio or "1.00"))
-        if tc <= Decimal("0.00"):
-            tc = Decimal("1.00")
-        pagado += calcular_amortizacion_cruzada(Decimal(str(p.importe)), tc, gasto.moneda, p.moneda)
-    return _redondear(_redondear(Decimal(str(gasto.monto_original))) - pagado)
+    return _redondear(_redondear(Decimal(str(gasto.monto_original))) - total_amortizado(pagos, gasto.moneda))
 
 
 def _ajuste_por_centavos(gasto, id_importador: int, saldo: Decimal) -> models.RegistroPago:
@@ -376,29 +370,9 @@ def _respaldar_y_borrar(db: Session, pago, motivo: str, usuario, identificador: 
 
 
 def _recalcular_estado_tras_anulacion(db: Session, gasto):
-    """
-    Recalcula el estado de pago del gasto con los pagos que quedan.
-    (Suma las conversiones en la base y redondea al final; registrar_pago redondea cada pago.)
-    """
-    if gasto.moneda == Moneda.USD:
-        convertido = case(
-            (models.RegistroPago.moneda == Moneda.USD, models.RegistroPago.importe),
-            (models.RegistroPago.moneda == Moneda.PEN, models.RegistroPago.importe / func.coalesce(models.RegistroPago.tipo_cambio_aplicado, models.RegistroPago.tipo_cambio, 1)),
-            else_=0,
-        )
-    else:
-        convertido = case(
-            (models.RegistroPago.moneda == Moneda.PEN, models.RegistroPago.importe),
-            (models.RegistroPago.moneda == Moneda.USD, models.RegistroPago.importe * func.coalesce(models.RegistroPago.tipo_cambio_aplicado, models.RegistroPago.tipo_cambio, 1)),
-            else_=0,
-        )
-    total = db.query(func.sum(convertido)).filter(
-        models.RegistroPago.id_gasto == gasto.id_gasto,
-        models.RegistroPago.estado_registro == EstadoRegistro.ACTIVO,
-    ).scalar()
-    total = _redondear(Decimal(str(total)) if total else Decimal("0.00"))
+    """Recalcula el estado de pago del gasto con los pagos que quedan (misma regla que al registrar)."""
     monto = _redondear(Decimal(str(gasto.monto_original)))
-    saldo = _redondear(monto - total)
+    saldo = saldo_pendiente_gasto(db, gasto)
     if saldo >= monto:
         gasto.estado_pago = EstadoPago.PENDIENTE
     elif saldo > TOLERANCIA_CENTAVOS:

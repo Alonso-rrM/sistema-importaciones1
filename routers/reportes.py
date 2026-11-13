@@ -6,6 +6,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload
 
 import models
+from domain.finanzas import amortizacion_de_pago, total_amortizado
 from dependencies import get_db, get_current_user
 from services.excel_exporter import generar_excel_sabana_global
 from constantes import (
@@ -141,21 +142,9 @@ def obtener_analytics_cockpit(
             etapas[etapa]["pen"] += monto_orig
 
         # Calcular saldo pendiente real
-        total_pagado = Decimal("0.00")
-        for p in g.pagos:
-            if p.estado_registro == EstadoRegistro.ACTIVO and p.importe:
-                imp = Decimal(str(p.importe))
-                tc_p = Decimal(str(p.tipo_cambio_aplicado or p.tipo_cambio or "1.00"))
-                if tc_p <= Decimal("0.00"):
-                    tc_p = Decimal("1.00")
-                if moneda_g == p.moneda:
-                    total_pagado += imp
-                elif moneda_g == Moneda.USD and p.moneda == Moneda.PEN:
-                    total_pagado += imp / tc_p
-                elif moneda_g == Moneda.PEN and p.moneda == Moneda.USD:
-                    total_pagado += imp * tc_p
-                else:
-                    total_pagado += imp
+        total_pagado = total_amortizado(
+            [p for p in g.pagos if p.estado_registro == EstadoRegistro.ACTIVO and p.importe], moneda_g
+        )
 
         saldo = max(Decimal("0.00"), monto_orig - total_pagado)
 
@@ -263,18 +252,7 @@ def exportar_sabana_liquidaciones(
             for p in g.pagos:
                 if p.estado_registro == EstadoRegistro.ACTIVO and p.importe:
                     imp_p = Decimal(str(p.importe))
-                    tc_p = Decimal(str(p.tipo_cambio_aplicado or p.tipo_cambio or "1.00"))
-                    if tc_p <= Decimal("0.00"):
-                        tc_p = Decimal("1.00")
-
-                    if moneda_g == p.moneda:
-                        total_pagado += imp_p
-                    elif moneda_g == Moneda.USD and p.moneda == Moneda.PEN:
-                        total_pagado += imp_p / tc_p
-                    elif moneda_g == Moneda.PEN and p.moneda == Moneda.USD:
-                        total_pagado += imp_p * tc_p
-                    else:
-                        total_pagado += imp_p
+                    total_pagado += amortizacion_de_pago(p, moneda_g)
 
                     v_rel = p.voucher_rel
                     banco_nom = v_rel.banco_rel.nombre if (v_rel and v_rel.banco_rel) else "Banco"

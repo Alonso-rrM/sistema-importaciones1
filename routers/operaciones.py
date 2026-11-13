@@ -8,6 +8,7 @@ from sqlalchemy.orm.exc import StaleDataError
 from sqlalchemy import func
 
 import models
+from domain.finanzas import amortizacion_de_pago
 from services.errores import error_interno
 import schemas
 from dependencies import get_db, get_current_user, RoleChecker
@@ -533,20 +534,7 @@ def obtener_datos_liquidacion_contenedor(id_maestro: int, db: Session, tc_ref: D
                 for p in g.pagos:
                     if p.estado_registro == EstadoRegistro.ACTIVO and p.importe:
                         imp = Decimal(str(p.importe))
-                        tc_p = Decimal(str(p.tipo_cambio_aplicado or p.tipo_cambio or "1.00"))
-                        if tc_p <= Decimal("0.00"):
-                            tc_p = Decimal("1.00")
-                        
-                        if moneda_g == p.moneda:
-                            pagado_linea = imp
-                        elif moneda_g == Moneda.USD and p.moneda == Moneda.PEN:
-                            pagado_linea = imp / tc_p
-                        elif moneda_g == Moneda.PEN and p.moneda == Moneda.USD:
-                            pagado_linea = imp * tc_p
-                        else:
-                            pagado_linea = imp
-                        
-                        total_pagado += pagado_linea
+                        total_pagado += amortizacion_de_pago(p, moneda_g)
 
                         v_rel = p.voucher_rel
                         banco_nom = v_rel.banco_rel.nombre if (v_rel and v_rel.banco_rel) else "Banco"

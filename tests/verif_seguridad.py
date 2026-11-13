@@ -667,6 +667,34 @@ chk("I5", "Borrado físico: si el registro está en uso responde 400; solo Super
 
 
 # ==========================================
+# J) REGLA ÚNICA DE AMORTIZACIÓN (registrar, anular y reportes deben coincidir)
+# ==========================================
+print("\n=========== J) REGLA ÚNICA DE AMORTIZACIÓN ===========")
+c.put("/tipo-cambio/", json={"fecha": str(datetime.date.today()), "precio_compra": "2.9900", "precio_venta": "3.0000"}, headers=H["teso"])
+mj = mk_maestro("F-J1"); dj = mk_dam(mj, "DAM-J1"); gj = mk_gasto(dj, c_otro.id_concepto, "1.05", "USD", doc_n="J-1")
+vj = mk_voucher(100, "PEN", num="OP-J1")
+# Tres pagos de S/ 1.00 a TC 3.00 amortizan USD 0.33 cada uno (0.99): saldo USD 0.06 -> PARCIAL.
+# Un cuarto pago igual supera el saldo y se rechaza por sobrepago.
+r_j = [pagar2(gj, vj["id_voucher"], "1.00", "PEN", "3.00").status_code for _ in range(4)]
+db.expire_all()
+pagos_j = db.query(models.RegistroPago).filter_by(id_gasto=gj, estado_registro="ACTIVO").order_by(models.RegistroPago.id_pago).all()
+# Un pago de S/ 0.03 (USD 0.01) deja 0.05: cierre automático con ajuste de centavos. Luego se anula ese pago:
+# el ajuste se revierte y, con la regla única, el gasto vuelve a PARCIAL (antes la anulación lo daba por PAGADO).
+r_extra = pagar2(gj, vj["id_voucher"], "0.03", "PEN", "3.00")
+id_extra = r_extra.json().get("id_pago")
+r_anul = c.request("DELETE", f"/pagos/{id_extra}", json={"motivo": "Prueba J1: anular pago chico"}, headers=H["teso"])
+liq = c.get(f"/maestros/{mj}/liquidacion-gastos", headers=H["teso"])
+saldo_liq = None
+if liq.status_code == 200:
+    for gg in liq.json().get("gastos", []):
+        if gg.get("numero_documento") == "J-1":
+            saldo_liq = gg.get("saldo_pendiente")
+chk("J1", "Tras anular un pago, el gasto conserva el estado de la regla de registro (PARCIAL con saldo USD 0.06) y la liquidación muestra el mismo saldo",
+    r_j == [200, 200, 200, 400] and len(pagos_j) == 3 and r_anul.status_code == 200 and gasto(gj).estado_pago == "PARCIAL" and saldo_liq in (0.06, "0.06"),
+    f"pagos={len(pagos_j)} anulación={r_anul.status_code} estado={gasto(gj).estado_pago} saldo_liquidación={saldo_liq} (liq {liq.status_code})")
+
+
+# ==========================================
 # 4. PRUEBA DE CONCURRENCIA REAL (PostgreSQL)
 # ==========================================
 print("\n=========== D) PRUEBA DE CONCURRENCIA REAL (PostgreSQL) ===========")
