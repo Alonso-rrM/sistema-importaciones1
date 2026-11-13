@@ -2,31 +2,28 @@ from typing import List, Optional
 from datetime import date, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 import json
-import os
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
-from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.orm.exc import StaleDataError
-from sqlalchemy.exc import IntegrityError, OperationalError
-from sqlalchemy import func, case, text
+from sqlalchemy import func
 
 import models
 from services.errores import error_interno
 import schemas
 from dependencies import get_db, get_current_user, RoleChecker
 from services.audit import registrar_auditoria, registrar_auditoria_sync
-from services.state_machine import evaluar_gatillos_gastos_dam, ESTADOS_POST_PROFORMA, resultado_automatico_proforma
+from services.state_machine import evaluar_gatillos_gastos_dam
 from services.excel_exporter import generar_excel_gastos
+import services.pagos as servicio_pagos
+from services.pagos import TC_MAXIMO, TC_MINIMO, ContextoPeticion, expediente_cerrado
 from domain.finanzas import calcular_amortizacion_cruzada
 from constantes import (
     AccionAuditoria,
     CategoriaProveedor,
-    ClaseAduanera,
     EstadoDocumentario,
     EstadoPago,
     EstadoRegistro,
-    Moneda,
     ROLES_FINANZAS,
     ROLES_OPERACIONES,
     ROLES_OPERACIONES_Y_FINANZAS,
@@ -36,45 +33,8 @@ from constantes import (
 router = APIRouter(tags=["Finanzas"])
 
 # ==========================================
-# 0. REGLAS FINANCIERAS DEL SERVIDOR
+# 0. REGLAS DEL SERVIDOR (las de pagos viven en services/pagos.py)
 # ==========================================
-TOLERANCIA_CENTAVOS = Decimal("0.05")
-# Spread máximo que un banco puede cobrar sobre el débito teórico en pagos con moneda cruzada
-MARGEN_SPREAD_BANCARIO = Decimal(os.getenv("MARGEN_SPREAD_BANCARIO", "0.05"))
-# Banda del TC respecto al oficial SUNAT registrado para la fecha
-MARGEN_TC_OFICIAL = Decimal(os.getenv("MARGEN_TC_OFICIAL", "0.05"))
-# Banda de cordura USD/PEN cuando no hay TC oficial registrado para la fecha
-TC_MINIMO = Decimal(os.getenv("TC_MINIMO", "2.50"))
-TC_MAXIMO = Decimal(os.getenv("TC_MAXIMO", "5.50"))
-
-
-def convertir_moneda(monto: Decimal, de: str, a: str, tc: Decimal) -> Decimal:
-    """Convierte un monto entre USD y PEN con redondeo SUNAT (ROUND_HALF_UP)."""
-    if de == a:
-        resultado = monto
-    elif de == Moneda.USD and a == Moneda.PEN:
-        resultado = monto * tc
-    elif de == Moneda.PEN and a == Moneda.USD:
-        resultado = monto / tc
-    else:
-        raise HTTPException(status_code=400, detail=f"Conversión de moneda no soportada: {de} → {a}.")
-    return resultado.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-
-
-# Tiempo máximo que un pago espera en cola a que otro pago libere el mismo gasto/voucher
-LOCK_TIMEOUT_PAGOS = os.getenv("LOCK_TIMEOUT_PAGOS", "5s")
-
-
-def aplicar_lock_timeout(db: Session):
-    """Limita la espera de bloqueos de fila en la transacción actual (solo PostgreSQL)."""
-    if db.get_bind().dialect.name == "postgresql":
-        # SET LOCAL solo afecta a la transacción en curso; el valor se valida para evitar inyección
-        valor = LOCK_TIMEOUT_PAGOS.strip()
-        if not valor.rstrip("ms").isdigit():
-            valor = "5s"
-        db.execute(text(f"SET LOCAL lock_timeout = '{valor}'"))
-
-
 def validar_voucher_unico(db: Session, banco_id: int, numero_operacion: str, excluir_id: Optional[int] = None):
     """Un mismo depósito (banco + N° de operación) no puede registrarse dos veces: duplicaría fondos."""
     q = db.query(models.VoucherBancario).filter(
@@ -87,30 +47,6 @@ def validar_voucher_unico(db: Session, banco_id: int, numero_operacion: str, exc
     if q.first():
         raise HTTPException(status_code=400, detail=f"Duplicidad detectada: ya existe un voucher con el N° de operación '{numero_operacion}' en este banco.")
 
-
-def expediente_cerrado(gasto_o_dam) -> bool:
-    """True si el contenedor asociado está en ATENCIÓN TOTAL."""
-    dam_obj = getattr(gasto_o_dam, "dam", None) or gasto_o_dam
-    maestro = getattr(dam_obj, "maestro", None)
-    return bool(maestro and maestro.estado_documentario == EstadoDocumentario.ATENCION_TOTAL)
-
-
-def validar_tipo_cambio(db: Session, tc: Decimal, fecha: date):
-    """Rechaza tipos de cambio fuera de la banda del TC oficial (o de la banda de cordura si no hay oficial)."""
-    oficial = db.query(models.HistorialTipoCambio).filter(models.HistorialTipoCambio.fecha == fecha).first()
-    if oficial and oficial.precio_venta:
-        ref = Decimal(str(oficial.precio_venta))
-        minimo = (ref * (Decimal("1") - MARGEN_TC_OFICIAL)).quantize(Decimal("0.0001"))
-        maximo = (ref * (Decimal("1") + MARGEN_TC_OFICIAL)).quantize(Decimal("0.0001"))
-        origen = f"TC oficial SUNAT {ref} del {fecha}"
-    else:
-        minimo, maximo = TC_MINIMO, TC_MAXIMO
-        origen = "banda de control USD/PEN"
-    if not (minimo <= tc <= maximo):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Tipo de cambio {tc} fuera de rango. Según {origen}, debe estar entre {minimo} y {maximo}."
-        )
 
 # ==========================================
 # 1. GASTOS
@@ -803,236 +739,18 @@ def eliminar_voucher(id_voucher: int, req: schemas.EliminacionRequest, db: Sessi
 @router.post("/pagos/", response_model=schemas.RegistroPago)
 async def registrar_pago(
     request: Request,
-    pago: schemas.RegistroPagoCreate, 
-    db: Session = Depends(get_db), 
-    current_user: models.Usuario = Depends(RoleChecker(ROLES_FINANZAS)) # 1: Admin, 3: Tesorería
+    pago: schemas.RegistroPagoCreate,
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(RoleChecker(ROLES_FINANZAS))
 ):
-    # 0. Verificación de Idempotencia (Evita cobros dobles).
-    # La clave se aísla por usuario: un tercero no puede "secuestrar" ni anular el pago de otro reutilizando su clave.
-    clave_cliente = request.headers.get("Idempotency-Key") or request.headers.get("idempotency-key")
-    clave_idempotencia = None
-    if clave_cliente:
-        if len(clave_cliente) > 80:
-            raise HTTPException(status_code=400, detail="Idempotency-Key demasiado larga (máx. 80 caracteres).")
-        clave_idempotencia = f"u{current_user.id_usuario}:{clave_cliente}"
-        registro_previo = db.query(models.RegistroIdempotencia).filter(
-            models.RegistroIdempotencia.clave_idempotencia == clave_idempotencia
-        ).first()
-        if registro_previo:
-            return json.loads(registro_previo.respuesta_json)
-
-    # 1. Búsqueda y Bloqueo del Gasto.
-    # En vez de NOWAIT (que rechazaba al instante cualquier pago simultáneo sobre el mismo voucher),
-    # la transacción ESPERA en cola hasta LOCK_TIMEOUT_PAGOS a que el otro pago termine.
-    # El bloqueo de fila sigue garantizando que no haya doble gasto ni saldo negativo.
-    aplicar_lock_timeout(db)
-    try:
-        gasto = db.query(models.RegistroGasto).filter(models.RegistroGasto.id_gasto == pago.id_gasto).with_for_update().populate_existing().first()
-    except OperationalError:
-        db.rollback()
-        raise HTTPException(status_code=409, detail="El gasto está siendo liquidado por otro usuario y no se liberó a tiempo. Intente nuevamente.")
-
-    if not gasto or gasto.estado_registro != EstadoRegistro.ACTIVO:
-        raise HTTPException(status_code=404, detail="El gasto asociado no existe.")
-
-    if gasto.estado_pago == EstadoPago.PAGADO:
-        raise HTTPException(status_code=400, detail="Operación rechazada: El gasto ya se encuentra totalmente PAGADO.")
-
-    id_importador_gasto = gasto.dam.maestro.id_importador if (gasto.dam and gasto.dam.maestro) else None
-    if id_importador_gasto is None:
-        raise HTTPException(status_code=400, detail="El gasto no está vinculado a un contenedor con importador; no puede liquidarse.")
-
-    # 2. Bloqueo y validación del Voucher (obligatorio: no existe pago sin respaldo bancario)
-    try:
-        voucher = db.query(models.VoucherBancario).filter(models.VoucherBancario.id_voucher == pago.voucher_id).with_for_update().populate_existing().first()
-    except OperationalError:
-        db.rollback()
-        raise HTTPException(status_code=409, detail="El voucher está siendo usado por otro pago y no se liberó a tiempo. Intente nuevamente.")
-
-    if not voucher or voucher.estado_registro != EstadoRegistro.ACTIVO:
-        raise HTTPException(status_code=404, detail="El voucher especificado no existe.")
-
-    if voucher.id_importador != id_importador_gasto:
-        raise HTTPException(status_code=400, detail="Violación de integridad transaccional: El voucher no pertenece a la entidad importadora del gasto.")
-
-    # 3. Validación del Tipo de Cambio (no se confía ciegamente en el cliente)
-    fecha_pago = pago.fecha_pago or date.today()
-    monedas_involucradas = {pago.moneda, gasto.moneda, voucher.moneda}
-    if len(monedas_involucradas) == 1:
-        tc_aplicado = Decimal("1.0000")  # Misma divisa en todo el flujo: el TC no interviene
-    else:
-        tc_aplicado = Decimal(str(pago.tipo_cambio)).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
-        validar_tipo_cambio(db, tc_aplicado, fecha_pago)
-
-    # 4. Débito del voucher: lo calcula el SERVIDOR en la moneda del voucher.
-    debito_teorico = convertir_moneda(Decimal(str(pago.importe)), pago.moneda, voucher.moneda, tc_aplicado)
-    gasto_financiero_tc = Decimal("0.00")
-    if pago.pago_moneda_cruzada:
-        # El banco puede debitar algo más que el teórico por su spread cambiario, dentro de un margen acotado.
-        if pago.monto_moneda_origen is None:
-            raise HTTPException(status_code=400, detail="En pago con moneda cruzada debe indicar el débito real del banco (monto_moneda_origen).")
-        monto_moneda_origen = Decimal(str(pago.monto_moneda_origen)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-        minimo = debito_teorico - TOLERANCIA_CENTAVOS
-        maximo = (debito_teorico * (Decimal("1") + MARGEN_SPREAD_BANCARIO)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-        if not (minimo <= monto_moneda_origen <= maximo):
-            raise HTTPException(
-                status_code=400,
-                detail=(f"Débito bancario inconsistente: para {pago.moneda} {pago.importe} al TC {tc_aplicado} el débito en el voucher "
-                        f"debe estar entre {voucher.moneda} {minimo} y {maximo}.")
-            )
-        gasto_financiero_tc = max(Decimal("0.00"), monto_moneda_origen - debito_teorico)
-    else:
-        monto_moneda_origen = debito_teorico
-
-    if voucher.saldo_disponible < monto_moneda_origen:
-        raise HTTPException(status_code=400, detail=f"Saldo insuficiente en el voucher. Disponible: {voucher.moneda} {voucher.saldo_disponible}, requerido: {voucher.moneda} {monto_moneda_origen}.")
-
-    # Resta el dinero del voucher
-    voucher.saldo_disponible -= monto_moneda_origen
-
-    # Construcción del pago SOLO con datos validados o derivados por el servidor
-    pago_dict = {
-        "id_gasto": gasto.id_gasto,
-        "id_dam": gasto.id_dam,
-        "id_concepto": gasto.id_concepto,
-        "id_importador": id_importador_gasto,
-        "voucher_id": voucher.id_voucher,
-        "moneda": pago.moneda,
-        "importe": Decimal(str(pago.importe)),
-        "tipo_cambio": tc_aplicado,
-        "tipo_cambio_aplicado": tc_aplicado,  # Numeric(15,4): conserva los 4 decimales para los recálculos
-        "estado_pago": EstadoPago.PAGADO,
-        "fecha_pago": fecha_pago,
-        "es_ajuste_sistema": False,
-        "pago_moneda_cruzada": pago.pago_moneda_cruzada,
-        "gasto_financiero_tc": gasto_financiero_tc,
-        "monto_moneda_origen": monto_moneda_origen,
-    }
-
-    # Validar que el concepto exista
-    concepto_existe = db.query(models.CatConceptoPago).filter(models.CatConceptoPago.id_concepto == pago_dict["id_concepto"]).first()
-    if not concepto_existe:
-        raise HTTPException(status_code=404, detail="El concepto de pago no existe en el catálogo.")
-
-    # 3. Validación Financiera Estricta con Cuantización SUNAT (ROUND_HALF_UP - Dominio Puro)
-    pagos_existentes = db.query(models.RegistroPago).filter(
-        models.RegistroPago.id_gasto == pago_dict["id_gasto"],
-        models.RegistroPago.estado_registro == EstadoRegistro.ACTIVO
-    ).all()
-
-    total_ya_pagado = Decimal("0.00")
-    for p in pagos_existentes:
-        importe_db = Decimal(str(p.importe))
-        tc_db = Decimal(str(p.tipo_cambio_aplicado or p.tipo_cambio or "1.00"))
-        if tc_db <= Decimal("0.00"):
-            tc_db = Decimal("1.00")
-        total_ya_pagado += calcular_amortizacion_cruzada(importe_db, tc_db, gasto.moneda, p.moneda)
-
-    monto_gasto_base = Decimal(str(gasto.monto_original)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    saldo_pendiente = (monto_gasto_base - total_ya_pagado).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-
-    # Calcular el importe amortizado por el nuevo pago en la moneda del gasto
-    nuevo_importe_amortizado = calcular_amortizacion_cruzada(
-        Decimal(str(pago_dict["importe"])),
-        tc_aplicado,
-        gasto.moneda,
-        pago_dict["moneda"]
+    """Registra un pago contra un gasto. La lógica completa está en services/pagos.py."""
+    contexto = ContextoPeticion(
+        usuario=current_user,
+        endpoint=request.url.path,
+        ip=request.client.host if request.client else "IP Desconocida",
+        clave_idempotencia_cliente=request.headers.get("Idempotency-Key") or request.headers.get("idempotency-key"),
     )
-
-    # Tolerancia por diferenciales cambiarios
-    margen_tolerancia = Decimal("0.05")
-    
-    if nuevo_importe_amortizado > (saldo_pendiente + margen_tolerancia):
-        saldo_formateado = saldo_pendiente.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-        raise HTTPException(
-            status_code=400, 
-            detail=f"Sobrepago detectado. El importe ingresado supera el saldo pendiente. Saldo restante: {gasto.moneda} {saldo_formateado}"
-        )
-
-    # 4. Guardar Pago Principal y Registrar Auditoría (Transacción Atómica ACID)
-    try:
-        nuevo_pago = models.RegistroPago(**pago_dict)
-        db.add(nuevo_pago)
-        
-        saldo_pendiente_nuevo = (saldo_pendiente - nuevo_importe_amortizado).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-
-        # Cerrar el gasto si el pago es exacto (o se pasa por centavos permitidos)
-        if saldo_pendiente_nuevo <= Decimal("0.00"):
-            gasto.estado_pago = EstadoPago.PAGADO
-            
-        # 5. Cierre Automático ZD (Ajuste Ficticio por centavos restantes reales)
-        elif Decimal("0.00") < saldo_pendiente_nuevo <= margen_tolerancia:
-            pago_ajuste = models.RegistroPago(
-                id_dam=gasto.id_dam,
-                id_concepto=gasto.id_concepto,
-                moneda=gasto.moneda,
-                importe=saldo_pendiente_nuevo,
-                tipo_cambio=Decimal("1.00"),
-                tipo_cambio_aplicado=Decimal("1.00"),
-                estado_pago=EstadoPago.PAGADO,
-                fecha_pago=date.today(),
-                id_importador=pago_dict.get("id_importador"),
-                id_gasto=gasto.id_gasto,
-                es_ajuste_sistema=True,
-                voucher_id=None,
-                pago_moneda_cruzada=False,
-                gasto_financiero_tc=Decimal("0.00"),
-                monto_moneda_origen=saldo_pendiente_nuevo
-            )
-            db.add(pago_ajuste)
-            gasto.estado_pago = EstadoPago.PAGADO
-        else:
-            gasto.estado_pago = EstadoPago.PARCIAL
-
-        # db.flush() asigna los IDs autoincrementales sin cerrar la transacción física
-        db.flush()
-
-        # --- AUDITORÍA: Registro de Creación ---
-        await registrar_auditoria(
-            db=db,
-            id_usuario=current_user.id_usuario,
-            endpoint=request.url.path,
-            accion=AccionAuditoria.CREACION_PAGO,
-            detalles=pago.model_dump_json(), # Pydantic V2
-            ip_address=request.client.host if request.client else "IP Desconocida"
-        )
-
-        # Guardar registro de idempotencia si se envió la cabecera
-        if clave_idempotencia:
-            try:
-                pago_serializado = json.dumps(jsonable_encoder(schemas.RegistroPago.model_validate(nuevo_pago)))
-                nuevo_idemp = models.RegistroIdempotencia(
-                    clave_idempotencia=clave_idempotencia,
-                    endpoint=request.url.path,
-                    respuesta_json=pago_serializado
-                )
-                db.add(nuevo_idemp)
-                db.commit() # Intentar commit atómico de la llave
-            except IntegrityError:
-                db.rollback()
-                # Si choca aquí, es porque otro hilo paralelo ya la guardó. Retornamos el previo.
-                registro_previo = db.query(models.RegistroIdempotencia).filter(
-                    models.RegistroIdempotencia.clave_idempotencia == clave_idempotencia
-                ).first()
-                if registro_previo:
-                    return json.loads(registro_previo.respuesta_json)
-                raise HTTPException(status_code=409, detail="Conflicto de idempotencia procesando la transacción paralela.")
-        else:
-            db.commit()
-
-        db.refresh(nuevo_pago)
-        
-        # Disparador Reactivo: Evaluar si el pago libera el levante (Proforma u OMC pagada)
-        if nuevo_pago.id_dam:
-            evaluar_gatillos_gastos_dam(db, nuevo_pago.id_dam)
-            
-        return nuevo_pago
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        db.rollback()
-        raise error_interno("Error en transacción", e, 400)
+    return servicio_pagos.registrar_pago(db, pago, contexto)
 
 @router.put("/pagos/{id_pago}", response_model=schemas.RegistroPago)
 def actualizar_pago(
@@ -1216,157 +934,9 @@ def listar_pagos(
     }
 
 @router.delete("/pagos/{id_pago}")
-def eliminar_pago(id_pago: int, req: schemas.EliminacionRequest, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_FINANZAS))): # 1: Admin, 3: Tesorería
-    pago = db.query(models.RegistroPago).filter(models.RegistroPago.id_pago == id_pago).first()
-    if not pago:
-        raise HTTPException(status_code=404, detail="Pago no encontrado")
-
-    if pago.dam and expediente_cerrado(pago.dam) and current_user.id_rol != Rol.SUPERADMIN:
-        raise HTTPException(status_code=403, detail="Operación Denegada: El expediente se encuentra en ATENCIÓN TOTAL. Solicite desbloqueo al Administrador.")
-
-    # Anular un pago de PROFORMA revierte la DAM a PENDIENTE PAGO PROFORMA. Si la DAM ya avanzó por
-    # diligencias MANUALES (aforo, observación, revisión, OMC), esa reversión borraría ese avance:
-    # solo el Administrador puede autorizarla (queda en bitácora).
-    dam_pago = pago.dam
-    clase_pago = pago.concepto_rel.clase_aduanera if pago.concepto_rel else None
-    es_pago_proforma = clase_pago in (ClaseAduanera.TRIBUTO, ClaseAduanera.PERCEPCION)
-    if (
-        es_pago_proforma and dam_pago and current_user.id_rol != Rol.SUPERADMIN
-        and dam_pago.estado_dam in ESTADOS_POST_PROFORMA
-        and dam_pago.estado_dam not in resultado_automatico_proforma(dam_pago)
-    ):
-        raise HTTPException(
-            status_code=403,
-            detail=(f"La DAM {dam_pago.numero_de_dam} ya avanzó por diligencias aduaneras (estado: {dam_pago.estado_dam}). "
-                    "Anular este pago de proforma la haría retroceder a PENDIENTE PAGO PROFORMA y perder ese avance. "
-                    "Solicite la anulación al Administrador.")
-        )
-
-    id_gasto_afectado = pago.id_gasto
-    es_ajuste_actual = pago.es_ajuste_sistema
-
-    try:
-        # Reversión de Dinero al Voucher
-        if pago.voucher_rel:
-            pago.voucher_rel.saldo_disponible += pago.monto_moneda_origen
-            
-        # 1. Respaldo del pago principal
-        cols_respaldo = {c.name for c in models.PagoEliminado.__table__.columns}
-        datos = {c.name: getattr(pago, c.name) for c in pago.__table__.columns if c.name in cols_respaldo}
-        snapshot = {
-            "Voucher": pago.voucher_rel.numero_operacion if pago.voucher_rel else "N/A",
-            "Banco": pago.voucher_rel.banco_rel.nombre if (pago.voucher_rel and pago.voucher_rel.banco_rel) else "N/A",
-            "Importador": pago.importador.nombre if pago.importador else "N/A",
-            "Concepto": pago.concepto_rel.nombre if pago.concepto_rel else "N/A",
-            "DAM": pago.dam.numero_de_dam if pago.dam else "N/A",
-            "Ref. Gasto": f"{pago.gasto_rel.monto_original} {pago.gasto_rel.moneda}" if pago.gasto_rel else "N/A"
-        }
-        respaldo = models.PagoEliminado(
-            **datos, 
-            motivo_eliminacion=req.motivo, 
-            usuario_id=current_user.id_usuario,
-            nombre_usuario_ejecutor=current_user.username,
-            identificador_principal=f"Pago {pago.id_pago}",
-            detalles_legibles=snapshot
-        )
-        db.add(respaldo)
-        
-        # 2. Ejecución Física del pago principal
-        db.delete(pago)
-        db.flush() 
-        
-        # 3. Lógica Contable: Reversión ZD y Recálculo Dinámico
-        if id_gasto_afectado:
-            gasto = db.query(models.RegistroGasto).filter(models.RegistroGasto.id_gasto == id_gasto_afectado).first()
-            
-            if gasto:
-                # A. Reversión de Ajuste ZD huérfano
-                if not es_ajuste_actual:
-                    pago_zd = db.query(models.RegistroPago).filter(
-                        models.RegistroPago.id_gasto == id_gasto_afectado,
-                        models.RegistroPago.es_ajuste_sistema.is_(True)
-                    ).first()
-                    
-                    if pago_zd:
-                        if pago_zd.voucher_rel:
-                            pago_zd.voucher_rel.saldo_disponible += pago_zd.monto_moneda_origen
-                        
-                        datos_zd = {c.name: getattr(pago_zd, c.name) for c in pago_zd.__table__.columns if c.name in cols_respaldo}
-                        snapshot_zd = {
-                            "Voucher": pago_zd.voucher_rel.numero_operacion if pago_zd.voucher_rel else "N/A",
-                            "Banco": pago_zd.voucher_rel.banco_rel.nombre if (pago_zd.voucher_rel and pago_zd.voucher_rel.banco_rel) else "N/A",
-                            "Importador": pago_zd.importador.nombre if pago_zd.importador else "N/A",
-                            "Concepto": pago_zd.concepto_rel.nombre if pago_zd.concepto_rel else "N/A",
-                            "DAM": pago_zd.dam.numero_de_dam if pago_zd.dam else "N/A",
-                            "Ref. Gasto": f"{pago_zd.gasto_rel.monto_original} {pago_zd.gasto_rel.moneda}" if pago_zd.gasto_rel else "N/A"
-                        }
-                        respaldo_zd = models.PagoEliminado(
-                            **datos_zd,
-                            motivo_eliminacion=f"Reversión contable automática por eliminación del pago padre ID: {id_pago}",
-                            usuario_id=current_user.id_usuario,
-                            nombre_usuario_ejecutor=current_user.username,
-                            identificador_principal=f"Pago ZD {pago_zd.id_pago}",
-                            detalles_legibles=snapshot_zd
-                        )
-                        db.add(respaldo_zd)
-                        db.delete(pago_zd)
-                        db.flush() 
-                
-                # B. Cálculo de saldos dinámicos según la moneda del gasto
-                if gasto.moneda == Moneda.USD:
-                    case_expr = case(
-                        (models.RegistroPago.moneda == Moneda.USD, models.RegistroPago.importe),
-                        (models.RegistroPago.moneda == Moneda.PEN, models.RegistroPago.importe / func.coalesce(models.RegistroPago.tipo_cambio_aplicado, models.RegistroPago.tipo_cambio, 1)),
-                        else_=0
-                    )
-                else: # gasto.moneda == "PEN"
-                    case_expr = case(
-                        (models.RegistroPago.moneda == Moneda.PEN, models.RegistroPago.importe),
-                        (models.RegistroPago.moneda == Moneda.USD, models.RegistroPago.importe * func.coalesce(models.RegistroPago.tipo_cambio_aplicado, models.RegistroPago.tipo_cambio, 1)),
-                        else_=0
-                    )
-
-                total_pagado_base = db.query(func.sum(case_expr)).filter(
-                    models.RegistroPago.id_gasto == id_gasto_afectado,
-                    models.RegistroPago.estado_registro == EstadoRegistro.ACTIVO
-                ).scalar()
-                
-                total_pagado_base = (Decimal(str(total_pagado_base)) if total_pagado_base else Decimal("0.00")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-                monto_gasto_base = Decimal(str(gasto.monto_original)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-                
-                saldo_pendiente = (monto_gasto_base - total_pagado_base).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-                margen_tolerancia = Decimal("0.05")
-                
-                # C. Asignación Dinámica del Estado
-                if saldo_pendiente >= monto_gasto_base:
-                    gasto.estado_pago = EstadoPago.PENDIENTE
-                elif saldo_pendiente > margen_tolerancia:
-                    gasto.estado_pago = EstadoPago.PARCIAL
-                else:
-                    gasto.estado_pago = EstadoPago.PAGADO
-                    
-        db.commit()
-
-        transicion = None
-        if id_gasto_afectado and gasto and gasto.id_dam:
-            transicion = evaluar_gatillos_gastos_dam(db, gasto.id_dam)
-
-        mensaje = f"Pago {id_pago} eliminado exitosamente. Saldos recalculados y sincronizados en los registros de auditoría."
-        respuesta = {"mensaje": mensaje, "reversion_dam": None}
-        if transicion and transicion[0] != transicion[1]:
-            dam_rev = db.query(models.DetalleDam).filter(models.DetalleDam.id_dam == gasto.id_dam).first()
-            respuesta["reversion_dam"] = {
-                "numero_de_dam": dam_rev.numero_de_dam if dam_rev else None,
-                "contenedor": dam_rev.maestro.numero_factura if (dam_rev and dam_rev.maestro) else None,
-                "estado_anterior": transicion[0],
-                "estado_nuevo": transicion[1],
-            }
-            respuesta["mensaje"] = (f"{mensaje} ⚠ La DAM {respuesta['reversion_dam']['numero_de_dam']} del contenedor "
-                                    f"{respuesta['reversion_dam']['contenedor']} volvió de '{transicion[0]}' a '{transicion[1]}'.")
-        return respuesta
-    except Exception as e:
-        db.rollback()
-        raise error_interno("Error al eliminar pago", e, 400)
+def eliminar_pago(id_pago: int, req: schemas.EliminacionRequest, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_FINANZAS))):
+    """Anula un pago y recalcula saldos y estados. La lógica completa está en services/pagos.py."""
+    return servicio_pagos.anular_pago(db, id_pago, req.motivo, current_user)
 
 
 # ==========================================

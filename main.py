@@ -7,6 +7,7 @@ from slowapi import _rate_limit_exceeded_handler
 from fastapi.responses import JSONResponse
 from security import COOKIE_SESION, CSRF_HEADER
 from dependencies import limiter
+from services.errores import ErrorDeNegocio
 from routers import auditoria, auth, catalogos, finanzas, integraciones, operaciones, reportes, usuarios
 
 # La documentación interactiva (/docs, /redoc, /openapi.json) expone el mapa completo de la API.
@@ -22,6 +23,13 @@ app = FastAPI(
 # Configuración Global de Rate Limiting (SlowAPI)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+@app.exception_handler(ErrorDeNegocio)
+async def responder_error_de_negocio(request: Request, exc: ErrorDeNegocio):
+    """Reglas de negocio incumplidas en los servicios: misma respuesta que una HTTPException."""
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detalle})
+
 
 cors_env = os.getenv("CORS_ORIGINS")
 origins = [o.strip() for o in cors_env.split(",") if o.strip()] if cors_env else ["http://localhost:5173", "http://127.0.0.1:5173"]

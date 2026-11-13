@@ -229,6 +229,16 @@ r = pagar2(g, v["id_voucher"], "100.00")
 db.expire_all(); zd = db.query(models.RegistroPago).filter_by(id_gasto=g, es_ajuste_sistema=True).first()
 chk("R7", "Ajuste ZD por centavos sigue cerrando el gasto", r.status_code == 200 and gasto(g).estado_pago == "PAGADO" and zd is not None, f"{gasto(g).estado_pago} zd={'sí' if zd else 'no'}")
 
+# R7b: anular el pago principal revierte también el ajuste de centavos, devuelve el dinero y deja respaldo de ambos
+id_pago_r7 = r.json()["id_pago"]; id_zd_r7 = zd.id_pago if zd else None
+r_an = c.request("DELETE", f"/pagos/{id_pago_r7}", json={"motivo": "Prueba R7b: anulación con ajuste de centavos"}, headers=H["teso"])
+db.expire_all()
+quedan = db.query(models.RegistroPago).filter_by(id_gasto=g).count()
+respaldos = db.query(models.PagoEliminado).filter(models.PagoEliminado.id_gasto == g).count()
+chk("R7b", "Anular el pago revierte el ajuste ZD, devuelve el saldo al voucher, deja 2 respaldos y el gasto vuelve a PENDIENTE",
+    r_an.status_code == 200 and quedan == 0 and respaldos == 2 and voucher(v["id_voucher"]).saldo_disponible == Decimal("1000.00") and gasto(g).estado_pago == "PENDIENTE" and id_zd_r7 is not None,
+    f"{r_an.status_code} quedan={quedan} respaldos={respaldos} saldo={voucher(v['id_voucher']).saldo_disponible} estado={gasto(g).estado_pago}")
+
 m = mk_maestro("F-R8"); d = mk_dam(m, "DAM-R8"); g = mk_gasto(d, c_otro.id_concepto, 200); v = mk_voucher(500, num="OP-R8")
 p = pagar2(g, v["id_voucher"], 200).json()
 rd = c.request("DELETE", f"/pagos/{p['id_pago']}", json={"motivo": "anulación de prueba"}, headers=H["teso"])
