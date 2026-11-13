@@ -1,14 +1,36 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useState } from 'react';
 import api from '../services/api';
 import { descargarExcel } from '../utils/exportUtils';
 import { BarChart3, RefreshCw, Zap, Ship, Scale, Tags, FolderOpen, Download, TrendingUp, Building2 } from 'lucide-react';
-import { useInteraccion } from '../context/interaccion';
+import { mensajeDeError, useInteraccion } from '../context/interaccion';
+import useConsulta from '../hooks/useConsulta';
+
+/** Fechas de inicio y fin del rango elegido (null = sin límite). */
+function fechasDelRango(rango) {
+  const hoy = new Date();
+  const iso = (d) => d.toISOString().slice(0, 10);
+  if (rango === 'MES') return { fecha_inicio: iso(new Date(hoy.getFullYear(), hoy.getMonth(), 1)), fecha_fin: iso(hoy) };
+  if (rango === 'TRIMESTRE') {
+    const hace90 = new Date();
+    hace90.setDate(hace90.getDate() - 90);
+    return { fecha_inicio: iso(hace90), fecha_fin: iso(hoy) };
+  }
+  if (rango === 'ANIO') return { fecha_inicio: iso(new Date(hoy.getFullYear(), 0, 1)), fecha_fin: iso(hoy) };
+  return { fecha_inicio: null, fecha_fin: null };
+}
+
+/** Parámetros comunes del tablero y de la sábana de liquidaciones. */
+function parametrosReporte(rango, idImportador, tcRef) {
+  const { fecha_inicio, fecha_fin } = fechasDelRango(rango);
+  const params = { tipo_cambio_referencial: parseFloat(tcRef) || 3.80 };
+  if (fecha_inicio) params.fecha_inicio = fecha_inicio;
+  if (fecha_fin) params.fecha_fin = fecha_fin;
+  if (idImportador) params.id_importador = idImportador;
+  return params;
+}
 
 const Reportes = () => {
   const { avisar } = useInteraccion();
-  const [loading, setLoading] = useState(true);
-  const [data, setData] = useState(null);
-  const [opcionesImportadores, setOpcionesImportadores] = useState([]);
 
   // Filtros globales del módulo
   const [rangoTemporal, setRangoTemporal] = useState('TODOS');
@@ -16,84 +38,33 @@ const Reportes = () => {
   const [tcRef, setTcRef] = useState('3.80');
   const [isExportandoSabana, setIsExportandoSabana] = useState(false);
 
-  useEffect(() => {
-    cargarImportadores();
-  }, []);
+  const avisarFallo = (err) => avisar(`Error al cargar analítica: ${mensajeDeError(err)}`, 'error');
 
-  useEffect(() => {
-    cargarCockpit();
-  }, [rangoTemporal, importadorFiltro, tcRef]);
+  const consultarImportadores = useCallback(
+    () => api.get('/importadores/').then((res) => res.data?.data || res.data || []),
+    [],
+  );
+  const { datos: opcionesImportadores } = useConsulta(consultarImportadores, { inicial: [] });
 
-  const cargarImportadores = async () => {
-    try {
-      const res = await api.get('/importadores/');
-      setOpcionesImportadores(res.data?.data || res.data || []);
-    } catch {
-      // Si falla, continúa
-    }
-  };
-
-  const calcularFechasFiltro = () => {
-    const hoy = new Date();
-    let fecha_inicio = null;
-    let fecha_fin = null;
-
-    if (rangoTemporal === 'MES') {
-      const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-      fecha_inicio = inicioMes.toISOString().slice(0, 10);
-      fecha_fin = hoy.toISOString().slice(0, 10);
-    } else if (rangoTemporal === 'TRIMESTRE') {
-      const hace90 = new Date();
-      hace90.setDate(hace90.getDate() - 90);
-      fecha_inicio = hace90.toISOString().slice(0, 10);
-      fecha_fin = hoy.toISOString().slice(0, 10);
-    } else if (rangoTemporal === 'ANIO') {
-      const inicioAnio = new Date(hoy.getFullYear(), 0, 1);
-      fecha_inicio = inicioAnio.toISOString().slice(0, 10);
-      fecha_fin = hoy.toISOString().slice(0, 10);
-    }
-
-    return { fecha_inicio, fecha_fin };
-  };
-
-  const cargarCockpit = async () => {
-    setLoading(true);
-    try {
-      const { fecha_inicio, fecha_fin } = calcularFechasFiltro();
-      const params = {
-        tipo_cambio_referencial: parseFloat(tcRef) || 3.80
-      };
-      if (fecha_inicio) params.fecha_inicio = fecha_inicio;
-      if (fecha_fin) params.fecha_fin = fecha_fin;
-      if (importadorFiltro) params.id_importador = importadorFiltro;
-
-      const res = await api.get('/reportes/analytics-cockpit', { params });
-      setData(res.data);
-    } catch (err) {
-      avisar(`Error al cargar analítica: ${err.response?.data?.detail || err.message || 'Error desconocido'}`, 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const consultarCockpit = useCallback(
+    () => api.get('/reportes/analytics-cockpit', { params: parametrosReporte(rangoTemporal, importadorFiltro, tcRef) })
+      .then((res) => res.data),
+    [rangoTemporal, importadorFiltro, tcRef],
+  );
+  const { datos: data, cargando: loading, recargar } = useConsulta(consultarCockpit, { alFallar: avisarFallo });
+  const cargarCockpit = () => recargar().catch(avisarFallo);
 
   const handleExportarSabana = async () => {
     setIsExportandoSabana(true);
     try {
-      const { fecha_inicio, fecha_fin } = calcularFechasFiltro();
-      const params = {
-        tipo_cambio_referencial: parseFloat(tcRef) || 3.80
-      };
-      if (fecha_inicio) params.fecha_inicio = fecha_inicio;
-      if (fecha_fin) params.fecha_fin = fecha_fin;
-      if (importadorFiltro) params.id_importador = importadorFiltro;
-
+      const params = parametrosReporte(rangoTemporal, importadorFiltro, tcRef);
       await descargarExcel(
         '/reportes/sabana-liquidaciones/exportar',
         params,
         'Sabana_Consolidada_Liquidaciones.xlsx'
       );
     } catch (err) {
-      avisar(`Error al exportar Sábana: ${err.response?.data?.detail || err.message || 'Error desconocido'}`, 'error');
+      avisar(`Error al exportar Sábana: ${mensajeDeError(err)}`, 'error');
     } finally {
       setIsExportandoSabana(false);
     }

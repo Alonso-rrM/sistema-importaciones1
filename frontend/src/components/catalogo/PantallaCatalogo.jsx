@@ -7,8 +7,9 @@
  */
 import { Search } from 'lucide-react';
 import { ESTADO_REGISTRO } from '../../constants';
-import useCatalogo, { FILTRO_TODOS, MODO } from './useCatalogo';
-import CampoRuc, { useConsultaRuc } from './CampoRuc';
+import useCatalogo, { FILTRO_TODOS, MODO, nombreDe } from './useCatalogo';
+import CampoRuc from './CampoRuc';
+import useConsultaRuc from './useConsultaRuc';
 
 const BOTON_FILTRO = 'px-3 py-1 rounded-md font-semibold transition-colors';
 const FILTRO_ACTIVO = 'bg-teal-600 text-white shadow';
@@ -110,7 +111,7 @@ function Bandeja({ definicion, c }) {
               </div>
               {tarjeta?.detalleDerecha && <span className="font-mono text-[10px] text-slate-400">{tarjeta.detalleDerecha(r)}</span>}
             </div>
-            <div className="mt-1.5 text-xs font-semibold text-slate-200 truncate">{r.nombre}</div>
+            <div className="mt-1.5 text-xs font-semibold text-slate-200 truncate">{nombreDe(definicion, r)}</div>
             {tarjeta?.subtitulo && <div className="mt-0.5 text-[11px] text-slate-500 truncate">{tarjeta.subtitulo(r)}</div>}
           </div>
         ))}
@@ -169,7 +170,7 @@ function CampoFormulario({ campo, c, consultaRuc }) {
         <label className="block text-xs font-bold text-slate-300 uppercase tracking-wide">
           {campo.etiqueta}{campo.requerido && ' *'}
         </label>
-        {campo.nombre === 'nombre' && razon?.original && (
+        {campo.nombre === 'nombre' && razon?.original && (   // alternar razón social completa / abreviada
           <button type="button" onClick={() => cambiar(valor === razon.sugerido ? razon.original : razon.sugerido)}
             className="text-[10px] font-semibold text-teal-400 hover:text-teal-300">
             {valor === razon.sugerido ? '📄 Ver Razón Social Completa' : '✂️ Usar Nombre Acortado'}
@@ -242,7 +243,7 @@ function Ficha({ definicion, c }) {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2.5">
             <h2 className="text-base font-bold text-white tracking-tight">
-              {c.modo === MODO.NUEVO ? `✨ Nuevo ${textos.singular}` : r?.nombre}
+              {c.modo === MODO.NUEVO ? `✨ Nuevo ${textos.singular}` : nombreDe(definicion, r)}
             </h2>
             {c.modo !== MODO.NUEVO && <InsigniaEstado estado={r?.estado_registro} />}
           </div>

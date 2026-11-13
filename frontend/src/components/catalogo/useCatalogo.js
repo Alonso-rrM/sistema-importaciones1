@@ -20,6 +20,9 @@ function formularioDesde(definicion, registro) {
   return Object.fromEntries(definicion.campos.map((c) => [c.nombre, registro?.[c.nombre] ?? c.valorInicial ?? '']));
 }
 
+/** Nombre visible de un registro (la mayoría de catálogos lo guarda en `nombre`). */
+export const nombreDe = (definicion, registro) => registro?.[definicion.campoNombre || 'nombre'];
+
 export default function useCatalogo(definicion) {
   const { avisar, confirmar } = useInteraccion();
   const { ruta, campoId, textos } = definicion;
@@ -34,26 +37,34 @@ export default function useCatalogo(definicion) {
   const [formulario, setFormulario] = useState(() => formularioVacio(definicion));
   const [guardando, setGuardando] = useState(false);
 
+  const obtener = useCallback(async () => {
+    const mostrarInactivos = filtroEstado !== ESTADO_REGISTRO.ACTIVO;
+    const { data } = await api.get(`/${ruta}/?mostrar_inactivos=${mostrarInactivos}`);
+    return data || [];
+  }, [ruta, filtroEstado]);
+
+  /** Vuelve a leer el catálogo (después de guardar, dar de baja, etc.). */
   const cargar = useCallback(async () => {
     try {
-      const mostrarInactivos = filtroEstado !== ESTADO_REGISTRO.ACTIVO;
-      const { data } = await api.get(`/${ruta}/?mostrar_inactivos=${mostrarInactivos}`);
-      setRegistros(data || []);
-      return data || [];
+      const data = await obtener();
+      setRegistros(data);
     } catch {
       avisar('No se pudo conectar con la base de datos.', 'error');
-      return [];
     }
-  }, [ruta, filtroEstado, avisar]);
+  }, [obtener, avisar]);
 
   useEffect(() => {
     let vigente = true;
-    cargar().then((data) => {
-      // Al abrir la pantalla se muestra el primer registro
-      if (vigente && data.length > 0) setSeleccionId((actual) => actual ?? data[0][campoId]);
-    });
+    obtener()
+      .then((data) => {
+        if (!vigente) return;
+        setRegistros(data);
+        // Al abrir la pantalla se muestra el primer registro
+        if (data.length > 0) setSeleccionId((actual) => actual ?? data[0][campoId]);
+      })
+      .catch(() => vigente && avisar('No se pudo conectar con la base de datos.', 'error'));
     return () => { vigente = false; };
-  }, [cargar, campoId]);
+  }, [obtener, campoId, avisar]);
 
   const filtrados = useMemo(() => {
     const termino = busquedaDiferida.toLowerCase();
@@ -110,7 +121,8 @@ export default function useCatalogo(definicion) {
     }
     const datos = Object.fromEntries(definicion.campos.map((c) => {
       const valor = typeof formulario[c.nombre] === 'string' ? formulario[c.nombre].trim() : formulario[c.nombre];
-      return [c.nombre, valor === '' && c.vacioComoNulo ? null : valor];
+      if (valor === '' && c.vacioComoNulo) return [c.nombre, null];
+      return [c.nombre, c.convertir ? c.convertir(valor) : valor];
     }));
 
     setGuardando(true);
@@ -144,7 +156,7 @@ export default function useCatalogo(definicion) {
     if (!ok) return;
     try {
       await api.delete(`/${ruta}/${seleccionId}`);
-      avisar(`✅ ${textos.singular} "${seleccionado.nombre}" desactivado correctamente.`, 'exito');
+      avisar(`✅ ${textos.singular} "${nombreDe(definicion, seleccionado)}" desactivado correctamente.`, 'exito');
       await cargar();
     } catch (error) {
       avisar(`❌ ${mensajeDeError(error, 'No se pudo desactivar.')}`, 'error');
@@ -155,7 +167,7 @@ export default function useCatalogo(definicion) {
     if (!seleccionado) return;
     try {
       await api.put(`/${ruta}/${seleccionId}/restaurar`);
-      avisar(`✅ ${textos.singular} "${seleccionado.nombre}" restaurado a ACTIVO.`, 'exito');
+      avisar(`✅ ${textos.singular} "${nombreDe(definicion, seleccionado)}" restaurado a ACTIVO.`, 'exito');
       await cargar();
     } catch (error) {
       avisar(`❌ ${mensajeDeError(error, 'No se pudo restaurar.')}`, 'error');
@@ -174,7 +186,7 @@ export default function useCatalogo(definicion) {
     if (!ok) return;
     try {
       await api.delete(`/${ruta}/${seleccionId}/fisico`);
-      avisar(`✅ ${textos.singular} "${seleccionado.nombre}" eliminado definitivamente.`, 'exito');
+      avisar(`✅ ${textos.singular} "${nombreDe(definicion, seleccionado)}" eliminado definitivamente.`, 'exito');
       setSeleccionId(null);
       await cargar();
     } catch (error) {

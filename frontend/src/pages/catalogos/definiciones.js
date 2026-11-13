@@ -7,7 +7,7 @@
  * buscarEn: campos donde busca el cuadro de búsqueda.
  * tarjeta: qué más muestra cada fila de la bandeja.  ficha: qué muestra la ficha de detalle.
  */
-import { Briefcase, Building2, Factory, Landmark, Users } from 'lucide-react';
+import { Briefcase, Building2, Factory, FileDigit, Landmark, Users } from 'lucide-react';
 import { CATEGORIA_PROVEEDOR } from '../../constants';
 
 const RUC_O_TEXTO = (r) => (r?.ruc ? `RUC: ${r.ruc}` : 'S/RUC');
@@ -168,6 +168,45 @@ export const PROVEEDORES = {
       { etiqueta: 'Razón Social', valor: (r) => r?.nombre },
       { etiqueta: 'RUC', valor: (r) => r?.ruc || 'Sin RUC' },
       { etiqueta: 'Categoría', valor: (r) => ETIQUETAS_CATEGORIA_PROVEEDOR[r?.categoria] || r?.categoria || '-' },
+    ],
+  },
+};
+
+export const COMPROBANTES = {
+  ruta: 'tipos-documento', campoId: 'id_tipo_doc', campoNombre: 'nombre_documento', Icono: FileDigit,
+  textos: {
+    singular: 'Comprobante',
+    titulo: 'Catálogo de Tipos de Comprobante',
+    subtitulo: 'Definición de documentos tributarios (Facturas, Boletas, Recibos, Notas de Crédito con multiplicador)',
+    placeholderBusqueda: 'Buscar tipo de comprobante...',
+    sinResultados: 'No se encontraron tipos de comprobante con los criterios indicados.',
+    ayudaSinSeleccion: 'Seleccione un tipo de comprobante de la bandeja izquierda para ver o modificar sus parámetros de cálculo.',
+    referencia: (r) => `el comprobante "${r.nombre_documento}"`,
+    advertenciaBorrado: 'tiene gastos asociados',
+  },
+  campos: [
+    { nombre: 'nombre_documento', etiqueta: 'Nombre del Tipo de Documento', requerido: true,
+      placeholder: 'Ej. Factura Comercial, Boleta de Venta, Nota de Crédito...',
+      mensajeRequerido: 'El nombre del tipo de documento es obligatorio.' },
+    { nombre: 'multiplicador_financiero', etiqueta: 'Multiplicador Financiero', tipo: 'seleccion', requerido: true,
+      valorInicial: 1, convertir: Number,
+      opciones: [
+        { valor: 1, etiqueta: '+1 (Suma al costo - Facturas, Recibos, Boletas)' },
+        { valor: -1, etiqueta: '-1 (Resta al costo - Notas de Crédito, Devoluciones)' },
+      ],
+      ayuda: 'Indica si el documento suma al costo del contenedor o lo descuenta.' },
+  ],
+  buscarEn: ['nombre_documento'],
+  tarjeta: { insignia: (r) => `Mult: ${r.multiplicador_financiero > 0 ? '+1' : '-1'}` },
+  ficha: {
+    titulo: 'Datos del Comprobante',
+    destacado: {
+      etiqueta: 'Efecto en el costo',
+      valor: (r) => (r?.multiplicador_financiero < 0 ? 'Resta al Gasto (-1)' : 'Suma al Gasto (+1)'),
+    },
+    datos: [
+      { etiqueta: 'Nombre del Documento', valor: (r) => r?.nombre_documento },
+      { etiqueta: 'Multiplicador', valor: (r) => `${r?.multiplicador_financiero} (${r?.multiplicador_financiero < 0 ? 'Crédito / Descuento' : 'Débito / Gasto'})` },
     ],
   },
 };

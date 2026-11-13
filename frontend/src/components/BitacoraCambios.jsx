@@ -49,7 +49,7 @@ const fmtValor = (v) => (v === null || v === undefined || v === '' ? '∅' : Str
 
 const BitacoraCambios = ({ onCount }) => {
   const [filas, setFilas] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [hayMas, setHayMas] = useState(false);
   const [detalle, setDetalle] = useState(null);
   const [filtros, setFiltros] = useState({ tabla: '', buscar: '', accion: '', fecha_desde: '', fecha_hasta: '' });
@@ -71,7 +71,20 @@ const BitacoraCambios = ({ onCount }) => {
     }
   }, [filtros]);
 
-  useEffect(() => { cargar(0); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Carga inicial (sin filtros). Después, los filtros se aplican con el botón Buscar.
+  useEffect(() => {
+    let vigente = true;
+    api.get('/auditoria/', { params: { limit: POR_PAGINA, offset: 0 } })
+      .then((res) => {
+        if (!vigente) return;
+        const datos = res.data || [];
+        setFilas(datos);
+        setHayMas(datos.length === POR_PAGINA);
+      })
+      .catch((error) => console.error('Error al cargar la bitácora:', error))
+      .finally(() => vigente && setLoading(false));
+    return () => { vigente = false; };
+  }, []);
   useEffect(() => { onCount?.(filas.length); }, [filas, onCount]);
 
   const limpiar = () => setFiltros({ tabla: '', buscar: '', accion: '', fecha_desde: '', fecha_hasta: '' });

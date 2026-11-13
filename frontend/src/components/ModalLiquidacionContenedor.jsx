@@ -1,33 +1,44 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useEffectEvent, useState } from 'react';
 import api from '../services/api';
 import { descargarExcel } from '../utils/exportUtils';
 import { ESTADO_LEVANTE, ESTADO_PAGO, MONEDA, TIPO_GASTO } from '../constants';
-import { useInteraccion } from '../context/interaccion';
+import { mensajeDeError, useInteraccion } from '../context/interaccion';
 
-const ModalLiquidacionContenedor = ({ isOpen, idMaestro, onClose }) => {
+const ContenidoLiquidacion = ({ idMaestro, onClose }) => {
   const { avisar } = useInteraccion();
   const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [tc, setTc] = useState('3.80');
   const [isExportingExcel, setIsExportingExcel] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
 
-  useEffect(() => {
-    if (isOpen && idMaestro) {
-      cargarLiquidacion(tc);
-    }
-  }, [isOpen, idMaestro]);
+  const consultar = (tcValor) => api
+    .get(`/maestros/${idMaestro}/liquidacion-gastos`, { params: { tipo_cambio_referencial: parseFloat(tcValor) || 3.80 } })
+    .then((res) => res.data);
 
+  const informarFallo = (err) => {
+    avisar(`Error al cargar liquidación: ${mensajeDeError(err)}`, 'error');
+    onClose();
+  };
+  const falloAlAbrir = useEffectEvent(informarFallo);
+
+  // Carga inicial al abrir el modal (con el TC referencial por defecto)
+  useEffect(() => {
+    let vigente = true;
+    api.get(`/maestros/${idMaestro}/liquidacion-gastos`, { params: { tipo_cambio_referencial: 3.80 } })
+      .then((res) => vigente && setData(res.data))
+      .catch((err) => vigente && falloAlAbrir(err))
+      .finally(() => vigente && setLoading(false));
+    return () => { vigente = false; };
+  }, [idMaestro]);
+
+  /** Recalcula con otro tipo de cambio referencial (lo dispara la usuaria). */
   const cargarLiquidacion = async (tcValor) => {
     setLoading(true);
     try {
-      const res = await api.get(`/maestros/${idMaestro}/liquidacion-gastos`, {
-        params: { tipo_cambio_referencial: parseFloat(tcValor) || 3.80 }
-      });
-      setData(res.data);
+      setData(await consultar(tcValor));
     } catch (err) {
-      avisar(`Error al cargar liquidación: ${err.response?.data?.detail || err.message || 'Error desconocido'}`, 'error');
-      onClose();
+      informarFallo(err);
     } finally {
       setLoading(false);
     }
@@ -78,8 +89,6 @@ const ModalLiquidacionContenedor = ({ isOpen, idMaestro, onClose }) => {
       }
     }, 150);
   };
-
-  if (!isOpen) return null;
 
   // Filtrar gastos por etapa para la tabla unificada
   const gastosFijos = data?.gastos?.filter(g => g.tipo_gasto === TIPO_GASTO.FIJO_DESPACHO) || [];
@@ -603,5 +612,10 @@ const renderFilasGastos = (gastos) => {
     );
   });
 };
+
+/** El contenido se monta al abrir y se desmonta al cerrar: cada apertura empieza con datos frescos. */
+const ModalLiquidacionContenedor = ({ isOpen, idMaestro, onClose }) => (
+  isOpen && idMaestro ? <ContenidoLiquidacion key={idMaestro} idMaestro={idMaestro} onClose={onClose} /> : null
+);
 
 export default ModalLiquidacionContenedor;

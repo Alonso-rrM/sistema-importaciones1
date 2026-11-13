@@ -1,10 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import api from '../services/api';
 import { acortarRazonSocial } from '../utils/textUtils';
 import { CATEGORIA_PROVEEDOR } from '../constants';
 
-const ModalCrearProveedorRapido = ({
-  isOpen,
+const FormularioProveedorRapido = ({
   onClose,
   onProveedorCreado,
   categoriaDefecto = CATEGORIA_PROVEEDOR.NACIONAL
@@ -15,19 +14,6 @@ const ModalCrearProveedorRapido = ({
   const [buscandoRuc, setBuscandoRuc] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [mensaje, setMensaje] = useState({ texto: '', tipo: '' });
-
-  useEffect(() => {
-    if (isOpen) {
-      setCategoria(categoriaDefecto);
-      setRuc('');
-      setNombre('');
-      setMensaje({ texto: '', tipo: '' });
-      setBuscandoRuc(false);
-      setGuardando(false);
-    }
-  }, [isOpen, categoriaDefecto]);
-
-  if (!isOpen) return null;
 
   const mostrarAlerta = (texto, tipo = 'info') => {
     setMensaje({ texto, tipo });
@@ -283,6 +269,9 @@ const ModalCrearProveedorRapido = ({
     </div>
   );
 };
+
+/** El formulario se monta al abrir el modal: cada apertura empieza vacío y con la categoría por defecto. */
+const ModalCrearProveedorRapido = ({ isOpen, ...props }) => (isOpen ? <FormularioProveedorRapido {...props} /> : null);
 
 export default ModalCrearProveedorRapido;
 

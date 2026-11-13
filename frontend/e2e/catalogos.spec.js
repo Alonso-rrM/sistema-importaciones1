@@ -8,6 +8,7 @@ const CATALOGOS = [
   { ruta: 'agentes', boton: 'Nuevo Agente', nombre: 'AGENCIA PRUEBA UI', placeholderNombre: 'agencia de aduanas', ruc: '20200000011', placeholderRuc: 'Ej. 20111222333' },
   { ruta: 'importadores', boton: 'Nuevo Importador', nombre: 'IMPORTADOR PRUEBA UI', placeholderNombre: 'Nombre oficial o abreviado de la empresa', ruc: '20200000012', placeholderRuc: 'Ej. 20123456789' },
   { ruta: 'proveedores', boton: 'Nuevo Proveedor', nombre: 'PROVEEDOR PRUEBA UI', placeholderNombre: 'Nombre oficial o abreviado del proveedor', ruc: '20200000013', placeholderRuc: 'Ej. 20987654321' },
+  { ruta: 'comprobantes', boton: 'Nuevo Comprobante', nombre: 'NOTA DE CREDITO UI', placeholderNombre: 'Ej. Factura Comercial' },
 ];
 
 for (const cat of CATALOGOS) {
@@ -88,4 +89,15 @@ test('proveedores: se puede registrar una entidad del Estado y filtrar por categ
   await expect(lista.getByText('MUNICIPALIDAD DEL CALLAO', { exact: true })).toBeVisible();
   await expect(lista.getByText('SUNAT', { exact: true })).toBeVisible();          // creado en los datos de ejemplo
   await expect(lista.getByText('NAVIERA E2E', { exact: true })).toBeHidden();     // nacional: queda fuera del filtro
+});
+
+test('comprobantes: el multiplicador se guarda como número (-1 para notas de crédito)', async ({ page }) => {
+  await iniciarSesion(page);
+  await page.goto('/app/comprobantes');
+  await page.getByRole('button', { name: 'Nuevo Comprobante' }).first().click();
+  await page.getByPlaceholder('Ej. Factura Comercial').fill('NOTA DE DEBITO UI');
+  await page.locator('form select').selectOption({ label: '-1 (Resta al costo - Notas de Crédito, Devoluciones)' });
+  await page.locator('form button[type=submit]').click();
+  await esperarAviso(page, 'exitosamente');
+  await expect(page.getByText('Resta al Gasto (-1)').first()).toBeVisible();
 });
