@@ -131,3 +131,70 @@ def test_los_estados_que_concede_el_pago_de_omc_son_posteriores_a_la_proforma():
     assert ESTADOS_POR_PAGO_OMC <= ESTADOS_POST_PROFORMA
     assert "PENDIENTE PAGO PROFORMA" not in ESTADOS_POST_PROFORMA
     assert "NUMERADA / EN EVALUACIÓN" not in ESTADOS_POST_PROFORMA
+
+
+# ---------- decidir_estado_dam: transiciones automáticas (regla pura) ----------
+
+from services.state_machine import AccionFechaLevante as F  # noqa: E402
+from services.state_machine import decidir_estado_dam  # noqa: E402
+
+SIN_NADA = {"tiene_proforma": False, "proforma_pagada": False, "tiene_omc": False, "omc_pagado": False}
+PROFORMA_PENDIENTE = {**SIN_NADA, "tiene_proforma": True}
+PROFORMA_PAGADA = {**SIN_NADA, "tiene_proforma": True, "proforma_pagada": True}
+OMC_PENDIENTE = {**PROFORMA_PAGADA, "tiene_omc": True}
+OMC_PAGADA = {**PROFORMA_PAGADA, "tiene_omc": True, "omc_pagado": True}
+
+NUMERADA = "NUMERADA / EN EVALUACIÓN"
+P_PROFORMA = "PENDIENTE PAGO PROFORMA"
+AFORO = "PENDIENTE DE AFORO"
+LEVANTE = "CON LEVANTE"
+LEVANTE_GTIA = "CON LEVANTE (GARANTÍA ACTIVA)"
+REVISION = "EN REVISIÓN"
+REVISION_OMC = "EN REVISIÓN OMC (POST-LEVANTE)"
+P_OMC = "PENDIENTE PAGO OMC"
+CERRADA = "GARANTÍA CERRADA / LIQUIDADA"
+OBSERVADA = "OBSERVADA / NOTIFICADA"
+
+
+@pytest.mark.parametrize("estado, clasif, canal, tipo_valor, esperado, fecha", [
+    # Avances
+    (NUMERADA, SIN_NADA, "VERDE", "DEFINITIVO", NUMERADA, F.CONSERVAR),
+    (NUMERADA, PROFORMA_PENDIENTE, "VERDE", "DEFINITIVO", P_PROFORMA, F.CONSERVAR),
+    (P_PROFORMA, PROFORMA_PENDIENTE, "VERDE", "DEFINITIVO", P_PROFORMA, F.CONSERVAR),   # sin pagar: no avanza
+    (P_PROFORMA, PROFORMA_PAGADA, "VERDE", "DEFINITIVO", LEVANTE, F.FIJAR_SI_FALTA),
+    (P_PROFORMA, PROFORMA_PAGADA, "VERDE", "GARANTIZADO", LEVANTE_GTIA, F.FIJAR_SI_FALTA),
+    (P_PROFORMA, PROFORMA_PAGADA, "NARANJA", "DEFINITIVO", AFORO, F.CONSERVAR),
+    (P_PROFORMA, PROFORMA_PAGADA, "ROJO", "GARANTIZADO", AFORO, F.CONSERVAR),
+    (REVISION, OMC_PENDIENTE, "ROJO", "DEFINITIVO", P_OMC, F.CONSERVAR),
+    (REVISION_OMC, OMC_PENDIENTE, "VERDE", "GARANTIZADO", P_OMC, F.CONSERVAR),
+    (REVISION, PROFORMA_PAGADA, "ROJO", "DEFINITIVO", REVISION, F.CONSERVAR),          # sin OMC: se queda
+    (P_OMC, OMC_PENDIENTE, "ROJO", "DEFINITIVO", P_OMC, F.CONSERVAR),
+    (P_OMC, OMC_PAGADA, "ROJO", "DEFINITIVO", LEVANTE, F.FIJAR_SI_FALTA),
+    (P_OMC, OMC_PAGADA, "VERDE", "GARANTIZADO", CERRADA, F.CONSERVAR),
+    # Reversiones (tienen prioridad)
+    (LEVANTE, PROFORMA_PENDIENTE, "VERDE", "DEFINITIVO", P_PROFORMA, F.BORRAR),
+    (AFORO, PROFORMA_PENDIENTE, "ROJO", "DEFINITIVO", P_PROFORMA, F.BORRAR),
+    (OBSERVADA, PROFORMA_PENDIENTE, "ROJO", "DEFINITIVO", P_PROFORMA, F.BORRAR),
+    (P_PROFORMA, SIN_NADA, "VERDE", "DEFINITIVO", NUMERADA, F.CONSERVAR),
+    (LEVANTE, OMC_PENDIENTE, "ROJO", "DEFINITIVO", P_OMC, F.BORRAR),
+    (CERRADA, OMC_PENDIENTE, "VERDE", "GARANTIZADO", P_OMC, F.CONSERVAR),             # garantía previa sigue válida
+    # Estados manuales sin regla automática
+    (OBSERVADA, PROFORMA_PAGADA, "ROJO", "DEFINITIVO", OBSERVADA, F.CONSERVAR),
+    (LEVANTE_GTIA, PROFORMA_PAGADA, "VERDE", "GARANTIZADO", LEVANTE_GTIA, F.CONSERVAR),
+])
+def test_transiciones_automaticas(estado, clasif, canal, tipo_valor, esperado, fecha):
+    d = decidir_estado_dam(estado, clasif, canal, tipo_valor)
+    assert d.estado == esperado
+    assert d.fecha_levante is fecha
+
+
+def test_solo_las_reversiones_llevan_motivo():
+    assert decidir_estado_dam(LEVANTE, PROFORMA_PENDIENTE, "VERDE", "DEFINITIVO").motivo_reversion
+    assert decidir_estado_dam(P_PROFORMA, SIN_NADA, "VERDE", "DEFINITIVO").motivo_reversion
+    assert decidir_estado_dam(LEVANTE, OMC_PENDIENTE, "ROJO", "DEFINITIVO").motivo_reversion
+    assert decidir_estado_dam(P_PROFORMA, PROFORMA_PAGADA, "VERDE", "DEFINITIVO").motivo_reversion is None
+    assert decidir_estado_dam(NUMERADA, PROFORMA_PENDIENTE, "VERDE", "DEFINITIVO").motivo_reversion is None
+
+
+def test_un_estado_desconocido_no_se_modifica():
+    assert decidir_estado_dam("ESTADO RARO", PROFORMA_PAGADA, "VERDE", "DEFINITIVO").estado == "ESTADO RARO"

@@ -1,6 +1,11 @@
 import datetime
-from sqlalchemy.orm import Session
 import json
+from dataclasses import dataclass
+from enum import Enum
+from typing import Optional
+
+from sqlalchemy.orm import Session
+
 from models import MaestroImportacion, DetalleDam, AuditLog
 from constantes import (
     ClaseAduanera,
@@ -142,67 +147,99 @@ def clasificar_gastos_dam(dam) -> dict:
     }
 
 
+class AccionFechaLevante(Enum):
+    CONSERVAR = "conservar"
+    FIJAR_SI_FALTA = "fijar_si_falta"   # se concede el levante: hoy, salvo que ya tuviera fecha
+    BORRAR = "borrar"                   # el levante perdió sustento
+
+
+@dataclass(frozen=True)
+class DecisionDam:
+    estado: str
+    motivo_reversion: Optional[str] = None
+    fecha_levante: AccionFechaLevante = AccionFechaLevante.CONSERVAR
+
+
+def decidir_estado_dam(estado_actual: str, clasificacion: dict, canal: Optional[str], tipo_valor: str) -> DecisionDam:
+    """
+    Regla PURA (sin base de datos) de las transiciones AUTOMÁTICAS de una DAM según sus gastos y pagos.
+    `clasificacion` es el resultado de clasificar_gastos_dam.
+
+    Las REVERSIONES se evalúan primero: corrigen lo que el sistema concedió y perdió sustento.
+
+      Condición                                                         -> Nuevo estado
+      R1  hay proforma, NO pagada, y la DAM está en un estado posterior  -> PENDIENTE PAGO PROFORMA (borra levante)
+      R1b en PENDIENTE PAGO PROFORMA y ya no hay proforma registrada     -> NUMERADA / EN EVALUACIÓN
+      R2  hay OMC, NO pagada, y la DAM está donde la dejó el pago OMC    -> PENDIENTE PAGO OMC
+                                                                           (borra levante salvo GARANTIZADO)
+      G1  NUMERADA y se registró la proforma (tributos + percepción)     -> PENDIENTE PAGO PROFORMA
+      G2  PENDIENTE PAGO PROFORMA y la proforma quedó pagada:
+            canal VERDE                                                  -> CON LEVANTE (o con GARANTÍA ACTIVA)
+            otro canal                                                   -> PENDIENTE DE AFORO
+      G3  EN REVISIÓN (o revisión OMC) y hay OMC pendiente               -> PENDIENTE PAGO OMC
+      G4  PENDIENTE PAGO OMC y la OMC quedó pagada:
+            GARANTIZADO                                                  -> GARANTÍA CERRADA / LIQUIDADA
+            otro                                                         -> CON LEVANTE
+
+    En cualquier otro caso la DAM se queda como está (las transiciones manuales viven en routers/operaciones.py).
+    """
+    c = clasificacion
+    garantizado = tipo_valor == TipoValor.GARANTIZADO
+    levante = EstadoDam.CON_LEVANTE_GARANTIA_ACTIVA if garantizado else EstadoDam.CON_LEVANTE
+
+    # ----- Reversiones -----
+    if c["tiene_proforma"] and not c["proforma_pagada"] and estado_actual in ESTADOS_POST_PROFORMA:
+        return DecisionDam(EstadoDam.PENDIENTE_PAGO_PROFORMA,
+                           "El pago de la proforma (tributos/percepción) fue anulado o quedó incompleto.",
+                           AccionFechaLevante.BORRAR)
+    if estado_actual == EstadoDam.PENDIENTE_PAGO_PROFORMA and not c["tiene_proforma"]:
+        return DecisionDam(EstadoDam.NUMERADA, "Ya no hay gastos de tributos y percepción registrados.")
+    if c["tiene_omc"] and not c["omc_pagado"] and estado_actual in ESTADOS_POR_PAGO_OMC:
+        # En GARANTIZADO el levante con garantía previo sigue siendo válido
+        return DecisionDam(EstadoDam.PENDIENTE_PAGO_OMC, "El pago de la OMC fue anulado o quedó incompleto.",
+                           AccionFechaLevante.CONSERVAR if garantizado else AccionFechaLevante.BORRAR)
+
+    # ----- Avances -----
+    if estado_actual == EstadoDam.NUMERADA:
+        if c["tiene_proforma"]:
+            return DecisionDam(EstadoDam.PENDIENTE_PAGO_PROFORMA)
+    elif estado_actual == EstadoDam.PENDIENTE_PAGO_PROFORMA:
+        if c["proforma_pagada"]:
+            if canal == CanalControl.VERDE:
+                return DecisionDam(levante, fecha_levante=AccionFechaLevante.FIJAR_SI_FALTA)
+            return DecisionDam(EstadoDam.PENDIENTE_AFORO)
+    elif estado_actual in (EstadoDam.EN_REVISION, EstadoDam.EN_REVISION_OMC):
+        if c["tiene_omc"] and not c["omc_pagado"]:
+            return DecisionDam(EstadoDam.PENDIENTE_PAGO_OMC)
+    elif estado_actual == EstadoDam.PENDIENTE_PAGO_OMC:
+        if c["omc_pagado"]:
+            if garantizado:
+                return DecisionDam(EstadoDam.GARANTIA_CERRADA)
+            return DecisionDam(EstadoDam.CON_LEVANTE, fecha_levante=AccionFechaLevante.FIJAR_SI_FALTA)
+
+    return DecisionDam(estado_actual)
+
+
 def evaluar_gatillos_gastos_dam(db: Session, id_dam: int):
     """
     Intercepta la canasta de gastos y pagos de una DAM para AVANZAR su estado documentario
     o REVERTIR los estados que el sistema concedió automáticamente si su pago fue anulado.
+    La decisión la toma decidir_estado_dam; aquí solo se aplica y se registra.
     Devuelve (estado_anterior, estado_nuevo) o None si la DAM no existe.
     """
     dam = db.query(DetalleDam).filter(DetalleDam.id_dam == id_dam).first()
-    if not dam: 
+    if not dam:
         return None
 
-    c = clasificar_gastos_dam(dam)
     estado_actual = dam.estado_dam
-    nuevo_estado = estado_actual
     tipo_valor = dam.maestro.tipo_valor if dam.maestro else TipoValor.DEFINITIVO
-    motivo_reversion = None
-
-    # ===== REVERSIONES (tienen prioridad: primero se corrige lo que perdió sustento) =====
-    # R1: La proforma dejó de estar pagada -> todo lo posterior al pago de la proforma se deshace
-    if c["tiene_proforma"] and not c["proforma_pagada"] and estado_actual in ESTADOS_POST_PROFORMA:
-        nuevo_estado = EstadoDam.PENDIENTE_PAGO_PROFORMA
+    decision = decidir_estado_dam(estado_actual, clasificar_gastos_dam(dam), dam.canal_control, tipo_valor)
+    nuevo_estado = decision.estado
+    motivo_reversion = decision.motivo_reversion
+    if decision.fecha_levante is AccionFechaLevante.BORRAR:
         dam.fecha_levante = None
-        motivo_reversion = "El pago de la proforma (tributos/percepción) fue anulado o quedó incompleto."
-    # R1b: Se eliminaron los gastos de la proforma -> vuelve al estado inicial
-    elif estado_actual == EstadoDam.PENDIENTE_PAGO_PROFORMA and not c["tiene_proforma"]:
-        nuevo_estado = EstadoDam.NUMERADA
-        motivo_reversion = "Ya no hay gastos de tributos y percepción registrados."
-    # R2: La OMC dejó de estar pagada -> se deshace el levante/cierre que concedió su pago
-    elif c["tiene_omc"] and not c["omc_pagado"] and estado_actual in ESTADOS_POR_PAGO_OMC:
-        nuevo_estado = EstadoDam.PENDIENTE_PAGO_OMC
-        if tipo_valor != TipoValor.GARANTIZADO:
-            dam.fecha_levante = None  # En GARANTIZADO el levante con garantía previo sigue siendo válido
-        motivo_reversion = "El pago de la OMC fue anulado o quedó incompleto."
-
-    # ===== AVANCES =====
-    # Gatillo 1: Proforma Registrada (AND estricto)
-    elif estado_actual == EstadoDam.NUMERADA:
-        if c["tiene_proforma"]:
-            nuevo_estado = EstadoDam.PENDIENTE_PAGO_PROFORMA
-
-    # Gatillo 2: Pago de Proforma (Salto por Canal)
-    elif estado_actual == EstadoDam.PENDIENTE_PAGO_PROFORMA:
-        if c["proforma_pagada"]:
-            if dam.canal_control == CanalControl.VERDE:
-                nuevo_estado = EstadoDam.CON_LEVANTE_GARANTIA_ACTIVA if tipo_valor == TipoValor.GARANTIZADO else EstadoDam.CON_LEVANTE
-                dam.fecha_levante = dam.fecha_levante or datetime.date.today()
-            else:
-                nuevo_estado = EstadoDam.PENDIENTE_AFORO
-    
-    # Gatillo 3: OMC Registrada en proceso
-    elif estado_actual in [EstadoDam.EN_REVISION, EstadoDam.EN_REVISION_OMC]:
-        if c["tiene_omc"] and not c["omc_pagado"]:
-            nuevo_estado = EstadoDam.PENDIENTE_PAGO_OMC
-    
-    # Gatillo 4: OMC Pagada en Tesorería
-    elif estado_actual == EstadoDam.PENDIENTE_PAGO_OMC:
-        if c["omc_pagado"]:
-            if tipo_valor == TipoValor.GARANTIZADO:
-                nuevo_estado = EstadoDam.GARANTIA_CERRADA
-            else:
-                nuevo_estado = EstadoDam.CON_LEVANTE
-                dam.fecha_levante = dam.fecha_levante or datetime.date.today()
+    elif decision.fecha_levante is AccionFechaLevante.FIJAR_SI_FALTA:
+        dam.fecha_levante = dam.fecha_levante or datetime.date.today()
 
     if nuevo_estado != estado_actual:
         dam.estado_dam = nuevo_estado
