@@ -618,6 +618,45 @@ chk("H8", "Carga masiva: una fila duplicada se reporta y las demás filas SÍ qu
 
 
 # ==========================================
+# I) CATÁLOGOS ESTÁNDAR (rutas generadas por routers/catalogo_generico.py)
+# ==========================================
+print("\n=========== I) CATÁLOGOS ESTÁNDAR ===========")
+r_b1 = c.post("/bancos/", json={"nombre": "BANCO I1"}, headers=H["teso"])
+r_b2 = c.post("/bancos/", json={"nombre": "BANCO I1"}, headers=H["teso"])
+r_b3 = c.post("/bancos/", json={"nombre": "BANCO I1B"}, headers=H["logi"])
+chk("I1", "Bancos: Tesorería crea; nombre duplicado responde 400 con mensaje (antes 500); Logística 403",
+    r_b1.status_code == 200 and r_b2.status_code == 400 and "ya está registrado" in det(r_b2) and r_b3.status_code == 403,
+    f"{r_b1.status_code}/{r_b2.status_code} {det(r_b2)} / {r_b3.status_code}")
+
+id_b = r_b1.json()["id_banco"]
+r_baja = c.delete(f"/bancos/{id_b}", headers=H["teso"])
+activos = [b["id_banco"] for b in c.get("/bancos/", headers=H["audi"]).json()]
+todos = [b["id_banco"] for b in c.get("/bancos/?mostrar_inactivos=true", headers=H["audi"]).json()]
+r_rest = c.put(f"/bancos/{id_b}/restaurar", headers=H["teso"])
+chk("I2", "Baja lógica: mensaje, desaparece del listado de activos, aparece con mostrar_inactivos y se restaura",
+    r_baja.json().get("mensaje") == "El banco 'BANCO I1' ha sido desactivado correctamente." and id_b not in activos and id_b in todos
+    and r_rest.status_code == 200 and r_rest.json()["estado_registro"] == "ACTIVO",
+    f"{r_baja.json()} activo={id_b in activos} todos={id_b in todos} restaurado={r_rest.json().get('estado_registro')}")
+
+r_a1 = c.post("/almacenes/", json={"nombre": "ALMACEN I3"}, headers=H["logi"]); r_a2 = c.post("/almacenes/", json={"nombre": "ALMACEN I3B"}, headers=H["logi"])
+r_a3 = c.put(f"/almacenes/{r_a2.json()['id_almacen']}", json={"nombre": "ALMACEN I3"}, headers=H["logi"])
+r_a4 = c.put("/almacenes/999999", json={"nombre": "X"}, headers=H["logi"])
+chk("I3", "Modificar con nombre ya usado responde 400 (antes 500); id inexistente 404 con mensaje propio",
+    r_a3.status_code == 400 and r_a4.status_code == 404 and det(r_a4) == "Almacén no encontrado", f"{r_a3.status_code} {det(r_a3)} / {r_a4.status_code} {det(r_a4)}")
+
+r_p = c.post("/proveedores/", json={"nombre": "PROVEEDOR I4", "ruc": "   "}, headers=H["logi"])
+r_p2 = c.post("/proveedores/", json={"nombre": "PROVEEDOR I4B", "ruc": " 20999999994 "}, headers=H["logi"])
+chk("I4", "Proveedores: RUC vacío se guarda como nulo y con espacios se recorta",
+    r_p.json().get("ruc") is None and r_p2.json().get("ruc") == "20999999994", f"{r_p.json().get('ruc')!r} / {r_p2.json().get('ruc')!r}")
+
+r_f1 = c.delete(f"/bancos/{banco.id_banco}/fisico", headers=H["admin"])
+r_f2 = c.delete(f"/bancos/{id_b}/fisico", headers=H["teso"])
+r_f3 = c.delete(f"/bancos/{id_b}/fisico", headers=H["admin"])
+chk("I5", "Borrado físico: si el registro está en uso responde 400; solo SuperAdmin; un registro libre se elimina",
+    r_f1.status_code == 400 and r_f2.status_code == 403 and r_f3.status_code == 200, f"{r_f1.status_code} {det(r_f1)} / {r_f2.status_code} / {r_f3.status_code}")
+
+
+# ==========================================
 # 4. PRUEBA DE CONCURRENCIA REAL (PostgreSQL)
 # ==========================================
 print("\n=========== D) PRUEBA DE CONCURRENCIA REAL (PostgreSQL) ===========")

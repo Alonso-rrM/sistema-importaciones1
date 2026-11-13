@@ -7,9 +7,11 @@ import io
 import models
 import schemas
 from dependencies import get_db, get_current_user, RoleChecker
+from routers.catalogo_generico import DefinicionCatalogo, normalizar_ruc_opcional, registrar_catalogo
+from services.carga_masiva import ALIAS_COLUMNA_NOMBRE, CONSTRUCTORES, construir_registro
 from domain.conceptos import clase_aduanera_sugerida
 from constantes import (
-    ClaseAduanera, EstadoRegistro, ROLES_FINANZAS, ROLES_OPERACIONES, ROLES_OPERACIONES_Y_FINANZAS, ROLES_SOLO_ADMIN, TipoGasto,
+    EstadoRegistro, ROLES_FINANZAS, ROLES_OPERACIONES, ROLES_OPERACIONES_Y_FINANZAS, ROLES_SOLO_ADMIN,
 )
 
 # Matriz RBAC de escritura en catálogos (1: Admin, 2: Logística, 3: Tesorería, 4: Auditoría = solo lectura)
@@ -35,425 +37,77 @@ def crear_rol(
     return nuevo_rol
 
 # ==========================================
-# 2. BANCOS
+# 2-7. CATÁLOGOS ESTÁNDAR (rutas generadas por routers/catalogo_generico.py)
 # ==========================================
-@router.post("/bancos/", response_model=schemas.CatBanco)
-def crear_banco(banco: schemas.CatBancoCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_TESORERIA))):
-    nuevo_banco = models.CatBanco(nombre=banco.nombre)
-    db.add(nuevo_banco)
-    db.commit()
-    db.refresh(nuevo_banco)
-    return nuevo_banco
+MENSAJE_NOMBRE_O_RUC_DUPLICADO = "Error: El Nombre o RUC ya están registrados."
 
-@router.get("/bancos/", response_model=List[schemas.CatBanco])
-def listar_bancos(mostrar_inactivos: bool = False, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
-    query = db.query(models.CatBanco)
-    if not mostrar_inactivos:
-        query = query.filter(models.CatBanco.estado_registro == EstadoRegistro.ACTIVO)
-    return query.order_by(models.CatBanco.id_banco.asc()).all()
 
-@router.put("/bancos/{id_banco}", response_model=schemas.CatBanco)
-def actualizar_banco(id_banco: int, banco_editado: schemas.CatBancoUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_TESORERIA))):
-    db_banco = db.query(models.CatBanco).filter(models.CatBanco.id_banco == id_banco).first()
-    if not db_banco:
-        raise HTTPException(status_code=404, detail="Banco no encontrado")
-    
-    update_data = banco_editado.model_dump(exclude_unset=True)
-    for key, value in update_data.items():
-        setattr(db_banco, key, value)
-    
-    db.commit()
-    db.refresh(db_banco)
-    return db_banco
+def _concepto_alta(datos: dict) -> dict:
+    # Si no se indica la clase aduanera, se propone una según el nombre
+    if datos.get("clase_aduanera") is None:
+        datos["clase_aduanera"] = clase_aduanera_sugerida(datos.get("nombre"))
+    return datos
 
-@router.delete("/bancos/{id_banco}")
-def eliminar_banco(id_banco: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_TESORERIA))):
-    banco = db.query(models.CatBanco).filter(models.CatBanco.id_banco == id_banco).first()
-    if not banco:
-        raise HTTPException(status_code=404, detail="Banco no encontrado")
-    banco.estado_registro = EstadoRegistro.INACTIVO
-    db.commit()
-    return {"mensaje": f"El banco '{banco.nombre}' ha sido desactivado correctamente."}
 
-@router.put("/bancos/{id_banco}/restaurar", response_model=schemas.CatBanco)
-def restaurar_bancos(id_banco: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_TESORERIA))):
-    db_item = db.query(models.CatBanco).filter(models.CatBanco.id_banco == id_banco).first()
-    if not db_item:
-        raise HTTPException(status_code=404, detail="Registro no encontrado")
-    db_item.estado_registro = EstadoRegistro.ACTIVO
-    db.commit()
-    db.refresh(db_item)
-    return db_item
+def _concepto_cambio(datos: dict) -> dict:
+    # La clase nunca queda vacía ni se recalcula al renombrar: solo cambia si se envía un valor
+    if datos.get("clase_aduanera") is None:
+        datos.pop("clase_aduanera", None)
+    return datos
 
-@router.delete("/bancos/{id_banco}/fisico")
-def eliminar_bancos_fisico(id_banco: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_SOLO_ADMIN))):
-    db_item = db.query(models.CatBanco).filter(models.CatBanco.id_banco == id_banco).first()
-    if not db_item:
-        raise HTTPException(status_code=404, detail="Registro no encontrado")
-    try:
-        db.delete(db_item)
-        db.commit()
-        return {"mensaje": "Registro eliminado definitivamente"}
-    except Exception:
-        db.rollback()
-        raise HTTPException(status_code=400, detail="No se puede eliminar porque este registro está siendo usado en otros módulos.")
 
-# ==========================================
-# 3. AGENTES
-# ==========================================
-@router.post("/agentes/", response_model=schemas.CatAgente)
-def crear_agente(agente: schemas.CatAgenteCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_OPERATIVOS))):
-    nuevo_agente = models.CatAgente(**agente.model_dump())
-    db.add(nuevo_agente)
-    db.commit()
-    db.refresh(nuevo_agente)
-    return nuevo_agente
+CATALOGOS_ESTANDAR = [
+    DefinicionCatalogo(
+        ruta="bancos", modelo=models.CatBanco, campo_id="id_banco",
+        esquema=schemas.CatBanco, esquema_alta=schemas.CatBancoCreate, esquema_cambio=schemas.CatBancoUpdate,
+        roles_escritura=ROLES_TESORERIA, singular="banco", plural="bancos",
+        nombre_con_articulo="El banco", no_encontrado="Banco no encontrado",
+        duplicado_alta="Error: El nombre del banco ya está registrado.",
+        duplicado_cambio="Error: El nombre del banco ya está registrado.",
+    ),
+    DefinicionCatalogo(
+        ruta="agentes", modelo=models.CatAgente, campo_id="id_agente",
+        esquema=schemas.CatAgente, esquema_alta=schemas.CatAgenteCreate, esquema_cambio=schemas.CatAgenteUpdate,
+        roles_escritura=ROLES_OPERATIVOS, singular="agente", plural="agentes",
+        nombre_con_articulo="El agente", no_encontrado="Agente no encontrado",
+        duplicado_alta=MENSAJE_NOMBRE_O_RUC_DUPLICADO, duplicado_cambio=MENSAJE_NOMBRE_O_RUC_DUPLICADO,
+    ),
+    DefinicionCatalogo(
+        ruta="proveedores", modelo=models.CatProveedor, campo_id="id_proveedor",
+        esquema=schemas.CatProveedor, esquema_alta=schemas.CatProveedorCreate, esquema_cambio=schemas.CatProveedorUpdate,
+        roles_escritura=ROLES_OPERATIVOS, singular="proveedor", plural="proveedores",
+        nombre_con_articulo="El proveedor", no_encontrado="Proveedor no encontrado",
+        duplicado_alta=MENSAJE_NOMBRE_O_RUC_DUPLICADO, duplicado_cambio=MENSAJE_NOMBRE_O_RUC_DUPLICADO,
+        preparar_alta=normalizar_ruc_opcional,
+    ),
+    DefinicionCatalogo(
+        ruta="almacenes", modelo=models.CatAlmacen, campo_id="id_almacen",
+        esquema=schemas.CatAlmacen, esquema_alta=schemas.CatAlmacenCreate, esquema_cambio=schemas.CatAlmacenUpdate,
+        roles_escritura=ROLES_OPERATIVOS, singular="almacen", plural="almacenes",
+        nombre_con_articulo="El almacén", no_encontrado="Almacén no encontrado",
+        duplicado_alta="Error: El nombre del almacén ya está registrado.",
+        duplicado_cambio="Error: El nombre del almacén ya está registrado.",
+    ),
+    DefinicionCatalogo(
+        ruta="importadores", modelo=models.CatImportador, campo_id="id_importador",
+        esquema=schemas.CatImportador, esquema_alta=schemas.CatImportadorCreate, esquema_cambio=schemas.CatImportadorUpdate,
+        roles_escritura=ROLES_OPERATIVOS, singular="importador", plural="importadores",
+        nombre_con_articulo="El importador", no_encontrado="Importador no encontrado",
+        duplicado_alta=MENSAJE_NOMBRE_O_RUC_DUPLICADO, duplicado_cambio=MENSAJE_NOMBRE_O_RUC_DUPLICADO,
+    ),
+    DefinicionCatalogo(
+        ruta="conceptos", modelo=models.CatConceptoPago, campo_id="id_concepto",
+        esquema=schemas.CatConceptoPago, esquema_alta=schemas.CatConceptoPagoCreate, esquema_cambio=schemas.CatConceptoPagoUpdate,
+        roles_escritura=ROLES_CONFIG, singular="concepto", plural="conceptos",
+        nombre_con_articulo="El concepto", no_encontrado="Concepto no encontrado",
+        duplicado_alta="Error al crear el concepto. Verifica que no esté duplicado.",
+        duplicado_cambio="Error: El nombre del concepto ya existe.",
+        preparar_alta=_concepto_alta, preparar_cambio=_concepto_cambio,
+    ),
+]
 
-@router.get("/agentes/", response_model=List[schemas.CatAgente])
-def listar_agentes(mostrar_inactivos: bool = False, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
-    query = db.query(models.CatAgente)
-    if not mostrar_inactivos:
-        query = query.filter(models.CatAgente.estado_registro == EstadoRegistro.ACTIVO)
-    return query.order_by(models.CatAgente.id_agente.asc()).all()
-
-@router.put("/agentes/{id_agente}", response_model=schemas.CatAgente)
-def actualizar_agente(id_agente: int, agente_editado: schemas.CatAgenteUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_OPERATIVOS))):
-    db_agente = db.query(models.CatAgente).filter(models.CatAgente.id_agente == id_agente).first()
-    if not db_agente:
-        raise HTTPException(status_code=404, detail="Agente no encontrado")
-    
-    update_data = agente_editado.model_dump(exclude_unset=True)
-    for key, value in update_data.items():
-        setattr(db_agente, key, value)
-        
-    try:
-        db.commit()
-        db.refresh(db_agente)
-        return db_agente
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(status_code=400, detail="Error: El Nombre o RUC ya están registrados.")
-
-@router.delete("/agentes/{id_agente}")
-def eliminar_agente(id_agente: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_OPERATIVOS))):
-    agente = db.query(models.CatAgente).filter(models.CatAgente.id_agente == id_agente).first()
-    if not agente:
-        raise HTTPException(status_code=404, detail="Agente no encontrado")
-    agente.estado_registro = EstadoRegistro.INACTIVO
-    db.commit()
-    return {"mensaje": f"El agente '{agente.nombre}' ha sido desactivado correctamente."}
-
-@router.put("/agentes/{id_agente}/restaurar", response_model=schemas.CatAgente)
-def restaurar_agentes(id_agente: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_OPERATIVOS))):
-    db_item = db.query(models.CatAgente).filter(models.CatAgente.id_agente == id_agente).first()
-    if not db_item:
-        raise HTTPException(status_code=404, detail="Registro no encontrado")
-    db_item.estado_registro = EstadoRegistro.ACTIVO
-    db.commit()
-    db.refresh(db_item)
-    return db_item
-
-@router.delete("/agentes/{id_agente}/fisico")
-def eliminar_agentes_fisico(id_agente: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_SOLO_ADMIN))):
-    db_item = db.query(models.CatAgente).filter(models.CatAgente.id_agente == id_agente).first()
-    if not db_item:
-        raise HTTPException(status_code=404, detail="Registro no encontrado")
-    try:
-        db.delete(db_item)
-        db.commit()
-        return {"mensaje": "Registro eliminado definitivamente"}
-    except Exception:
-        db.rollback()
-        raise HTTPException(status_code=400, detail="No se puede eliminar porque este registro está siendo usado en otros módulos.")
-
-# ==========================================
-# 4. PROVEEDORES
-# ==========================================
-@router.post("/proveedores/", response_model=schemas.CatProveedor)
-def crear_proveedor(proveedor: schemas.CatProveedorCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_OPERATIVOS))):
-    data = proveedor.model_dump()
-    if not data.get("ruc") or not str(data.get("ruc")).strip():
-        data["ruc"] = None
-    else:
-        data["ruc"] = str(data["ruc"]).strip()
-
-    nuevo_proveedor = models.CatProveedor(**data)
-    try:
-        db.add(nuevo_proveedor)
-        db.commit()
-        db.refresh(nuevo_proveedor)
-        return nuevo_proveedor
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(status_code=400, detail="Error: El Nombre o RUC ya están registrados.")
-
-@router.get("/proveedores/", response_model=List[schemas.CatProveedor])
-def listar_proveedores(mostrar_inactivos: bool = False, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
-    query = db.query(models.CatProveedor)
-    if not mostrar_inactivos:
-        query = query.filter(models.CatProveedor.estado_registro == EstadoRegistro.ACTIVO)
-    return query.order_by(models.CatProveedor.id_proveedor.asc()).all()
-
-@router.put("/proveedores/{id_proveedor}", response_model=schemas.CatProveedor)
-def actualizar_proveedor(id_proveedor: int, proveedor_editado: schemas.CatProveedorUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_OPERATIVOS))):
-    db_proveedor = db.query(models.CatProveedor).filter(models.CatProveedor.id_proveedor == id_proveedor).first()
-    if not db_proveedor:
-        raise HTTPException(status_code=404, detail="Proveedor no encontrado")
-    
-    update_data = proveedor_editado.model_dump(exclude_unset=True)
-    for key, value in update_data.items():
-        setattr(db_proveedor, key, value)
-        
-    try:
-        db.commit()
-        db.refresh(db_proveedor)
-        return db_proveedor
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(status_code=400, detail="Error: El Nombre o RUC ya están registrados.")
-
-@router.delete("/proveedores/{id_proveedor}")
-def eliminar_proveedor(id_proveedor: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_OPERATIVOS))):
-    proveedor = db.query(models.CatProveedor).filter(models.CatProveedor.id_proveedor == id_proveedor).first()
-    if not proveedor:
-        raise HTTPException(status_code=404, detail="Proveedor no encontrado")
-    proveedor.estado_registro = EstadoRegistro.INACTIVO
-    db.commit()
-    return {"mensaje": f"El proveedor '{proveedor.nombre}' ha sido desactivado correctamente."}
-
-@router.put("/proveedores/{id_proveedor}/restaurar", response_model=schemas.CatProveedor)
-def restaurar_proveedores(id_proveedor: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_OPERATIVOS))):
-    db_item = db.query(models.CatProveedor).filter(models.CatProveedor.id_proveedor == id_proveedor).first()
-    if not db_item:
-        raise HTTPException(status_code=404, detail="Registro no encontrado")
-    db_item.estado_registro = EstadoRegistro.ACTIVO
-    db.commit()
-    db.refresh(db_item)
-    return db_item
-
-@router.delete("/proveedores/{id_proveedor}/fisico")
-def eliminar_proveedores_fisico(id_proveedor: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_SOLO_ADMIN))):
-    db_item = db.query(models.CatProveedor).filter(models.CatProveedor.id_proveedor == id_proveedor).first()
-    if not db_item:
-        raise HTTPException(status_code=404, detail="Registro no encontrado")
-    try:
-        db.delete(db_item)
-        db.commit()
-        return {"mensaje": "Registro eliminado definitivamente"}
-    except Exception:
-        db.rollback()
-        raise HTTPException(status_code=400, detail="No se puede eliminar porque este registro está siendo usado en otros módulos.")
-
-# ==========================================
-# 5. ALMACENES
-# ==========================================
-@router.post("/almacenes/", response_model=schemas.CatAlmacen)
-def crear_almacen(almacen: schemas.CatAlmacenCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_OPERATIVOS))):
-    nuevo_almacen = models.CatAlmacen(**almacen.model_dump())
-    db.add(nuevo_almacen)
-    db.commit()
-    db.refresh(nuevo_almacen)
-    return nuevo_almacen
-
-@router.get("/almacenes/", response_model=List[schemas.CatAlmacen])
-def listar_almacenes(mostrar_inactivos: bool = False, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
-    query = db.query(models.CatAlmacen)
-    if not mostrar_inactivos:
-        query = query.filter(models.CatAlmacen.estado_registro == EstadoRegistro.ACTIVO)
-    return query.order_by(models.CatAlmacen.id_almacen.asc()).all()
-
-@router.put("/almacenes/{id_almacen}", response_model=schemas.CatAlmacen)
-def actualizar_almacen(id_almacen: int, almacen_editado: schemas.CatAlmacenUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_OPERATIVOS))):
-    db_almacen = db.query(models.CatAlmacen).filter(models.CatAlmacen.id_almacen == id_almacen).first()
-    if not db_almacen:
-        raise HTTPException(status_code=404, detail="Almacén no encontrado")
-    
-    update_data = almacen_editado.model_dump(exclude_unset=True)
-    for key, value in update_data.items():
-        setattr(db_almacen, key, value)
-        
-    db.commit()
-    db.refresh(db_almacen)
-    return db_almacen
-
-@router.delete("/almacenes/{id_almacen}")
-def eliminar_almacen(id_almacen: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_OPERATIVOS))):
-    almacen = db.query(models.CatAlmacen).filter(models.CatAlmacen.id_almacen == id_almacen).first()
-    if not almacen:
-        raise HTTPException(status_code=404, detail="Almacén no encontrado")
-    almacen.estado_registro = EstadoRegistro.INACTIVO
-    db.commit()
-    return {"mensaje": f"El almacén '{almacen.nombre}' ha sido desactivado correctamente."}
-
-@router.put("/almacenes/{id_almacen}/restaurar", response_model=schemas.CatAlmacen)
-def restaurar_almacenes(id_almacen: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_OPERATIVOS))):
-    db_item = db.query(models.CatAlmacen).filter(models.CatAlmacen.id_almacen == id_almacen).first()
-    if not db_item:
-        raise HTTPException(status_code=404, detail="Registro no encontrado")
-    db_item.estado_registro = EstadoRegistro.ACTIVO
-    db.commit()
-    db.refresh(db_item)
-    return db_item
-
-@router.delete("/almacenes/{id_almacen}/fisico")
-def eliminar_almacenes_fisico(id_almacen: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_SOLO_ADMIN))):
-    db_item = db.query(models.CatAlmacen).filter(models.CatAlmacen.id_almacen == id_almacen).first()
-    if not db_item:
-        raise HTTPException(status_code=404, detail="Registro no encontrado")
-    try:
-        db.delete(db_item)
-        db.commit()
-        return {"mensaje": "Registro eliminado definitivamente"}
-    except Exception:
-        db.rollback()
-        raise HTTPException(status_code=400, detail="No se puede eliminar porque este registro está siendo usado en otros módulos.")
-
-# ==========================================
-# 6. IMPORTADORES
-# ==========================================
-@router.post("/importadores/", response_model=schemas.CatImportador)
-def crear_importador(importador: schemas.CatImportadorCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_OPERATIVOS))):
-    nuevo_importador = models.CatImportador(**importador.model_dump())
-    db.add(nuevo_importador)
-    db.commit()
-    db.refresh(nuevo_importador)
-    return nuevo_importador
-
-@router.get("/importadores/", response_model=List[schemas.CatImportador])
-def listar_importadores(mostrar_inactivos: bool = False, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
-    query = db.query(models.CatImportador)
-    if not mostrar_inactivos:
-        query = query.filter(models.CatImportador.estado_registro == EstadoRegistro.ACTIVO)
-    return query.order_by(models.CatImportador.id_importador.asc()).all()
-
-@router.put("/importadores/{id_importador}", response_model=schemas.CatImportador)
-def actualizar_importador(id_importador: int, importador_editado: schemas.CatImportadorUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_OPERATIVOS))):
-    db_importador = db.query(models.CatImportador).filter(models.CatImportador.id_importador == id_importador).first()
-    if not db_importador:
-        raise HTTPException(status_code=404, detail="Importador no encontrado")
-    
-    update_data = importador_editado.model_dump(exclude_unset=True)
-    for key, value in update_data.items():
-        setattr(db_importador, key, value)
-        
-    try:
-        db.commit()
-        db.refresh(db_importador)
-        return db_importador
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(status_code=400, detail="Error: El Nombre o RUC ya están registrados.")
-
-@router.delete("/importadores/{id_importador}")
-def eliminar_importador(id_importador: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_OPERATIVOS))):
-    importador = db.query(models.CatImportador).filter(models.CatImportador.id_importador == id_importador).first()
-    if not importador:
-        raise HTTPException(status_code=404, detail="Importador no encontrado")
-    importador.estado_registro = EstadoRegistro.INACTIVO
-    db.commit()
-    return {"mensaje": f"El importador '{importador.nombre}' ha sido desactivado correctamente."}
-
-@router.put("/importadores/{id_importador}/restaurar", response_model=schemas.CatImportador)
-def restaurar_importadores(id_importador: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_OPERATIVOS))):
-    db_item = db.query(models.CatImportador).filter(models.CatImportador.id_importador == id_importador).first()
-    if not db_item:
-        raise HTTPException(status_code=404, detail="Registro no encontrado")
-    db_item.estado_registro = EstadoRegistro.ACTIVO
-    db.commit()
-    db.refresh(db_item)
-    return db_item
-
-@router.delete("/importadores/{id_importador}/fisico")
-def eliminar_importadores_fisico(id_importador: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_SOLO_ADMIN))):
-    db_item = db.query(models.CatImportador).filter(models.CatImportador.id_importador == id_importador).first()
-    if not db_item:
-        raise HTTPException(status_code=404, detail="Registro no encontrado")
-    try:
-        db.delete(db_item)
-        db.commit()
-        return {"mensaje": "Registro eliminado definitivamente"}
-    except Exception:
-        db.rollback()
-        raise HTTPException(status_code=400, detail="No se puede eliminar porque este registro está siendo usado en otros módulos.")
-
-# ==========================================
-# 7. CONCEPTOS DE PAGO
-# ==========================================
-@router.post("/conceptos/", response_model=schemas.CatConceptoPago)
-def crear_concepto(concepto: schemas.CatConceptoPagoCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_CONFIG))):
-    try:
-        datos = concepto.model_dump()
-        if datos.get("clase_aduanera") is None:
-            datos["clase_aduanera"] = clase_aduanera_sugerida(datos.get("nombre"))
-        nuevo_concepto = models.CatConceptoPago(**datos)
-        db.add(nuevo_concepto)
-        db.commit()
-        db.refresh(nuevo_concepto)
-        return nuevo_concepto
-    except Exception:
-        db.rollback()
-        raise HTTPException(status_code=400, detail="Error al crear el concepto. Verifica que no esté duplicado.")
-
-@router.get("/conceptos/", response_model=List[schemas.CatConceptoPago])
-def listar_conceptos(mostrar_inactivos: bool = False, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
-    query = db.query(models.CatConceptoPago)
-    if not mostrar_inactivos:
-        query = query.filter(models.CatConceptoPago.estado_registro == EstadoRegistro.ACTIVO)
-    return query.order_by(models.CatConceptoPago.id_concepto.asc()).all()
-
-@router.put("/conceptos/{id_concepto}", response_model=schemas.CatConceptoPago)
-def actualizar_concepto(id_concepto: int, concepto_editado: schemas.CatConceptoPagoUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_CONFIG))):
-    db_concepto = db.query(models.CatConceptoPago).filter(models.CatConceptoPago.id_concepto == id_concepto).first()
-    if not db_concepto:
-        raise HTTPException(status_code=404, detail="Concepto no encontrado")
-    
-    update_data = concepto_editado.model_dump(exclude_unset=True)
-    if update_data.get("clase_aduanera") is None:
-        # La clase nunca queda vacía ni se recalcula al renombrar: solo cambia si se envía un valor
-        update_data.pop("clase_aduanera", None)
-    for key, value in update_data.items():
-        setattr(db_concepto, key, value)
-        
-    try:
-        db.commit()
-        db.refresh(db_concepto)
-        return db_concepto
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(status_code=400, detail="Error: El nombre del concepto ya existe.")
-
-@router.delete("/conceptos/{id_concepto}")
-def eliminar_concepto(id_concepto: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_CONFIG))):
-    concepto = db.query(models.CatConceptoPago).filter(models.CatConceptoPago.id_concepto == id_concepto).first()
-    if not concepto:
-        raise HTTPException(status_code=404, detail="Concepto no encontrado")
-    
-    concepto.estado_registro = EstadoRegistro.INACTIVO
-    db.commit()
-    return {"mensaje": f"El concepto '{concepto.nombre}' ha sido desactivado correctamente."}
-
-@router.put("/conceptos/{id_concepto}/restaurar", response_model=schemas.CatConceptoPago)
-def restaurar_conceptos(id_concepto: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_CONFIG))):
-    db_item = db.query(models.CatConceptoPago).filter(models.CatConceptoPago.id_concepto == id_concepto).first()
-    if not db_item:
-        raise HTTPException(status_code=404, detail="Registro no encontrado")
-    db_item.estado_registro = EstadoRegistro.ACTIVO
-    db.commit()
-    db.refresh(db_item)
-    return db_item
-
-@router.delete("/conceptos/{id_concepto}/fisico")
-def eliminar_conceptos_fisico(id_concepto: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_SOLO_ADMIN))):
-    db_item = db.query(models.CatConceptoPago).filter(models.CatConceptoPago.id_concepto == id_concepto).first()
-    if not db_item:
-        raise HTTPException(status_code=404, detail="Registro no encontrado")
-    try:
-        db.delete(db_item)
-        db.commit()
-        return {"mensaje": "Registro eliminado definitivamente"}
-    except Exception:
-        db.rollback()
-        raise HTTPException(status_code=400, detail="No se puede eliminar porque este registro está siendo usado en otros módulos.")
+for _definicion in CATALOGOS_ESTANDAR:
+    registrar_catalogo(router, _definicion)
 
 # ==========================================
 # 8. TIPOS DE DOCUMENTO DE PAGO
@@ -580,9 +234,7 @@ async def carga_masiva_excel(
     df = df.where(pd.notnull(df), None)
 
     # Renombrar columnas comunes a 'nombre'
-    alias_nombre = ["nombre_banco", "razon_social", "nombre_rol", "nombre_concepto",
-                    "nombre_proveedor", "nombre_agente", "nombre_importador", "nombre_almacen"]
-    for alias in alias_nombre:
+    for alias in ALIAS_COLUMNA_NOMBRE:
         if alias in df.columns:
             df = df.rename(columns={alias: "nombre"})
             break
@@ -590,60 +242,17 @@ async def carga_masiva_excel(
     insertados = 0
     errores = []
 
-    CATALOGOS_VALIDOS = ["roles", "bancos", "conceptos", "proveedores", "agentes", "importadores", "almacenes"]
-    if catalogo not in CATALOGOS_VALIDOS:
-        raise HTTPException(status_code=400, detail=f"Catálogo inválido. Válidos: {', '.join(CATALOGOS_VALIDOS)}")
+    if catalogo not in CONSTRUCTORES:
+        raise HTTPException(status_code=400, detail=f"Catálogo inválido. Válidos: {', '.join(CONSTRUCTORES)}")
 
     for i, row in df.iterrows():
         fila_num = i + 2  # Excel es 1-indexado, fila 1 es cabecera
         try:
-            data = {k: (_limpiar_valor(v)) for k, v in row.to_dict().items()}
-
-            if catalogo == "roles":
-                if not data.get("nombre"):
-                    continue
-                obj = models.CatRol(nombre=str(data["nombre"]), descripcion=data.get("descripcion"))
-            elif catalogo == "bancos":
-                if not data.get("nombre"):
-                    continue
-                obj = models.CatBanco(nombre=str(data["nombre"]))
-            elif catalogo == "conceptos":
-                if not data.get("nombre"):
-                    continue
-                # Columna opcional en el Excel: si no viene, se propone según el nombre
-                clase_excel = str(data.get("clase_aduanera") or "").strip().upper()
-                if clase_excel and clase_excel not in {c.value for c in ClaseAduanera}:
-                    raise ValueError(
-                        f"clase_aduanera '{clase_excel}' no es válida. Use: " + ", ".join(c.value for c in ClaseAduanera)
-                    )
-                obj = models.CatConceptoPago(
-                    nombre=str(data["nombre"]),
-                    descripcion=data.get("descripcion"),
-                    tipo_gasto=str(data.get("tipo_gasto") or TipoGasto.FIJO_DESPACHO),
-                    clase_aduanera=clase_excel or clase_aduanera_sugerida(str(data["nombre"])),
-                )
-            elif catalogo == "proveedores":
-                if not data.get("nombre"):
-                    continue
-                ruc = str(int(float(data["ruc"]))) if data.get("ruc") is not None else None
-                obj = models.CatProveedor(nombre=str(data["nombre"]), ruc=ruc)
-            elif catalogo == "agentes":
-                if not data.get("nombre"):
-                    continue
-                ruc = str(int(float(data["ruc"]))) if data.get("ruc") is not None else None
-                obj = models.CatAgente(nombre=str(data["nombre"]), ruc=ruc)
-            elif catalogo == "importadores":
-                if not data.get("nombre"):
-                    continue
-                ruc = str(int(float(data["ruc"]))) if data.get("ruc") is not None else None
-                obj = models.CatImportador(nombre=str(data["nombre"]), ruc=ruc)
-            elif catalogo == "almacenes":
-                if not data.get("nombre"):
-                    continue
-                obj = models.CatAlmacen(nombre=str(data["nombre"]))
-
+            fila = {k: _limpiar_valor(v) for k, v in row.to_dict().items()}
+            obj = construir_registro(catalogo, fila)
+            if obj is None:
+                continue
             # Cada fila va en su propio punto de guardado: si una falla, se deshace SOLO esa fila.
-            # (Antes un rollback general borraba también las filas anteriores ya contadas como insertadas.)
             with db.begin_nested():
                 db.add(obj)
                 db.flush()  # detectar errores de integridad fila a fila
