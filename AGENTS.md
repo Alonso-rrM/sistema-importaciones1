@@ -24,9 +24,18 @@ Un gasto puede estar en dólares y pagarse en soles (o al revés) con tipo de ca
 Archivos clave:
 
 - `constantes.py` y `frontend/src/constants/index.js`: valores fijos (roles, estados, monedas...). Son espejo uno del otro.
-- `services/state_machine.py`: máquina de estados de la DAM y del contenedor (levantes y reversiones).
-- `domain/`: reglas puras, sin base de datos (conversión de pagos, sugerencia de clase aduanera).
-- `routers/finanzas.py`: gastos, pagos y vouchers. `routers/operaciones.py`: contenedores y DAMs.
+- `services/state_machine.py`: máquina de estados. `decidir_estado_dam` es la regla pura de las transiciones
+  automáticas de la DAM (con su tabla documentada); `evaluar_gatillos_gastos_dam` solo la aplica.
+- `services/pagos.py`: registrar y anular pagos, partidos en pasos. Las rutas de `routers/finanzas.py` solo delegan.
+- `domain/`: reglas puras, sin base de datos: amortización de pagos (`finanzas.py`), sugerencia de clase
+  aduanera (`conceptos.py`), abreviación de razón social (`razon_social.py`).
+- `routers/catalogo_generico.py`: las seis rutas estándar de un catálogo. Bancos, agentes, proveedores,
+  almacenes, importadores y conceptos se DECLARAN en `routers/catalogos.py`.
+- `services/carga_masiva.py`: constructoras por catálogo para la carga desde Excel (patrón Factory).
+- `services/audit_trail.py` REGISTRA los cambios; `services/bitacora_legible.py` los TRADUCE a lenguaje de negocio.
+- `services/sunat.py`: cliente de la consulta de RUC (ApiPeru). `routers/integraciones.py` solo lo expone.
+- `routers/operaciones.py`: contenedores y DAMs. `routers/finanzas.py`: gastos, vouchers, pagos y tipo de cambio.
+- `main.py`: solo arma la aplicación (configuración, middleware y routers).
 - `scripts/verificar_valores.py`: diagnóstico de SOLO LECTURA de valores fuera de catálogo en la base.
 
 ## 3. Rama de trabajo (importante)
@@ -53,6 +62,11 @@ Archivos clave:
 7. La clase de un concepto (tributo, percepción, OMC) se lee del campo `clase_aduanera`.
    **No clasifiques conceptos buscando palabras en su nombre.**
 8. Mensajes de commit en español, claros, uno por cambio lógico.
+9. **Lo pagado de un gasto se calcula SOLO con `domain/finanzas.py`** (`amortizacion_de_pago`, `total_amortizado`):
+   cada pago se convierte y redondea por separado. No escribas otra fórmula de conversión de pagos.
+10. Los servicios informan reglas incumplidas con `ErrorDeNegocio` (`services/errores.py`), no con
+    `HTTPException`. `main.py` la convierte en la respuesta HTTP.
+11. Un catálogo nuevo con las rutas estándar se agrega declarando un `DefinicionCatalogo`; no copies rutas.
 
 ## 5. Estado del plan de mejora
 
@@ -61,7 +75,7 @@ Archivos clave:
 | 0 | Red de seguridad: pytest, ruff, ESLint, verificación automática en GitHub Actions | Hecha |
 | 1 | Valores fijos en un solo lugar (`constantes.py` y `src/constants`) | Hecha |
 | 2 | Clase aduanera del concepto en un campo (`clase_aduanera`), ya no por nombre | Hecha |
-| 3 | Ordenar el backend: servicio de pagos, catálogos genéricos, `main.py` más delgado | Pendiente |
+| 3 | Ordenar el backend: servicio de pagos, catálogos genéricos, `main.py` más delgado, bitácora y máquina de estados | Hecha |
 | 4 | Ordenar el frontend: componentes y hooks comunes, diálogos propios | Pendiente |
 | 5 | Validación de lo que digita la usuaria (RUC, DAM, comprobantes, montos) | Pendiente |
 | 6 | Limpieza: README, `.env.example`, archivos sobrantes | Pendiente |
@@ -77,6 +91,12 @@ Deuda conocida y aceptada por ahora:
   (Proveedores y el modal de creación rápida solo ofrecen Nacional e Internacional).
 - Los roles iniciales tienen nombres distintos según se creen por `/setup` o por `scripts/seed_inicial.py`
   (los números de rol coinciden; solo cambia el texto).
+- Funciones de consulta y reportes todavía largas (120-180 líneas): `listar_gastos` (finanzas),
+  `obtener_datos_liquidacion_contenedor` y `kpi_gastos_maestro` (operaciones), `obtener_analytics_cockpit` y
+  `exportar_sabana_liquidaciones` (reportes). Tienen poca cobertura de pruebas: antes de partirlas, agregar
+  verificaciones de su salida.
+- `PROVISIONAL` (nombre antiguo de GARANTIZADO) se trata como garantizado al validar la DAM, pero no en las
+  transiciones automáticas (da "CON LEVANTE" en vez de "CON LEVANTE (GARANTÍA ACTIVA)"). Se conservó tal cual.
 
 ## 6. Cómo verificar
 
@@ -90,7 +110,7 @@ pytest
 
 Sin la variable `TEST_DATABASE_URL`, `pytest` corre las pruebas unitarias y omite las de PostgreSQL.
 Con ella corre también la batería de seguridad. **Esa base debe ser desechable y su nombre debe contener
-"test": la batería borra todo su contenido.**
+"test": la batería borra todo su contenido.** Para depurar, `CONSERVAR_BASE_PRUEBAS=1` deja los datos que generó.
 
 Frontend (desde `frontend/`):
 
