@@ -11,7 +11,7 @@ import models
 import schemas
 from constantes import AccionAuditoria, ROLES_AUDITORIA
 from dependencies import get_db, RoleChecker
-from services.audit_trail import enriquecer_bitacora
+from services.bitacora_legible import enriquecer_bitacora
 
 router = APIRouter()
 

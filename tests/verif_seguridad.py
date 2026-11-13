@@ -732,11 +732,15 @@ print(f"\nRESUMEN TOTAL: {len(R)-len(fallas)}/{len(R)} pruebas pasan." + (" Fall
 # ==========================================
 # 5. LIMPIEZA FINAL DE LA BASE DE PRUEBAS
 # ==========================================
-print(f"\n[LIMPIEZA FINAL] Limpiando la base de datos {db_name} ...")
 db.close()
-with engine_clean.connect() as conn:
-    conn.execute(text("DROP SCHEMA public CASCADE; CREATE SCHEMA public;"))
-print("✅ [LIMPIEZA FINAL] Esquema public limpiado.")
+if os.environ.get("CONSERVAR_BASE_PRUEBAS") == "1":
+    # Útil para depurar: deja los datos generados por la batería en la base de pruebas
+    print(f"\n[LIMPIEZA FINAL] Omitida (CONSERVAR_BASE_PRUEBAS=1): los datos quedan en {db_name}.")
+else:
+    print(f"\n[LIMPIEZA FINAL] Limpiando la base de datos {db_name} ...")
+    with engine_clean.connect() as conn:
+        conn.execute(text("DROP SCHEMA public CASCADE; CREATE SCHEMA public;"))
+    print("✅ [LIMPIEZA FINAL] Esquema public limpiado.")
 
 # Código de salida distinto de cero si alguna verificación falló (lo usan pytest y la integración continua)
 sys.exit(1 if fallas else 0)
