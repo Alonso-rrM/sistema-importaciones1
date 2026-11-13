@@ -105,3 +105,26 @@ test('anular un pago de la proforma avisa que la DAM perdió el levante', async 
   await aviso.locator('[data-dialogo-aceptar]').click();
   await expect(aviso).toBeHidden();
 });
+
+test('el botón "Pagar" de Gastos abre la obligación en Pagos', async ({ page }) => {
+  await iniciarSesion(page);
+  await page.goto('/app/gastos');
+  await page.getByText('TRIBUTOS').first().click();
+  await page.getByRole('button', { name: 'Pagar' }).first().click();
+  await expect(page).toHaveURL(/\/app\/pagos\?gasto_id=/);
+  await expect(page.getByText(/Gasto #\d+ · TRIBUTOS/)).toBeVisible();
+});
+
+test('pagar un gasto en soles con un voucher en dólares usa el tipo de cambio', async ({ page }) => {
+  const errores = vigilarErrores(page);
+  await iniciarSesion(page);
+  await page.goto('/app/pagos');
+  await page.getByText('S/ 1200.00', { exact: true }).first().click();      // TRIBUTOS en soles
+  await elegirOpcion(page, 'Seleccionar voucher con saldo a favor...', 'OP-E2E-1');   // voucher en dólares
+  await campoTrasRotulo(page, 'Importe a Liquidar').fill('376');
+  await campoTrasRotulo(page, 'Tipo de Cambio').fill('3.76');
+  await responderDialogo(page, () => page.locator('form button[type=submit]').click());
+  await esperarAviso(page, 'exitosamente');
+  await expect(page.getByText('S/ 824.00', { exact: true }).first()).toBeVisible();   // 1200 - 376
+  expect(errores).toEqual([]);
+});
