@@ -1271,7 +1271,7 @@ def eliminar_pago(id_pago: int, req: schemas.EliminacionRequest, db: Session = D
                 if not es_ajuste_actual:
                     pago_zd = db.query(models.RegistroPago).filter(
                         models.RegistroPago.id_gasto == id_gasto_afectado,
-                        models.RegistroPago.es_ajuste_sistema == True
+                        models.RegistroPago.es_ajuste_sistema.is_(True)
                     ).first()
                     
                     if pago_zd:

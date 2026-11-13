@@ -115,7 +115,9 @@ def clasificar_gastos_dam(dam) -> dict:
             grupos["percepcion"].append(g)
         elif "OMC" in nombre:
             grupos["omc"].append(g)
-    pagado = lambda lista: bool(lista) and all(g.estado_pago == "PAGADO" for g in lista)
+    def pagado(lista):
+        return bool(lista) and all(g.estado_pago == "PAGADO" for g in lista)
+
     return {
         "tiene_proforma": bool(grupos["tributos"]) and bool(grupos["percepcion"]),
         "proforma_pagada": pagado(grupos["tributos"]) and pagado(grupos["percepcion"]),

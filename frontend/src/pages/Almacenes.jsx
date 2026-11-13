@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import api from '../services/api';
 import useDebounce from '../hooks/useDebounce';
-import { Factory, Search, Pencil, Trash2 } from 'lucide-react';
+import { Factory, Search } from 'lucide-react';
 
 const Almacenes = () => {
   const [almacenes, setAlmacenes] = useState([]);

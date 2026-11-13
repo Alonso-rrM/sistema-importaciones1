@@ -712,7 +712,6 @@ def enriquecer_bitacora(db: Session, filas: list) -> list[dict]:
             idg = _a_int(snap.get("id_gasto"))
             idv = _a_int(snap.get("voucher_id"))
             g_info = gastos_map.get(idg) if idg else None
-            v_info = vouchers_map.get(idv) if idv else None
             id_dam_res = snap.get("id_dam") or (g_info.get("id_dam") if g_info else None)
             id_conc_res = snap.get("id_concepto") or (g_info.get("id_concepto") if g_info else None)
             mon = snap.get("moneda") or ""

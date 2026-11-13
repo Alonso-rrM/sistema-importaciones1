@@ -17,7 +17,7 @@ function Login() {
         if (res.data && res.data.inicializado === false) {
           navigate('/setup');
         }
-      } catch (err) {
+      } catch {
         // Si hay error de red o backend iniciando, se mantiene en login
       }
     };

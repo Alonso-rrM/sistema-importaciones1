@@ -4,7 +4,7 @@ import os
 import re
 import requests
 from datetime import date, datetime, time
-from fastapi import FastAPI, Depends, HTTPException, status, Request, Query
+from fastapi import FastAPI, Depends, HTTPException, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session, joinedload
 from slowapi.errors import RateLimitExceeded
@@ -12,7 +12,6 @@ from slowapi import _rate_limit_exceeded_handler
 
 import models
 import schemas
-from database import SessionLocal
 from fastapi.responses import JSONResponse
 from security import get_password_hash, COOKIE_SESION, CSRF_HEADER
 from dependencies import get_db, get_current_user, RoleChecker, limiter

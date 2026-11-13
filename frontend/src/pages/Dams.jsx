@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../services/api';
-import { obtenerRol } from '../utils/session';
 import useDebounce from '../hooks/useDebounce';
 import Paginador from '../components/Paginador';
 import { descargarExcel } from '../utils/exportUtils';
@@ -51,7 +50,6 @@ const Dams = () => {
 
   // Rol del usuario decodificado
   // Rol solo para la interfaz (los permisos reales los valida el backend)
-  const userRole = obtenerRol();
 
   const maestrosMap = useMemo(() => {
     const map = {};

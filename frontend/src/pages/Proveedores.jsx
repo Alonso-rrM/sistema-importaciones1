@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import api from '../services/api';
 import useDebounce from '../hooks/useDebounce';
 import { acortarRazonSocial } from '../utils/textUtils';
@@ -123,7 +123,7 @@ const Proveedores = () => {
       } else {
         mostrarAlerta('RUC no encontrado en SUNAT.', 'info');
       }
-    } catch (error) {
+    } catch {
       mostrarAlerta('No se pudo consultar el RUC en SUNAT.', 'error');
     } finally {
       setBuscandoRuc(false);

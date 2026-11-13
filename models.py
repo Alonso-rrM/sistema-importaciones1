@@ -2,8 +2,6 @@ import datetime
 # Agregamos 'Boolean' a las importaciones para el ZAJUSTE
 from sqlalchemy import Column, Integer, String, Numeric, Date, ForeignKey, DateTime, Text, Boolean, JSON, Index
 from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.sql import func
 from database import Base
 
 # --- 1. TABLAS CATÁLOGO ---

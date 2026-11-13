@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { differenceInDays, parseISO, format } from 'date-fns';
+import { differenceInDays, parseISO } from 'date-fns';
 import api from '../services/api';
 import { obtenerRol } from '../utils/session';
 import useDebounce from '../hooks/useDebounce';
@@ -8,7 +8,7 @@ import Paginador from '../components/Paginador';
 import { descargarExcel } from '../utils/exportUtils';
 import ModalLiquidacionContenedor from '../components/ModalLiquidacionContenedor';
 import ModalCrearProveedorRapido from '../components/ModalCrearProveedorRapido';
-import { Download, Clock, Search, Settings, FileText, Banknote, Trash2, Zap, CheckCircle2, AlertTriangle, Unlock, CreditCard, Receipt, FolderOpen } from 'lucide-react';
+import { Download, Clock, Search, Settings, FileText, Banknote, Trash2, Unlock, CreditCard, Receipt, FolderOpen } from 'lucide-react';
 
 const KPI_KEYS = ['FIJO_DESPACHO', 'POST_LEVANTE', 'EXTRAORDINARIO', 'GLOBAL'];
 
@@ -281,6 +281,8 @@ const Logistica = () => {
   };
 
   // Micro-acción: Toggle certificación de aforo físico en DAM
+  // PENDIENTE: esta acción no está conectada a ningún botón. Decidir si se conecta o se elimina.
+  // eslint-disable-next-line no-unused-vars
   const handleToggleAforo = async (e, dam) => {
     e.stopPropagation();
     if (userRole !== 1 && userRole !== 2) return alert("Solo Administradores o personal de Logística pueden certificar el Aforo Físico.");

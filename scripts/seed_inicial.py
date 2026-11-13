@@ -91,14 +91,14 @@ def run():
             )
             db.add(admin)
             db.commit()
-            print(f"   OK  Usuario creado exitosamente.")
+            print("   OK  Usuario creado exitosamente.")
             print(f"      Username : {ADMIN_USERNAME}")
             print(f"      Email    : {ADMIN_EMAIL}")
-            print(f"      Rol      : SuperAdmin (id_rol=1)")
+            print("      Rol      : SuperAdmin (id_rol=1)")
 
         print("\n>>> SEED COMPLETADO. Ya puedes iniciar sesion en el frontend.")
         print(f"   Username: {ADMIN_USERNAME}")
-        print(f"   Password: (la que pusiste en ADMIN_PASSWORD en .env)\n")
+        print("   Password: (la que pusiste en ADMIN_PASSWORD en .env)\n")
 
     except Exception as e:
         db.rollback()

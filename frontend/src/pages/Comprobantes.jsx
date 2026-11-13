@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import api from '../services/api';
 import useDebounce from '../hooks/useDebounce';
-import { FileDigit, Search, Pencil, Trash2 } from 'lucide-react';
+import { FileDigit, Search } from 'lucide-react';
 
 const Comprobantes = () => {
   const [comprobantes, setComprobantes] = useState([]);

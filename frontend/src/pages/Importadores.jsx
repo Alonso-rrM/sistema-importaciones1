@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import api from '../services/api';
 import useDebounce from '../hooks/useDebounce';
 import { acortarRazonSocial } from '../utils/textUtils';
-import { Building2, Search, Trash2, Pencil } from 'lucide-react';
+import { Building2, Search } from 'lucide-react';
 
 const Importadores = () => {
   const [importadores, setImportadores] = useState([]);
@@ -118,7 +118,7 @@ const Importadores = () => {
       } else {
         mostrarAlerta('RUC no encontrado en el padrón de SUNAT.', 'info');
       }
-    } catch (error) {
+    } catch {
       mostrarAlerta('No se pudo consultar el RUC en SUNAT.', 'error');
     } finally {
       setBuscandoRuc(false);

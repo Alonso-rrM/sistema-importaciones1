@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import api from '../services/api';
 import { descargarExcel } from '../utils/exportUtils';
 import { BarChart3, RefreshCw, Zap, Ship, Scale, Tags, FolderOpen, Download, TrendingUp, Building2 } from 'lucide-react';

@@ -1,3 +1,4 @@
+import re as _re
 from typing import List, Optional, Dict, Any, Generic, TypeVar, Literal, Annotated
 from pydantic import BaseModel, ConfigDict, Field, AfterValidator
 
@@ -10,7 +11,6 @@ Moneda = Literal["USD", "PEN"]
 MontoPositivo = Annotated[Decimal, Field(gt=0, max_digits=15, decimal_places=2)]
 
 # --- Tipos de seguridad para cuentas de usuario ---
-import re as _re
 
 def _validar_password(v: str) -> str:
     """Política mínima: 10+ caracteres, con mayúscula, minúscula y número. Máx. 72 bytes (límite de bcrypt)."""

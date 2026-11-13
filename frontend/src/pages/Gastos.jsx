@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../services/api';
 import { avisarReversionDam } from '../utils/reversion';
@@ -7,7 +7,7 @@ import Paginador from '../components/Paginador';
 import ModalCrearProveedorRapido from '../components/ModalCrearProveedorRapido';
 import useDebounce from '../hooks/useDebounce';
 import { descargarExcel } from '../utils/exportUtils';
-import { Download, Clock, Search, Settings, FileText, Banknote, Trash2, Pencil, Zap, CheckCircle2, AlertTriangle, Building2, Scale, Package, BarChart3, CreditCard } from 'lucide-react';
+import { Download, Clock, Search, Settings, FileText, Banknote, Trash2, Pencil, CheckCircle2, AlertTriangle, Building2, Scale, Package, BarChart3, CreditCard } from 'lucide-react';
 
 const selectDarkStyles = {
   control: (base, state) => ({
@@ -58,7 +58,6 @@ const Gastos = () => {
   const [selectedId, setSelectedId] = useState(null);
 
   const [gastos, setGastos] = useState([]);
-  const [maestrosRaw, setMaestrosRaw] = useState([]);
   const [damsRaw, setDamsRaw] = useState([]);
   
   const [searchTerm, setSearchTerm] = useState('');
@@ -226,7 +225,6 @@ const Gastos = () => {
       const proveedoresList = extractList(resProveedores);
       const tiposDocList = extractList(resTiposDoc);
 
-      setMaestrosRaw(maestrosList);
       setDamsRaw(damsList);
       setOpcionesMaestros(maestrosList.map(m => ({ value: m.id_maestro, label: `Factura: ${m.numero_factura}` })));
       setOpcionesConceptos(conceptosList.map(c => ({ value: c.id_concepto, label: c.nombre })));

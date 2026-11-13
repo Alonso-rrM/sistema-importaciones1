@@ -1,10 +1,9 @@
-from typing import Optional, List
+from typing import Optional
 from datetime import date, timedelta
 from decimal import Decimal
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func
 
 import models
 from dependencies import get_db, get_current_user

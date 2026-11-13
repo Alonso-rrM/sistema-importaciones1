@@ -1,5 +1,5 @@
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 import io
@@ -526,7 +526,6 @@ def eliminar_tipo_documento_fisico(id: int, db: Session = Depends(get_db), curre
 
 def _limpiar_valor(v):
     """Limpia valores de pandas: NaN → None, float entero → int → str para RUC."""
-    import math
     if v is None:
         return None
     try:

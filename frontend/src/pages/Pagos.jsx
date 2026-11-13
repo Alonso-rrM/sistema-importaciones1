@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { avisarReversionDam } from '../utils/reversion';
@@ -6,7 +6,7 @@ import { obtenerRol } from '../utils/session';
 import Select from 'react-select';
 import Paginador from '../components/Paginador';
 import useDebounce from '../hooks/useDebounce';
-import { Scale, FileText, Landmark, Banknote, Search, Building2, CreditCard, Zap, ShieldCheck, Trash2, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Scale, FileText, Landmark, Banknote, Search, CreditCard, Zap, ShieldCheck, AlertTriangle } from 'lucide-react';
 
 const selectDarkStyles = {
   control: (base, state) => ({

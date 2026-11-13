@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import api from '../services/api';
 import useDebounce from '../hooks/useDebounce';
-import { Landmark, Search, Pencil, Trash2 } from 'lucide-react';
+import { Landmark, Search } from 'lucide-react';
 
 const Bancos = () => {
   const [bancos, setBancos] = useState([]);

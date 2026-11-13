@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import api from '../services/api';
 import useDebounce from '../hooks/useDebounce';
 import { Tags, Search, Plus, Pencil, Trash2, RotateCcw, Ban, FileText } from 'lucide-react';
