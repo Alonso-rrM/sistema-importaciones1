@@ -7,8 +7,9 @@
  * buscarEn: campos donde busca el cuadro de búsqueda.
  * tarjeta: qué más muestra cada fila de la bandeja.  ficha: qué muestra la ficha de detalle.
  */
-import { Briefcase, Building2, Factory, FileDigit, Landmark, Users } from 'lucide-react';
-import { CATEGORIA_PROVEEDOR } from '../../constants';
+import { Briefcase, Building2, Factory, FileDigit, Landmark, Tags, Users } from 'lucide-react';
+import { CATEGORIA_PROVEEDOR, CLASE_ADUANERA, TIPO_GASTO } from '../../constants';
+import GastosDelConcepto from '../conceptos/GastosDelConcepto';
 
 const RUC_O_TEXTO = (r) => (r?.ruc ? `RUC: ${r.ruc}` : 'S/RUC');
 
@@ -158,7 +159,7 @@ export const PROVEEDORES = {
   buscarEn: ['nombre', 'ruc'],
   filtroExtra: { campo: 'categoria', textoTodos: 'Todas las Cat.', opciones: OPCIONES_CATEGORIA },
   tarjeta: {
-    insignia: (r) => ETIQUETAS_CATEGORIA_PROVEEDOR[r.categoria] || r.categoria || ETIQUETAS_CATEGORIA_PROVEEDOR[CATEGORIA_PROVEEDOR.NACIONAL],
+    insignias: [(r) => ETIQUETAS_CATEGORIA_PROVEEDOR[r.categoria] || r.categoria || ETIQUETAS_CATEGORIA_PROVEEDOR[CATEGORIA_PROVEEDOR.NACIONAL]],
     detalleDerecha: RUC_O_TEXTO,
   },
   ficha: {
@@ -197,7 +198,7 @@ export const COMPROBANTES = {
       ayuda: 'Indica si el documento suma al costo del contenedor o lo descuenta.' },
   ],
   buscarEn: ['nombre_documento'],
-  tarjeta: { insignia: (r) => `Mult: ${r.multiplicador_financiero > 0 ? '+1' : '-1'}` },
+  tarjeta: { insignias: [(r) => `Mult: ${r.multiplicador_financiero > 0 ? '+1' : '-1'}`] },
   ficha: {
     titulo: 'Datos del Comprobante',
     destacado: {
@@ -207,6 +208,79 @@ export const COMPROBANTES = {
     datos: [
       { etiqueta: 'Nombre del Documento', valor: (r) => r?.nombre_documento },
       { etiqueta: 'Multiplicador', valor: (r) => `${r?.multiplicador_financiero} (${r?.multiplicador_financiero < 0 ? 'Crédito / Descuento' : 'Débito / Gasto'})` },
+    ],
+  },
+};
+
+// ---------- Conceptos de gasto ----------
+const ETAPAS_GASTO = {
+  [TIPO_GASTO.FIJO_DESPACHO]: { corta: 'Fijo Despacho', larga: '1. Gasto Fijo Operativo (Despacho)',
+    opcion: '1. Gasto Fijo Operativo (Ruta Crítica Despacho)', clase: 'bg-amber-500/10 text-amber-400 border-amber-500/30' },
+  [TIPO_GASTO.POST_LEVANTE]: { corta: 'Post-Levante', larga: '2. Gasto Post-Levante (Devolución/Entrega)',
+    opcion: '2. Gasto Post-Levante (Devolución de Vacío / Entrega)', clase: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' },
+  [TIPO_GASTO.EXTRAORDINARIO]: { corta: 'Extraordinario', larga: '3. Gasto Extraordinario (Eventualidades)',
+    opcion: '3. Gasto Extraordinario (Multas / Eventualidades)', clase: 'bg-purple-500/10 text-purple-400 border-purple-500/30' },
+};
+const etapaDe = (r) => ETAPAS_GASTO[r?.tipo_gasto] || ETAPAS_GASTO[TIPO_GASTO.EXTRAORDINARIO];
+
+// Clase aduanera: papel del concepto en el despacho. La usa el backend para decidir el levante de la DAM.
+export const CLASES_ADUANERAS = {
+  [CLASE_ADUANERA.NINGUNA]: { etiqueta: 'Ninguna', detalle: 'No interviene en el levante (fletes, almacenaje, multas, etc.)' },
+  [CLASE_ADUANERA.TRIBUTO]: { etiqueta: 'Tributo', detalle: 'Forma parte de la proforma junto con la percepción' },
+  [CLASE_ADUANERA.PERCEPCION]: { etiqueta: 'Percepción', detalle: 'Forma parte de la proforma junto con los tributos' },
+  [CLASE_ADUANERA.OMC]: { etiqueta: CLASE_ADUANERA.OMC, detalle: 'Ajuste de valor OMC: su pago libera o cierra la DAM' },
+};
+const claseDe = (r) => CLASES_ADUANERAS[r?.clase_aduanera] || CLASES_ADUANERAS[CLASE_ADUANERA.NINGUNA];
+const COLOR_CLASE_NINGUNA = 'bg-slate-500/10 text-slate-400 border-slate-500/30';
+const COLOR_CLASE_ADUANERA = 'bg-sky-500/10 text-sky-300 border-sky-500/30';
+
+export const CONCEPTOS = {
+  ruta: 'conceptos', campoId: 'id_concepto', Icono: Tags, PanelDetalle: GastosDelConcepto,
+  textos: {
+    singular: 'Concepto',
+    titulo: 'Catálogo de Conceptos de Pago',
+    subtitulo: 'Clasificación contable para gastos de importación (Flete, Almacenaje, Agenciamiento, Cuadrilla, etc.)',
+    placeholderBusqueda: 'Buscar por Nombre o Descripción...',
+    sinResultados: 'No se encontraron conceptos con los criterios indicados.',
+    ayudaSinSeleccion: 'Seleccione un concepto de la bandeja izquierda para ver o modificar su clasificación.',
+    referencia: (r) => `el concepto "${r.nombre}"`,
+    advertenciaBorrado: 'tiene gastos asociados',
+  },
+  campos: [
+    { nombre: 'nombre', etiqueta: 'Nombre del Concepto', requerido: true,
+      placeholder: 'Ej. Flete Internacional, Almacenaje Callao, Gastos de Despacho...',
+      mensajeRequerido: 'El nombre del concepto de pago es obligatorio.' },
+    { nombre: 'tipo_gasto', etiqueta: 'Etapa Logística (Clasificación para KPIs)', tipo: 'seleccion', requerido: true,
+      valorInicial: TIPO_GASTO.FIJO_DESPACHO,
+      opciones: Object.entries(ETAPAS_GASTO).map(([valor, e]) => ({ valor, etiqueta: e.opcion })),
+      ayuda: 'Determina cómo medirá el sistema el avance de pagos de este concepto en la barra de progreso del contenedor.' },
+    { nombre: 'clase_aduanera', etiqueta: 'Clase Aduanera (Levante de la DAM)', tipo: 'seleccion', requerido: true,
+      valorInicial: CLASE_ADUANERA.NINGUNA,
+      opciones: Object.entries(CLASES_ADUANERAS).map(([valor, c]) => ({ valor, etiqueta: `${c.etiqueta} — ${c.detalle}` })),
+      ayuda: 'El sistema da el levante de la DAM cuando los gastos de clase Tributo y Percepción están pagados. Ya no depende del nombre del concepto.' },
+    { nombre: 'descripcion', etiqueta: 'Descripción (Opcional)', tipo: 'multilinea', vacioComoNulo: true,
+      placeholder: 'Detalles sobre este concepto o su aplicación contable...' },
+  ],
+  buscarEn: ['nombre', 'descripcion'],
+  tarjeta: {
+    insignias: [
+      (r) => ({ texto: etapaDe(r).corta, clase: etapaDe(r).clase }),
+      (r) => (r.clase_aduanera && r.clase_aduanera !== CLASE_ADUANERA.NINGUNA
+        ? { texto: `Aduana: ${claseDe(r).etiqueta}`, clase: COLOR_CLASE_ADUANERA } : null),
+    ],
+    subtitulo: (r) => r.descripcion || null,
+  },
+  ficha: {
+    titulo: 'Datos del Concepto',
+    destacado: { etiqueta: 'Etapa', valor: (r) => etapaDe(r).corta },
+    datos: [
+      { etiqueta: 'Denominación', valor: (r) => r?.nombre },
+      { etiqueta: 'Etapa Logística (KPI)', valor: (r) => ({ texto: etapaDe(r).larga, clase: etapaDe(r).clase }) },
+      { etiqueta: 'Clase Aduanera (Levante)', valor: (r) => ({
+        texto: claseDe(r).etiqueta, detalle: claseDe(r).detalle,
+        clase: !r?.clase_aduanera || r.clase_aduanera === CLASE_ADUANERA.NINGUNA ? COLOR_CLASE_NINGUNA : COLOR_CLASE_ADUANERA,
+      }) },
+      { etiqueta: 'Descripción / Justificación', valor: (r) => r?.descripcion || 'Sin descripción detallada' },
     ],
   },
 };

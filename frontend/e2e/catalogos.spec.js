@@ -9,6 +9,7 @@ const CATALOGOS = [
   { ruta: 'importadores', boton: 'Nuevo Importador', nombre: 'IMPORTADOR PRUEBA UI', placeholderNombre: 'Nombre oficial o abreviado de la empresa', ruc: '20200000012', placeholderRuc: 'Ej. 20123456789' },
   { ruta: 'proveedores', boton: 'Nuevo Proveedor', nombre: 'PROVEEDOR PRUEBA UI', placeholderNombre: 'Nombre oficial o abreviado del proveedor', ruc: '20200000013', placeholderRuc: 'Ej. 20987654321' },
   { ruta: 'comprobantes', boton: 'Nuevo Comprobante', nombre: 'NOTA DE CREDITO UI', placeholderNombre: 'Ej. Factura Comercial' },
+  { ruta: 'conceptos', boton: 'Nuevo Concepto', nombre: 'CONCEPTO PRUEBA UI', placeholderNombre: 'Ej. Flete Internacional' },
 ];
 
 for (const cat of CATALOGOS) {
@@ -100,4 +101,23 @@ test('comprobantes: el multiplicador se guarda como número (-1 para notas de cr
   await page.locator('form button[type=submit]').click();
   await esperarAviso(page, 'exitosamente');
   await expect(page.getByText('Resta al Gasto (-1)').first()).toBeVisible();
+});
+
+test('conceptos: la clase aduanera se guarda y se edita la observación de un gasto del concepto', async ({ page }) => {
+  await iniciarSesion(page);
+  await page.goto('/app/conceptos');
+  await page.getByRole('button', { name: 'Nuevo Concepto' }).first().click();
+  await page.getByPlaceholder('Ej. Flete Internacional').fill('DERECHOS UI');
+  await page.locator('form select').nth(1).selectOption({ label: 'Tributo — Forma parte de la proforma junto con la percepción' });
+  await page.locator('form button[type=submit]').click();
+  await esperarAviso(page, 'exitosamente');
+  await expect(page.locator('section').first().getByText('Aduana: Tributo').first()).toBeVisible();
+
+  // Observación en un gasto existente del concepto FLETE LOCAL
+  await page.locator('section').first().getByText('FLETE LOCAL', { exact: true }).click();
+  await expect(page.getByText('Gasto #').first()).toBeVisible();
+  await page.getByRole('button', { name: '+ Agregar observación' }).first().click();
+  await page.getByPlaceholder('Sobrecosto 4 días extra').fill('Demora de 2 días en el puerto');
+  await page.getByRole('button', { name: 'Guardar Observación' }).click();
+  await expect(page.getByText('"Demora de 2 días en el puerto"').first()).toBeVisible();
 });

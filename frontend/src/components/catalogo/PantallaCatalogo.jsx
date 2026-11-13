@@ -28,6 +28,26 @@ function InsigniaEstado({ estado }) {
   );
 }
 
+/**
+ * Valor de la ficha o insignia de la bandeja: texto simple, o { texto, clase, detalle } para mostrarlo
+ * como insignia de color con una línea de detalle opcional.
+ */
+function Valor({ valor, grande }) {
+  if (valor && typeof valor === 'object') {
+    return (
+      <>
+        <span className={`inline-block px-2 py-0.5 rounded font-bold border ${grande ? 'text-xs mt-0.5' : 'text-[10px]'} ${valor.clase || 'bg-slate-800 text-slate-300 border-slate-700'}`}>
+          {valor.texto}
+        </span>
+        {grande && valor.detalle && <span className="block text-[10px] text-slate-500">{valor.detalle}</span>}
+      </>
+    );
+  }
+  return grande ? <span className="font-bold text-slate-100 text-sm">{valor}</span> : (
+    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">{valor}</span>
+  );
+}
+
 function Encabezado({ definicion, onNuevo }) {
   const { Icono, textos } = definicion;
   return (
@@ -103,16 +123,15 @@ function Bandeja({ definicion, c }) {
               <div className="flex items-center gap-2">
                 <span className="font-mono font-bold text-xs text-teal-400">#{r[campoId]}</span>
                 <InsigniaEstado estado={r.estado_registro} />
-                {tarjeta?.insignia && (
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
-                    {tarjeta.insignia(r)}
-                  </span>
-                )}
+                {(tarjeta?.insignias || []).map((insignia, i) => {
+                  const valor = insignia(r);
+                  return valor ? <Valor key={i} valor={valor} /> : null;
+                })}
               </div>
               {tarjeta?.detalleDerecha && <span className="font-mono text-[10px] text-slate-400">{tarjeta.detalleDerecha(r)}</span>}
             </div>
             <div className="mt-1.5 text-xs font-semibold text-slate-200 truncate">{nombreDe(definicion, r)}</div>
-            {tarjeta?.subtitulo && <div className="mt-0.5 text-[11px] text-slate-500 truncate">{tarjeta.subtitulo(r)}</div>}
+            {tarjeta?.subtitulo?.(r) && <div className="mt-0.5 text-[11px] text-slate-500 truncate">{tarjeta.subtitulo(r)}</div>}
           </div>
         ))}
       </div>
@@ -151,6 +170,11 @@ function CampoFormulario({ campo, c, consultaRuc }) {
   let control;
   if (campo.tipo === 'ruc') {
     control = <CampoRuc campo={campo} valor={valor} onCambio={cambiar} consulta={consultaRuc} />;
+  } else if (campo.tipo === 'multilinea') {
+    control = (
+      <textarea rows={3} value={valor} onChange={(e) => cambiar(e.target.value)} placeholder={campo.placeholder}
+        className={`${CLASE_ENTRADA} resize-y`} />
+    );
   } else if (campo.tipo === 'seleccion') {
     control = (
       <select value={valor} onChange={(e) => cambiar(e.target.value)} className={CLASE_ENTRADA}>
@@ -217,7 +241,7 @@ function Formulario({ definicion, c }) {
 }
 
 function Ficha({ definicion, c }) {
-  const { campoId, textos, ficha, Icono } = definicion;
+  const { campoId, textos, ficha, Icono, PanelDetalle } = definicion;
   const r = c.seleccionado;
 
   if (!r && c.modo !== MODO.NUEVO) {
@@ -269,10 +293,11 @@ function Ficha({ definicion, c }) {
             {ficha.datos.map((dato) => (
               <div key={dato.etiqueta} className="bg-slate-900/80 border border-slate-800 p-3.5 rounded-lg space-y-1">
                 <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">{dato.etiqueta}</span>
-                <span className="font-bold text-slate-100 text-sm">{dato.valor(r)}</span>
+                <Valor valor={dato.valor(r)} grande />
               </div>
             ))}
           </div>
+          {PanelDetalle && <PanelDetalle key={r[campoId]} registro={r} />}
         </div>
       ) : (
         <Formulario key={c.modo + (r?.[campoId] ?? '')} definicion={definicion} c={c} />
