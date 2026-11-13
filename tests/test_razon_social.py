@@ -1,7 +1,7 @@
 """Abreviación de razones sociales devueltas por la consulta de RUC. No requiere base de datos."""
 import pytest
 
-from main import acortar_razon_social
+from domain.razon_social import acortar_razon_social
 
 
 @pytest.mark.parametrize("original, esperado", [

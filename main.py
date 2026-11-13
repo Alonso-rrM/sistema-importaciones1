@@ -1,23 +1,13 @@
-from typing import List, Optional
-import json
 import os
-import re
-import requests
-from datetime import date, datetime, time
-from fastapi import FastAPI, Depends, HTTPException, Request, Query
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session, joinedload
 from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
 
-import models
-import schemas
 from fastapi.responses import JSONResponse
-from security import get_password_hash, COOKIE_SESION, CSRF_HEADER
-from dependencies import get_db, get_current_user, RoleChecker, limiter
-from services.audit_trail import enriquecer_bitacora
-from routers import auth, catalogos, operaciones, finanzas, reportes
-from constantes import AccionAuditoria, ROLES_AUDITORIA, ROLES_SOLO_ADMIN
+from security import COOKIE_SESION, CSRF_HEADER
+from dependencies import limiter
+from routers import auditoria, auth, catalogos, finanzas, integraciones, operaciones, reportes, usuarios
 
 # La documentación interactiva (/docs, /redoc, /openapi.json) expone el mapa completo de la API.
 # Desactivada por defecto; para desarrollo, definir ENABLE_DOCS=true en el .env
@@ -71,168 +61,10 @@ app.include_router(catalogos.router)
 app.include_router(operaciones.router)
 app.include_router(finanzas.router)
 app.include_router(reportes.router)
+app.include_router(usuarios.router)
+app.include_router(integraciones.router)
+app.include_router(auditoria.router)
 
 @app.get("/")
 def ruta_principal():
     return {"mensaje": "¡Servidor de Importaciones funcionando al 100%!"}
-
-# --- USUARIOS (Blindado: Solo SuperAdmin Rol 1) ---
-@app.post("/usuarios/", response_model=schemas.Usuario)
-def crear_usuario(
-    usuario: schemas.UsuarioCreate, 
-    db: Session = Depends(get_db),
-    current_user: models.Usuario = Depends(RoleChecker(ROLES_SOLO_ADMIN))
-):
-    if db.query(models.Usuario).filter(models.Usuario.username == usuario.username).first():
-        raise HTTPException(status_code=400, detail="El username ya está registrado")
-    hashed_password = get_password_hash(usuario.password)
-    nuevo_usuario = models.Usuario(
-        id_rol=usuario.id_rol, username=usuario.username, email=usuario.email,
-        is_active=usuario.is_active, hashed_password=hashed_password
-    )
-    db.add(nuevo_usuario)
-    db.commit()
-    db.refresh(nuevo_usuario)
-    return nuevo_usuario
-
-# --- INTEGRACIONES EXTERNAS (SUNAT) ---
-def acortar_razon_social(texto: str) -> str:
-    """Normaliza y compacta razones sociales largas oficiales de SUNAT."""
-    if not texto:
-        return ""
-    nombre = texto.strip().upper()
-    if " - " in nombre:
-        partes = [p.strip() for p in nombre.split(" - ") if p.strip()]
-        if len(partes) >= 2:
-            p1, p2 = partes[0], partes[-1]
-            if len(p2) <= len(p1) and len(p2) >= 2:
-                nombre = p2
-
-    reemplazos = [
-        (r'\bSOCIEDAD\s+ANONIMA\s+CERRADA\b', 'S.A.C.'),
-        (r'\bSOCIEDAD\s+COMERCIAL\s+DE\s+RESPONSABILIDAD\s+LIMITADA\b', 'S.R.L.'),
-        (r'\bEMPRESA\s+INDIVIDUAL\s+DE\s+RESPONSABILIDAD\s+LIMITADA\b', 'E.I.R.L.'),
-        (r'\bSOCIEDAD\s+ANONIMA\s+ABIERTA\b', 'S.A.A.'),
-        (r'\bSOCIEDAD\s+ANONIMA\b', 'S.A.'),
-        (r'\bS\s*\.?\s*A\s*\.?\s*C\s*\.?\b', 'S.A.C.'),
-        (r'\bS\s*\.?\s*R\s*\.?\s*L\s*\.?\b', 'S.R.L.'),
-        (r'\bE\s*\.?\s*I\s*\.?\s*R\s*\.?\s*L\s*\.?\b', 'E.I.R.L.'),
-        (r'\bS\s*\.?\s*A\s*\.?\s*A\s*\.?\b', 'S.A.A.'),
-        (r'\bS\s*\.?\s*A\s*\.?(?!\w)', 'S.A.'),
-    ]
-    for patron, sigla in reemplazos:
-        nombre = re.sub(patron, sigla, nombre, flags=re.IGNORECASE)
-
-    nombre = re.sub(r'[\'\"\`]', '', nombre)
-    nombre = re.sub(r'\s+O\s+(?=S\.)', ' ', nombre)
-    nombre = re.sub(r'\s+', ' ', nombre).strip()
-    nombre = re.sub(r'\.{2,}', '.', nombre)
-    return nombre
-
-@app.get("/sunat/ruc/{ruc}", tags=["Integraciones"])
-@limiter.limit("30/minute")  # Protege la cuota del token de ApiPeru
-def consultar_ruc_sunat(request: Request, ruc: str, current_user: models.Usuario = Depends(get_current_user)):
-    if len(ruc) != 11 or not ruc.isdigit():
-        raise HTTPException(status_code=400, detail="El RUC debe tener 11 dígitos numéricos.")
-        
-    token = os.getenv("SUNAT_API_TOKEN")
-    if not token:
-        raise HTTPException(status_code=500, detail="Token de SUNAT (ApiPeru) no configurado en el servidor.")
-
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-    try:
-        response = requests.get(f"https://apiperu.dev/api/ruc/{ruc}", headers=headers, timeout=5)
-        if response.status_code == 200:
-            res_json = response.json()
-            if not res_json.get("success"):
-                raise HTTPException(status_code=404, detail="RUC no encontrado en SUNAT.")
-            data = res_json.get("data", {})
-            estado, condicion = data.get("estado"), data.get("condicion")
-            if estado != "ACTIVO":  # literal-permitido: estado del contribuyente según SUNAT, no del sistema
-                raise HTTPException(status_code=400, detail=f"El RUC está {estado}. No se puede operar.")
-            if condicion != "HABIDO":
-                raise HTTPException(status_code=400, detail=f"El RUC tiene condición {condicion}.")
-            
-            razon_social = data.get("nombre_o_razon_social") or ""
-            return {
-                "razon_social": razon_social,
-                "nombre_sugerido": acortar_razon_social(razon_social),
-                "estado": estado,
-                "condicion": condicion
-            }
-        else:
-            raise HTTPException(status_code=response.status_code, detail="Error al consultar SUNAT a través de ApiPeru.")
-    except requests.exceptions.RequestException:
-        raise HTTPException(status_code=503, detail="El servicio de consulta no está disponible temporalmente.")
-
-# --- ENDPOINTS DE CONSULTA DE AUDITORÍA (HISTÓRICO Y TABLAS SOMBRA) ---
-@app.get("/auditoria/", response_model=List[schemas.AuditLog], tags=["Auditoria"])
-def listar_auditoria(
-    limit: int = Query(100, ge=1, le=500),
-    offset: int = Query(0, ge=0),
-    accion: Optional[str] = Query(None, max_length=100, description="Texto contenido en la acción, ej. 'MODIFICACION Pago'"),
-    tabla: Optional[str] = Query(None, max_length=60, description="Tabla afectada, ej. 'registro_pagos'"),
-    id_registro: Optional[int] = Query(None, description="ID del registro afectado (requiere 'tabla')"),
-    buscar: Optional[str] = Query(None, max_length=120, description="Texto a buscar en valores legibles (DAM, Factura, Voucher, Concepto...)"),
-    id_usuario: Optional[int] = None,
-    fecha_desde: Optional[date] = None,
-    fecha_hasta: Optional[date] = None,
-    db: Session = Depends(get_db),
-    current_user: models.Usuario = Depends(RoleChecker(ROLES_AUDITORIA))
-):
-    """Bitácora de eventos con filtros. Permite reconstruir la historia completa de un registro."""
-    q = db.query(models.AuditLog)
-    if accion:
-        q = q.filter(models.AuditLog.accion.ilike(f"%{accion.strip()}%"))
-    if tabla:
-        if not re.fullmatch(r"[a-z_]{1,60}", tabla):
-            raise HTTPException(status_code=400, detail="Nombre de tabla inválido.")
-        if id_registro is not None:
-            q = q.filter(models.AuditLog.detalles.like(f'%"tabla": "{tabla}", "id": {id_registro},%'))
-        elif tabla == "registro_gastos":
-            q = q.filter(models.AuditLog.detalles.like(f'%"tabla": "{tabla}"%') | (models.AuditLog.accion == AccionAuditoria.CREACION_GASTO))
-        elif tabla == "registro_pagos":
-            q = q.filter(models.AuditLog.detalles.like(f'%"tabla": "{tabla}"%') | models.AuditLog.accion.in_([AccionAuditoria.CREACION_PAGO, AccionAuditoria.EDICION_FECHA_PAGO]))
-        elif tabla == "detalle_dams":
-            q = q.filter(models.AuditLog.detalles.like(f'%"tabla": "{tabla}"%') | models.AuditLog.accion.in_([AccionAuditoria.CAMBIO_ESTADO_DAM, AccionAuditoria.REVERSION_AUTOMATICA_DAM]))
-        elif tabla == "historial_tipo_cambio":
-            q = q.filter(models.AuditLog.detalles.like(f'%"tabla": "{tabla}"%') | models.AuditLog.accion.like("%TIPO CAMBIO%"))
-        else:
-            q = q.filter(models.AuditLog.detalles.like(f'%"tabla": "{tabla}"%'))
-    if id_usuario is not None:
-        q = q.filter(models.AuditLog.id_usuario == id_usuario)
-    if fecha_desde:
-        q = q.filter(models.AuditLog.created_at >= datetime.combine(fecha_desde, time.min))
-    if fecha_hasta:
-        q = q.filter(models.AuditLog.created_at <= datetime.combine(fecha_hasta, time.max))
-    filas = (
-        q.options(joinedload(models.AuditLog.usuario))
-        .order_by(models.AuditLog.created_at.desc(), models.AuditLog.id_log.desc())
-        .offset(offset).limit(limit).all()
-    )
-    enriquecidos = enriquecer_bitacora(db, filas)
-    if buscar and buscar.strip():
-        termino = buscar.strip().lower()
-        enriquecidos = [
-            item for item in enriquecidos
-            if termino in (item.get("resumen_legible") or "").lower()
-            or termino in (item.get("accion") or "").lower()
-            or termino in (item.get("nombre_usuario") or "").lower()
-            or termino in json.dumps(item.get("detalles_legibles") or {}, ensure_ascii=False).lower()
-        ]
-    return enriquecidos
-@app.get("/auditoria/maestros/", response_model=List[schemas.MaestroEliminadoResponse], tags=["Auditoria"])
-def listar_auditoria_maestros(db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_AUDITORIA))):
-    return db.query(models.MaestroEliminado).order_by(models.MaestroEliminado.fecha_eliminacion.desc()).all()
-@app.get("/auditoria/dams/", response_model=List[schemas.DamEliminadaResponse], tags=["Auditoria"])
-def listar_auditoria_dams(db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_AUDITORIA))):
-    return db.query(models.DamEliminada).order_by(models.DamEliminada.fecha_eliminacion.desc()).all()
-@app.get("/auditoria/gastos/", response_model=List[schemas.GastoEliminadoResponse], tags=["Auditoria"])
-def listar_auditoria_gastos(db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_AUDITORIA))):
-    return db.query(models.GastoEliminado).order_by(models.GastoEliminado.fecha_eliminacion.desc()).all()
-@app.get("/auditoria/pagos/", response_model=List[schemas.PagoEliminadoResponse], tags=["Auditoria"])
-def listar_auditoria_pagos(db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_AUDITORIA))):
-    return db.query(models.PagoEliminado).order_by(models.PagoEliminado.fecha_eliminacion.desc()).all()
-@app.get("/auditoria/vouchers/", response_model=List[schemas.VoucherEliminadoResponse], tags=["Auditoria"])
-def listar_auditoria_vouchers(db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_AUDITORIA))):
-    return db.query(models.VoucherEliminado).order_by(models.VoucherEliminado.fecha_eliminacion.desc()).all()
