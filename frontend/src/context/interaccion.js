@@ -5,6 +5,7 @@
  *
  *   avisar('Banco registrado.', 'exito');                     // aviso flotante: 'exito' | 'error' | 'info' | 'advertencia'
  *   if (!(await confirmar({ titulo: '¿Desactivar?', mensaje: '...', peligro: true }))) return;
+ *   await confirmar({ titulo: 'Atención', mensaje: '...', soloAceptar: true });   // aviso que hay que reconocer
  *   const datos = await pedirDatos({ titulo: 'Tipo de cambio', campos: [{ nombre: 'venta', etiqueta: 'Venta' }] });
  *   if (!datos) return;                                       // null = la usuaria canceló
  *

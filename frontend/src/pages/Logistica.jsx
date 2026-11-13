@@ -10,10 +10,12 @@ import ModalLiquidacionContenedor from '../components/ModalLiquidacionContenedor
 import ModalCrearProveedorRapido from '../components/ModalCrearProveedorRapido';
 import { Download, Clock, Search, Settings, FileText, Banknote, Trash2, Unlock, CreditCard, Receipt, FolderOpen } from 'lucide-react';
 import { CANAL_CONTROL, CATEGORIA_PROVEEDOR, ESTADO_DAM, ESTADO_DOCUMENTARIO, ESTADO_LEVANTE, ESTADO_PAGO, MONEDA, ROL, STATUS_LLEGADA, TIPO_GASTO, TIPO_VALOR } from '../constants';
+import { useInteraccion } from '../context/interaccion';
 
 const KPI_KEYS = [TIPO_GASTO.FIJO_DESPACHO, TIPO_GASTO.POST_LEVANTE, TIPO_GASTO.EXTRAORDINARIO, 'GLOBAL'];
 
 const Logistica = () => {
+  const { avisar, confirmar } = useInteraccion();
   const navigate = useNavigate();
   const [maestros, setMaestros] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
@@ -202,8 +204,8 @@ const Logistica = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [maestros]);
 
-  const handleSelect = (m) => {
-    if (hasUnsavedChanges && !window.confirm("⚠️ Tienes cambios sin guardar. ¿Deseas descartarlos y cambiar de registro?")) return;
+  const handleSelect = async (m) => {
+    if (hasUnsavedChanges && !(await confirmar({ titulo: 'Cambios sin guardar', mensaje: 'Tienes cambios sin guardar. ¿Deseas descartarlos y cambiar de registro?', textoAceptar: 'Descartar cambios', peligro: true }))) return;
     setSelectedId(m.id_maestro);
     setViewMode('MODIFICAR');
     setFormData(mapearMaestroAForm(m));
@@ -216,8 +218,8 @@ const Logistica = () => {
     cargarSubRegistros(m.id_maestro, m.numero_factura);
   };
 
-  const handleNuevo = () => {
-    if (hasUnsavedChanges && !window.confirm("⚠️ Tienes cambios sin guardar. ¿Deseas descartarlos y crear uno nuevo?")) return;
+  const handleNuevo = async () => {
+    if (hasUnsavedChanges && !(await confirmar({ titulo: 'Cambios sin guardar', mensaje: 'Tienes cambios sin guardar. ¿Deseas descartarlos y crear uno nuevo?', textoAceptar: 'Descartar cambios', peligro: true }))) return;
     setSelectedId(null);
     setViewMode('NUEVO');
     setFormData(estadoInicial);
@@ -232,10 +234,10 @@ const Logistica = () => {
 
   const handleGuardar = async (e) => {
     e.preventDefault();
-    if (isReadOnly) return alert("Este registro cuenta con LEVANTE y está protegido contra edición.");
+    if (isReadOnly) return avisar("Este registro cuenta con LEVANTE y está protegido contra edición.", 'advertencia');
 
     if (formData.status_llegada === STATUS_LLEGADA.EN_ALMACEN && !formData.fecha_recepcion_almacen) {
-      return alert("Debe ingresar la Fecha de Recepción en Almacén.");
+      return avisar("Debe ingresar la Fecha de Recepción en Almacén.", 'advertencia');
     }
 
     setIsGuardando(true);
@@ -259,7 +261,7 @@ const Logistica = () => {
         venta_sucesiva: formData.venta_sucesiva || 'NO'
       };
 
-      if (!payload.numero_factura) return alert("El campo N° Factura es obligatorio.");
+      if (!payload.numero_factura) return avisar("El campo N° Factura es obligatorio.", 'advertencia');
 
       if (viewMode === 'NUEVO') {
         const res = await api.post('/maestros/', payload);
@@ -273,18 +275,18 @@ const Logistica = () => {
       }
       await cargarMaestros();
       setHasUnsavedChanges(false);
-      alert("✅ Expediente guardado exitosamente.");
+      avisar("✅ Expediente guardado exitosamente.", 'exito');
     } catch (error) {
       const detail = error.response?.data?.detail;
       const msg = typeof detail === 'string' ? detail : (Array.isArray(detail) ? detail.map(d => `${d.loc ? d.loc.slice(-1) : 'campo'}: ${d.msg}`).join('\n') : 'Error al guardar');
-      alert(`Error al guardar:\n${msg}`);
+      avisar(`Error al guardar:\n${msg}`, 'error');
     } finally { setIsGuardando(false); }
   };
 
   // Creación rápida inline: DAM
   const handleCrearDamInline = async (e) => {
     e.preventDefault();
-    if (!modalNuevaDam.numero_de_dam.trim()) return alert("El N° de DAM es obligatorio.");
+    if (!modalNuevaDam.numero_de_dam.trim()) return avisar("El N° de DAM es obligatorio.", 'advertencia');
     setIsSubmittingInline(true);
     try {
       const payload = {
@@ -298,21 +300,21 @@ const Logistica = () => {
       setModalNuevaDam({ open: false, numero_de_dam: '', serie: '', canal_control: CANAL_CONTROL.VERDE, monto_valor_provisional_usd: '' });
       cargarSubRegistros(selectedId, formData.numero_factura);
       cargarMaestros();
-      alert("✅ DAM registrada correctamente.");
+      avisar("✅ DAM registrada correctamente.", 'exito');
     } catch (err) {
-      alert(`Error al registrar DAM: ${err.response?.data?.detail || 'Error desconocido'}`);
+      avisar(`Error al registrar DAM: ${err.response?.data?.detail || 'Error desconocido'}`, 'error');
     } finally { setIsSubmittingInline(false); }
   };
 
   // Creación rápida inline: Gasto
   const handleCrearGastoInline = async (e) => {
     e.preventDefault();
-    if (!modalNuevoGasto.id_dam) return alert("Debe seleccionar una DAM asociada.");
-    if (!modalNuevoGasto.id_concepto) return alert("Debe seleccionar un concepto.");
-    if (!modalNuevoGasto.id_proveedor) return alert("Debe seleccionar un proveedor.");
-    if (!modalNuevoGasto.id_tipo_doc) return alert("Debe seleccionar un tipo de documento.");
+    if (!modalNuevoGasto.id_dam) return avisar("Debe seleccionar una DAM asociada.", 'advertencia');
+    if (!modalNuevoGasto.id_concepto) return avisar("Debe seleccionar un concepto.", 'advertencia');
+    if (!modalNuevoGasto.id_proveedor) return avisar("Debe seleccionar un proveedor.", 'advertencia');
+    if (!modalNuevoGasto.id_tipo_doc) return avisar("Debe seleccionar un tipo de documento.", 'advertencia');
     const monto = parseFloat(modalNuevoGasto.monto_original);
-    if (isNaN(monto) || monto <= 0) return alert("El monto debe ser mayor a 0.");
+    if (isNaN(monto) || monto <= 0) return avisar("El monto debe ser mayor a 0.", 'advertencia');
 
     setIsSubmittingInline(true);
     try {
@@ -329,31 +331,36 @@ const Logistica = () => {
       await api.post('/gastos/', payload);
       setModalNuevoGasto({ open: false, id_dam: '', id_concepto: '', id_proveedor: '', id_tipo_doc: '', numero_documento: '', monto_original: '', moneda: MONEDA.USD, observaciones: '' });
       cargarSubRegistros(selectedId, formData.numero_factura);
-      alert("✅ Gasto registrado y vinculado al contenedor.");
+      avisar("✅ Gasto registrado y vinculado al contenedor.", 'exito');
     } catch (err) {
-      alert(`Error al registrar Gasto: ${err.response?.data?.detail || 'Error desconocido'}`);
+      avisar(`Error al registrar Gasto: ${err.response?.data?.detail || 'Error desconocido'}`, 'error');
     } finally { setIsSubmittingInline(false); }
   };
 
   const handleDesbloquearLevante = async () => {
-    if (!window.confirm("¿Seguro que deseas desbloquear este expediente con LEVANTE? Su estado pasará a SIN LEVANTE.")) return;
+    if (!(await confirmar({
+      titulo: 'Desbloquear expediente',
+      mensaje: '¿Seguro que deseas desbloquear este expediente con LEVANTE? Su estado pasará a SIN LEVANTE.',
+      textoAceptar: 'Desbloquear',
+      peligro: true,
+    }))) return;
     try {
       await api.post(`/maestros/${selectedId}/desbloquear/`);
-      alert("✅ Expediente desbloqueado correctamente.");
+      avisar("✅ Expediente desbloqueado correctamente.", 'exito');
       setFormData(prev => ({ ...prev, estado_levante: ESTADO_LEVANTE.SIN_LEVANTE }));
       cargarMaestros();
-    } catch (error) { alert(`Error al desbloquear: ${error.response?.data?.detail || 'Error desconocido'}`); }
+    } catch (error) { avisar(`Error al desbloquear: ${error.response?.data?.detail || 'Error desconocido'}`, 'error'); }
   };
 
   const handleEliminarConfirm = async () => {
-    if (!modalEliminar.motivo || modalEliminar.motivo.length < 10) return alert("Debe ingresar un motivo válido de al menos 10 caracteres.");
+    if (!modalEliminar.motivo || modalEliminar.motivo.length < 10) return avisar("Debe ingresar un motivo válido de al menos 10 caracteres.", 'advertencia');
     try {
       await api.delete(`/maestros/${modalEliminar.id}`, { data: { motivo: modalEliminar.motivo } });
       setModalEliminar({ open: false, id: null, motivo: '' });
       setSelectedId(null);
       setViewMode(null);
       cargarMaestros();
-    } catch (error) { alert(`Error al eliminar: ${error.response?.data?.detail || 'Error desconocido'}`); }
+    } catch (error) { avisar(`Error al eliminar: ${error.response?.data?.detail || 'Error desconocido'}`, 'error'); }
   };
 
   const cfr = (parseFloat(formData.fob_usd || 0) + parseFloat(formData.flete_usd || 0)).toFixed(2);
@@ -371,7 +378,7 @@ const Logistica = () => {
 
       await descargarExcel('/maestros/exportar', params, 'Reporte_Logistica.xlsx');
     } catch (error) {
-      alert(`Error al exportar reporte: ${error.response?.data?.detail || error.message || 'Error desconocido'}`);
+      avisar(`Error al exportar reporte: ${error.response?.data?.detail || error.message || 'Error desconocido'}`, 'error');
     } finally {
       setIsExportando(false);
     }
@@ -558,7 +565,7 @@ const Logistica = () => {
           <>
             <header className="p-4 border-b border-slate-800 bg-slate-800/80 flex flex-wrap items-center justify-between gap-3 shrink-0">
               <div className="flex items-center gap-3">
-                <button onClick={() => { if (!hasUnsavedChanges || window.confirm("¿Descartar cambios?")) { setViewMode(null); setHasUnsavedChanges(false); } }} className="lg:hidden p-1.5 bg-slate-700 text-slate-300 rounded hover:bg-slate-600">⬅</button>
+                <button onClick={async () => { if (!hasUnsavedChanges || await confirmar({ titulo: 'Cambios sin guardar', mensaje: '¿Descartar los cambios sin guardar?', textoAceptar: 'Descartar cambios', peligro: true })) { setViewMode(null); setHasUnsavedChanges(false); } }} className="lg:hidden p-1.5 bg-slate-700 text-slate-300 rounded hover:bg-slate-600">⬅</button>
                 <div>
                   <div className="flex items-center gap-2">
                     <h1 className="text-base font-bold font-mono text-white">{viewMode === 'NUEVO' ? 'Nuevo Expediente' : `Expediente Factura ${formData.numero_factura}`}</h1>

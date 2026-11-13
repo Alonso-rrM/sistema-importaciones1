@@ -3,8 +3,10 @@ import api from '../services/api';
 import useDebounce from '../hooks/useDebounce';
 import { Tags, Search, Plus, Pencil, Trash2, RotateCcw, Ban, FileText } from 'lucide-react';
 import { CLASE_ADUANERA, ESTADO_PAGO, ESTADO_REGISTRO, MONEDA, TIPO_GASTO } from '../constants';
+import { useInteraccion } from '../context/interaccion';
 
 const Conceptos = () => {
+  const { avisar, confirmar } = useInteraccion();
   const [conceptos, setConceptos] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [viewMode, setViewMode] = useState('DETALLE'); // 'DETALLE', 'NUEVO', 'MODIFICAR'
@@ -14,7 +16,6 @@ const Conceptos = () => {
   const [filtroEstado, setFiltroEstado] = useState(ESTADO_REGISTRO.ACTIVO); // 'ACTIVO', 'INACTIVO', 'TODOS'
 
   const [isGuardando, setIsGuardando] = useState(false);
-  const [mensaje, setMensaje] = useState({ texto: '', tipo: '' });
 
   // Gastos y Observaciones específicas asociadas al Concepto seleccionado
   const [gastosConcepto, setGastosConcepto] = useState([]);
@@ -77,13 +78,13 @@ const Conceptos = () => {
       await api.put(`/gastos/${idGasto}`, {
         observaciones: textoObsTemp.trim() || null
       });
-      mostrarAlerta('✅ Observación específica del gasto actualizada correctamente.', 'exito');
+      avisar('✅ Observación específica del gasto actualizada correctamente.', 'exito');
       setEditandoObsId(null);
       setTextoObsTemp('');
       if (selectedId) cargarGastosDelConcepto(selectedId, debouncedGastoObs);
     } catch (error) {
       const msg = error.response?.data?.detail || 'No se pudo guardar la observación del gasto.';
-      mostrarAlerta(`❌ ${msg}`, 'error');
+      avisar(`❌ ${msg}`, 'error');
     } finally {
       setIsGuardandoObs(false);
     }
@@ -117,14 +118,10 @@ const Conceptos = () => {
       }
     } catch (error) {
       console.error('Error al cargar conceptos:', error);
-      mostrarAlerta('No se pudo conectar con la base de datos.', 'error');
+      avisar('No se pudo conectar con la base de datos.', 'error');
     }
   };
 
-  const mostrarAlerta = (texto, tipo = 'info') => {
-    setMensaje({ texto, tipo });
-    setTimeout(() => setMensaje({ texto: '', tipo: '' }), 4000);
-  };
 
   const handleSelect = (c) => {
     setSelectedId(c.id_concepto);
@@ -174,7 +171,7 @@ const Conceptos = () => {
   const handleGuardar = async (e) => {
     e.preventDefault();
     if (!formData.nombre.trim()) {
-      mostrarAlerta('El nombre del concepto de pago es obligatorio.', 'error');
+      avisar('El nombre del concepto de pago es obligatorio.', 'error');
       return;
     }
 
@@ -189,19 +186,19 @@ const Conceptos = () => {
 
       if (viewMode === 'NUEVO') {
         const res = await api.post('/conceptos/', payload);
-        mostrarAlerta('✅ Concepto registrado exitosamente.', 'exito');
+        avisar('✅ Concepto registrado exitosamente.', 'exito');
         await cargarConceptos();
         setSelectedId(res.data?.id_concepto || null);
         setViewMode('DETALLE');
       } else if (viewMode === 'MODIFICAR') {
         await api.put(`/conceptos/${selectedId}`, payload);
-        mostrarAlerta('✅ Concepto actualizado exitosamente.', 'exito');
+        avisar('✅ Concepto actualizado exitosamente.', 'exito');
         await cargarConceptos();
         setViewMode('DETALLE');
       }
     } catch (error) {
       const errorMsg = error.response?.data?.detail || 'Error al guardar el registro.';
-      mostrarAlerta(`❌ ${errorMsg}`, 'error');
+      avisar(`❌ ${errorMsg}`, 'error');
     } finally {
       setIsGuardando(false);
     }
@@ -209,16 +206,21 @@ const Conceptos = () => {
 
   const handleEliminar = async () => {
     if (!selectedConcepto) return;
-    const confirmar = window.confirm(`¿Estás seguro de desactivar el concepto "${selectedConcepto.nombre}"?\nEsta acción lo marcará como INACTIVO.`);
-    if (!confirmar) return;
+    const ok = await confirmar({
+      titulo: 'Desactivar registro',
+      mensaje: `¿Estás seguro de desactivar el concepto "${selectedConcepto.nombre}"?\nEsta acción lo marcará como INACTIVO.`,
+      textoAceptar: 'Desactivar',
+      peligro: true,
+    });
+    if (!ok) return;
 
     try {
       await api.delete(`/conceptos/${selectedId}`);
-      mostrarAlerta(`✅ Concepto "${selectedConcepto.nombre}" desactivado correctamente.`, 'exito');
+      avisar(`✅ Concepto "${selectedConcepto.nombre}" desactivado correctamente.`, 'exito');
       await cargarConceptos();
     } catch (error) {
       const detalle = error.response?.data?.detail || 'No se pudo desactivar.';
-      mostrarAlerta(`❌ ${detalle}`, 'error');
+      avisar(`❌ ${detalle}`, 'error');
     }
   };
 
@@ -226,29 +228,32 @@ const Conceptos = () => {
     if (!selectedConcepto) return;
     try {
       await api.put(`/conceptos/${selectedId}/restaurar`);
-      mostrarAlerta(`✅ Concepto "${selectedConcepto.nombre}" restaurado a ACTIVO.`, 'exito');
+      avisar(`✅ Concepto "${selectedConcepto.nombre}" restaurado a ACTIVO.`, 'exito');
       await cargarConceptos();
     } catch (error) {
       const detalle = error.response?.data?.detail || 'No se pudo restaurar.';
-      mostrarAlerta(`❌ ${detalle}`, 'error');
+      avisar(`❌ ${detalle}`, 'error');
     }
   };
 
   const handleEliminarFisico = async () => {
     if (!selectedConcepto) return;
-    const confirmacion = window.confirm(
-      `⚠️ ATENCIÓN: ¿Deseas eliminar DEFINITIVAMENTE el concepto "${selectedConcepto.nombre}"?\n\nEsta acción NO se puede deshacer y fallará si tiene gastos asociados.`
-    );
+    const confirmacion = await confirmar({
+      titulo: 'Eliminar definitivamente',
+      mensaje: `⚠️ ATENCIÓN: ¿Deseas eliminar DEFINITIVAMENTE el concepto "${selectedConcepto.nombre}"?\n\nEsta acción NO se puede deshacer y fallará si tiene gastos asociados.`,
+      textoAceptar: 'Eliminar definitivamente',
+      peligro: true,
+    });
     if (!confirmacion) return;
 
     try {
       await api.delete(`/conceptos/${selectedId}/fisico`);
-      mostrarAlerta(`✅ Concepto "${selectedConcepto.nombre}" eliminado definitivamente.`, 'exito');
+      avisar(`✅ Concepto "${selectedConcepto.nombre}" eliminado definitivamente.`, 'exito');
       setSelectedId(null);
       await cargarConceptos();
     } catch (error) {
       const detalle = error.response?.data?.detail || 'No se pudo eliminar definitivamente.';
-      mostrarAlerta(`❌ ${detalle}`, 'error');
+      avisar(`❌ ${detalle}`, 'error');
     }
   };
 
@@ -429,19 +434,6 @@ const Conceptos = () => {
 
         {/* PANEL DERECHO WORKSTATION (62%) */}
         <section className="lg:col-span-7 flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl min-h-0">
-          
-          {mensaje.texto && (
-            <div className={`p-3 border-b text-xs flex items-center justify-between animate-fadeIn ${
-              mensaje.tipo === 'exito'
-                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
-                : mensaje.tipo === 'error'
-                ? 'bg-rose-500/10 border-rose-500/30 text-rose-300'
-                : 'bg-teal-500/10 border-teal-500/30 text-teal-300'
-            }`}>
-              <span>{mensaje.texto}</span>
-              <button onClick={() => setMensaje({ texto: '', tipo: '' })} className="hover:text-white">✕</button>
-            </div>
-          )}
 
           {!selectedConcepto && viewMode !== 'NUEVO' ? (
             <div className="flex-1 flex flex-col items-center justify-center p-12 text-center text-slate-500">

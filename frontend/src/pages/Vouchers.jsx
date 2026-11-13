@@ -7,6 +7,7 @@ import Paginador from '../components/Paginador';
 import useDebounce from '../hooks/useDebounce';
 import { Ticket, Scale, Search, Building2, Pencil, Trash2, Banknote, CreditCard, Lock, RotateCcw, Plus, FileText, AlertTriangle, Ban } from 'lucide-react';
 import { MONEDA } from '../constants';
+import { useInteraccion } from '../context/interaccion';
 
 const selectDarkStyles = {
   control: (base, state) => ({
@@ -51,6 +52,7 @@ const selectDarkStyles = {
 };
 
 const Vouchers = () => {
+  const { avisar, confirmar } = useInteraccion();
   const navigate = useNavigate();
   const [viewMode, setViewMode] = useState('DETALLE'); // 'DETALLE', 'NUEVO', 'MODIFICAR'
   const [selectedId, setSelectedId] = useState(null);
@@ -70,7 +72,6 @@ const Vouchers = () => {
   const [isLoading, setIsLoading] = useState(false);
 
   const [isGuardando, setIsGuardando] = useState(false);
-  const [mensaje, setMensaje] = useState({ texto: '', tipo: '' });
 
   // Modal de eliminación por auditoría
   const [modalEliminar, setModalEliminar] = useState({ open: false, voucher: null, motivo: '' });
@@ -155,7 +156,7 @@ const Vouchers = () => {
       }
     } catch (error) {
       console.error('Error al cargar vouchers:', error);
-      mostrarAlerta('No se pudo conectar con el servidor de vouchers.', 'error');
+      avisar('No se pudo conectar con el servidor de vouchers.', 'error');
     } finally {
       setIsLoading(false);
     }
@@ -173,10 +174,6 @@ const Vouchers = () => {
     });
   };
 
-  const mostrarAlerta = (texto, tipo = 'info') => {
-    setMensaje({ texto, tipo });
-    setTimeout(() => setMensaje({ texto: '', tipo: '' }), 4000);
-  };
 
   const handleSelect = (v) => {
     setSelectedId(v.id_voucher);
@@ -223,12 +220,12 @@ const Vouchers = () => {
 
   const handleGuardar = async (e) => {
     e.preventDefault();
-    if (!formData.banco_id) return mostrarAlerta('Debe seleccionar una entidad bancaria.', 'error');
-    if (!formData.id_importador) return mostrarAlerta('Debe seleccionar la empresa importadora.', 'error');
-    if (!formData.numero_operacion.trim()) return mostrarAlerta('Debe ingresar el número de operación.', 'error');
+    if (!formData.banco_id) return avisar('Debe seleccionar una entidad bancaria.', 'error');
+    if (!formData.id_importador) return avisar('Debe seleccionar la empresa importadora.', 'error');
+    if (!formData.numero_operacion.trim()) return avisar('Debe ingresar el número de operación.', 'error');
     
     const monto = parseFloat(formData.monto_total);
-    if (isNaN(monto) || monto <= 0) return mostrarAlerta('El monto total debe ser mayor a 0.', 'error');
+    if (isNaN(monto) || monto <= 0) return avisar('El monto total debe ser mayor a 0.', 'error');
 
     setIsGuardando(true);
     try {
@@ -243,19 +240,19 @@ const Vouchers = () => {
 
       if (viewMode === 'NUEVO') {
         const res = await api.post('/vouchers/', payload);
-        mostrarAlerta('✅ Voucher registrado exitosamente.', 'exito');
+        avisar('✅ Voucher registrado exitosamente.', 'exito');
         await cargarVouchers();
         setSelectedId(res.data?.id_voucher || null);
         setViewMode('DETALLE');
       } else if (viewMode === 'MODIFICAR') {
         await api.put(`/vouchers/${selectedId}`, { ...payload, version: formData.version });
-        mostrarAlerta('✅ Voucher actualizado exitosamente.', 'exito');
+        avisar('✅ Voucher actualizado exitosamente.', 'exito');
         await cargarVouchers();
         setViewMode('DETALLE');
       }
     } catch (error) {
       const err = error.response?.data?.detail || 'Error al guardar voucher.';
-      mostrarAlerta(`❌ ${err}`, 'error');
+      avisar(`❌ ${err}`, 'error');
     } finally {
       setIsGuardando(false);
     }
@@ -263,20 +260,20 @@ const Vouchers = () => {
 
   const handleEliminarConfirm = async () => {
     if (!modalEliminar.motivo || modalEliminar.motivo.trim().length < 10) {
-      return alert('Debe ingresar un motivo de eliminación válido (mínimo 10 caracteres).');
+      return avisar('Debe ingresar un motivo de eliminación válido (mínimo 10 caracteres).', 'advertencia');
     }
     setIsEliminando(true);
     try {
       await api.delete(`/vouchers/${modalEliminar.voucher.id_voucher}`, {
         data: { motivo: modalEliminar.motivo.trim() }
       });
-      mostrarAlerta(`✅ Voucher #${modalEliminar.voucher.id_voucher} eliminado correctamente.`, 'exito');
+      avisar(`✅ Voucher #${modalEliminar.voucher.id_voucher} eliminado correctamente.`, 'exito');
       setModalEliminar({ open: false, voucher: null, motivo: '' });
       setSelectedId(null);
       await cargarVouchers();
     } catch (error) {
       const err = error.response?.data?.detail || 'No se pudo eliminar el voucher.';
-      mostrarAlerta(`❌ ${err}`, 'error');
+      avisar(`❌ ${err}`, 'error');
     } finally {
       setIsEliminando(false);
     }
@@ -301,15 +298,15 @@ const Vouchers = () => {
 
   const handleReversarPagoVoucher = async () => {
     if (!modalReversarPagoVoucher.motivo || modalReversarPagoVoucher.motivo.trim().length < 10) {
-      return alert('Debe ingresar un motivo de anulación válido (mínimo 10 caracteres).');
+      return avisar('Debe ingresar un motivo de anulación válido (mínimo 10 caracteres).', 'advertencia');
     }
     setIsReversandoPagoVoucher(true);
     try {
       const resAnulacion = await api.delete(`/pagos/${modalReversarPagoVoucher.pago.id_pago}`, {
         data: { motivo: modalReversarPagoVoucher.motivo.trim() }
       });
-      avisarReversionDam(resAnulacion);
-      mostrarAlerta(`✅ Pago #${modalReversarPagoVoucher.pago.id_pago} reversado. El saldo fue devuelto al voucher.`, 'exito');
+      avisarReversionDam(resAnulacion, confirmar);
+      avisar(`✅ Pago #${modalReversarPagoVoucher.pago.id_pago} reversado. El saldo fue devuelto al voucher.`, 'exito');
       setModalReversarPagoVoucher({ open: false, pago: null, motivo: '' });
       await cargarVouchers();
       if (selectedId) {
@@ -317,7 +314,7 @@ const Vouchers = () => {
       }
     } catch (error) {
       const err = error.response?.data?.detail || 'Error al reversar pago.';
-      mostrarAlerta(`❌ ${err}`, 'error');
+      avisar(`❌ ${err}`, 'error');
     } finally {
       setIsReversandoPagoVoucher(false);
     }
@@ -523,19 +520,6 @@ const Vouchers = () => {
 
         {/* PANEL DERECHO WORKSTATION (62%) */}
         <section className="lg:col-span-7 flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl min-h-0">
-          
-          {mensaje.texto && (
-            <div className={`p-3 border-b text-xs flex items-center justify-between animate-fadeIn ${
-              mensaje.tipo === 'exito'
-                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
-                : mensaje.tipo === 'error'
-                ? 'bg-rose-500/10 border-rose-500/30 text-rose-300'
-                : 'bg-teal-500/10 border-teal-500/30 text-teal-300'
-            }`}>
-              <span>{mensaje.texto}</span>
-              <button onClick={() => setMensaje({ texto: '', tipo: '' })} className="hover:text-white">✕</button>
-            </div>
-          )}
 
           {!selectedVoucher && viewMode !== 'NUEVO' ? (
             <div className="flex-1 flex flex-col items-center justify-center p-12 text-center text-slate-500">

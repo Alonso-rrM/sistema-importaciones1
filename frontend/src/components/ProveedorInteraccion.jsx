@@ -34,7 +34,7 @@ function PilaDeAvisos({ avisos, cerrar }) {
 }
 
 function Dialogo({ dialogo, responder }) {
-  const { titulo, mensaje, textoAceptar, textoCancelar, peligro, campos } = dialogo;
+  const { titulo, mensaje, textoAceptar, textoCancelar, peligro, campos, soloAceptar } = dialogo;
   const [valores, setValores] = useState(() =>
     Object.fromEntries((campos || []).map((c) => [c.nombre, c.valorInicial ?? ''])));
   const [errores, setErrores] = useState({});
@@ -100,10 +100,12 @@ function Dialogo({ dialogo, responder }) {
           ))}
         </div>
         <div className="px-5 py-3.5 border-t border-slate-800 bg-slate-950/60 flex justify-end gap-2.5">
-          <button type="button" onClick={() => responder(null)} data-dialogo-cancelar
-            className="px-4 py-2 border border-slate-700 text-slate-300 hover:bg-slate-800 rounded-lg text-xs font-semibold">
-            {textoCancelar || 'Cancelar'}
-          </button>
+          {!soloAceptar && (
+            <button type="button" onClick={() => responder(null)} data-dialogo-cancelar
+              className="px-4 py-2 border border-slate-700 text-slate-300 hover:bg-slate-800 rounded-lg text-xs font-semibold">
+              {textoCancelar || 'Cancelar'}
+            </button>
+          )}
           <button type="submit" ref={botonAceptar} data-dialogo-aceptar
             className={`px-5 py-2 text-white rounded-lg text-xs font-bold shadow-lg ${colorAceptar}`}>
             {textoAceptar || 'Aceptar'}

@@ -3,8 +3,10 @@ import api from '../services/api';
 import useDebounce from '../hooks/useDebounce';
 import { FileDigit, Search } from 'lucide-react';
 import { ESTADO_REGISTRO } from '../constants';
+import { useInteraccion } from '../context/interaccion';
 
 const Comprobantes = () => {
+  const { avisar, confirmar } = useInteraccion();
   const [comprobantes, setComprobantes] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [viewMode, setViewMode] = useState('DETALLE'); // 'DETALLE', 'NUEVO', 'MODIFICAR'
@@ -14,7 +16,6 @@ const Comprobantes = () => {
   const [filtroEstado, setFiltroEstado] = useState(ESTADO_REGISTRO.ACTIVO); // 'ACTIVO', 'INACTIVO', 'TODOS'
 
   const [isGuardando, setIsGuardando] = useState(false);
-  const [mensaje, setMensaje] = useState({ texto: '', tipo: '' });
 
   const estadoInicial = {
     nombre_documento: '',
@@ -44,14 +45,10 @@ const Comprobantes = () => {
       }
     } catch (error) {
       console.error('Error al cargar tipos de documento:', error);
-      mostrarAlerta('No se pudo conectar con la base de datos.', 'error');
+      avisar('No se pudo conectar con la base de datos.', 'error');
     }
   };
 
-  const mostrarAlerta = (texto, tipo = 'info') => {
-    setMensaje({ texto, tipo });
-    setTimeout(() => setMensaje({ texto: '', tipo: '' }), 4000);
-  };
 
   const handleSelect = (comp) => {
     setSelectedId(comp.id_tipo_doc);
@@ -95,7 +92,7 @@ const Comprobantes = () => {
   const handleGuardar = async (e) => {
     e.preventDefault();
     if (!formData.nombre_documento.trim()) {
-      mostrarAlerta('El nombre del tipo de documento es obligatorio.', 'error');
+      avisar('El nombre del tipo de documento es obligatorio.', 'error');
       return;
     }
 
@@ -108,19 +105,19 @@ const Comprobantes = () => {
 
       if (viewMode === 'NUEVO') {
         const res = await api.post('/tipos-documento/', payload);
-        mostrarAlerta('✅ Tipo de documento registrado exitosamente.', 'exito');
+        avisar('✅ Tipo de documento registrado exitosamente.', 'exito');
         await cargarComprobantes();
         setSelectedId(res.data?.id_tipo_doc || null);
         setViewMode('DETALLE');
       } else if (viewMode === 'MODIFICAR') {
         await api.put(`/tipos-documento/${selectedId}`, payload);
-        mostrarAlerta('✅ Tipo de documento actualizado exitosamente.', 'exito');
+        avisar('✅ Tipo de documento actualizado exitosamente.', 'exito');
         await cargarComprobantes();
         setViewMode('DETALLE');
       }
     } catch (error) {
       const errorMsg = error.response?.data?.detail || 'Error al guardar el registro.';
-      mostrarAlerta(`❌ ${errorMsg}`, 'error');
+      avisar(`❌ ${errorMsg}`, 'error');
     } finally {
       setIsGuardando(false);
     }
@@ -128,16 +125,21 @@ const Comprobantes = () => {
 
   const handleEliminar = async () => {
     if (!selectedComprobante) return;
-    const confirmar = window.confirm(`¿Estás seguro de desactivar el comprobante "${selectedComprobante.nombre_documento}"?\nEsta acción lo marcará como INACTIVO.`);
-    if (!confirmar) return;
+    const ok = await confirmar({
+      titulo: 'Desactivar registro',
+      mensaje: `¿Estás seguro de desactivar el comprobante "${selectedComprobante.nombre_documento}"?\nEsta acción lo marcará como INACTIVO.`,
+      textoAceptar: 'Desactivar',
+      peligro: true,
+    });
+    if (!ok) return;
 
     try {
       await api.delete(`/tipos-documento/${selectedId}`);
-      mostrarAlerta(`✅ Comprobante "${selectedComprobante.nombre_documento}" desactivado correctamente.`, 'exito');
+      avisar(`✅ Comprobante "${selectedComprobante.nombre_documento}" desactivado correctamente.`, 'exito');
       await cargarComprobantes();
     } catch (error) {
       const detalle = error.response?.data?.detail || 'No se pudo desactivar.';
-      mostrarAlerta(`❌ ${detalle}`, 'error');
+      avisar(`❌ ${detalle}`, 'error');
     }
   };
 
@@ -145,29 +147,32 @@ const Comprobantes = () => {
     if (!selectedComprobante) return;
     try {
       await api.put(`/tipos-documento/${selectedId}/restaurar`);
-      mostrarAlerta(`✅ Comprobante "${selectedComprobante.nombre_documento}" restaurado a ACTIVO.`, 'exito');
+      avisar(`✅ Comprobante "${selectedComprobante.nombre_documento}" restaurado a ACTIVO.`, 'exito');
       await cargarComprobantes();
     } catch (error) {
       const detalle = error.response?.data?.detail || 'No se pudo restaurar.';
-      mostrarAlerta(`❌ ${detalle}`, 'error');
+      avisar(`❌ ${detalle}`, 'error');
     }
   };
 
   const handleEliminarFisico = async () => {
     if (!selectedComprobante) return;
-    const confirmacion = window.confirm(
-      `⚠️ ATENCIÓN: ¿Deseas eliminar DEFINITIVAMENTE el tipo de comprobante "${selectedComprobante.nombre_documento}"?\n\nEsta acción NO se puede deshacer y fallará si tiene gastos asociados.`
-    );
+    const confirmacion = await confirmar({
+      titulo: 'Eliminar definitivamente',
+      mensaje: `⚠️ ATENCIÓN: ¿Deseas eliminar DEFINITIVAMENTE el tipo de comprobante "${selectedComprobante.nombre_documento}"?\n\nEsta acción NO se puede deshacer y fallará si tiene gastos asociados.`,
+      textoAceptar: 'Eliminar definitivamente',
+      peligro: true,
+    });
     if (!confirmacion) return;
 
     try {
       await api.delete(`/tipos-documento/${selectedId}/fisico`);
-      mostrarAlerta(`✅ Comprobante "${selectedComprobante.nombre_documento}" eliminado definitivamente.`, 'exito');
+      avisar(`✅ Comprobante "${selectedComprobante.nombre_documento}" eliminado definitivamente.`, 'exito');
       setSelectedId(null);
       await cargarComprobantes();
     } catch (error) {
       const detalle = error.response?.data?.detail || 'No se pudo eliminar definitivamente.';
-      mostrarAlerta(`❌ ${detalle}`, 'error');
+      avisar(`❌ ${detalle}`, 'error');
     }
   };
 
@@ -330,19 +335,6 @@ const Comprobantes = () => {
 
         {/* PANEL DERECHO WORKSTATION (62%) */}
         <section className="lg:col-span-7 flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl min-h-0">
-          
-          {mensaje.texto && (
-            <div className={`p-3 border-b text-xs flex items-center justify-between animate-fadeIn ${
-              mensaje.tipo === 'exito'
-                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
-                : mensaje.tipo === 'error'
-                ? 'bg-rose-500/10 border-rose-500/30 text-rose-300'
-                : 'bg-teal-500/10 border-teal-500/30 text-teal-300'
-            }`}>
-              <span>{mensaje.texto}</span>
-              <button onClick={() => setMensaje({ texto: '', tipo: '' })} className="hover:text-white">✕</button>
-            </div>
-          )}
 
           {!selectedComprobante && viewMode !== 'NUEVO' ? (
             <div className="flex-1 flex flex-col items-center justify-center p-12 text-center text-slate-500">

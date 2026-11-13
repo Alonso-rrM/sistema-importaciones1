@@ -1,12 +1,11 @@
 // Operaciones desde las pantallas: crear un expediente (contenedor) con su DAM, y crear y eliminar un voucher.
 import { test, expect } from '@playwright/test';
-import { aceptarAvisosNativos, campoTrasRotulo, elegirOpcion, iniciarSesion, vigilarErrores } from './ayudas.js';
+import { campoTrasRotulo, elegirOpcion, iniciarSesion, vigilarErrores } from './ayudas.js';
 
 test.describe.configure({ mode: 'serial' });
 
 test('crear un expediente y registrarle una DAM desde Logística', async ({ page }) => {
   const errores = vigilarErrores(page);
-  aceptarAvisosNativos(page);
   await iniciarSesion(page);
   await page.goto('/app/logistica');
 
@@ -16,7 +15,7 @@ test('crear un expediente y registrarle una DAM desde Logística', async ({ page
   await page.getByRole('button', { name: 'Crear Expediente' }).click();
   await expect(page.getByText('Expediente Factura GF-E2E-UI-1')).toBeVisible();
 
-  // El aviso de "expediente guardado" puede estar cerrándose: se reintenta abrir el formulario de la DAM
+  // Se reintenta por si la pantalla todavía está refrescando el expediente recién creado
   await expect(async () => {
     await page.getByRole('button', { name: /DAM Rápida/ }).first().click();
     await expect(page.getByPlaceholder('Ej: 118-2026-10-123456')).toBeVisible({ timeout: 2000 });

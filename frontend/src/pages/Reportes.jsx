@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react';
 import api from '../services/api';
 import { descargarExcel } from '../utils/exportUtils';
 import { BarChart3, RefreshCw, Zap, Ship, Scale, Tags, FolderOpen, Download, TrendingUp, Building2 } from 'lucide-react';
+import { useInteraccion } from '../context/interaccion';
 
 const Reportes = () => {
+  const { avisar } = useInteraccion();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState(null);
   const [opcionesImportadores, setOpcionesImportadores] = useState([]);
@@ -68,7 +70,7 @@ const Reportes = () => {
       const res = await api.get('/reportes/analytics-cockpit', { params });
       setData(res.data);
     } catch (err) {
-      alert(`Error al cargar analítica: ${err.response?.data?.detail || err.message || 'Error desconocido'}`);
+      avisar(`Error al cargar analítica: ${err.response?.data?.detail || err.message || 'Error desconocido'}`, 'error');
     } finally {
       setLoading(false);
     }
@@ -91,7 +93,7 @@ const Reportes = () => {
         'Sabana_Consolidada_Liquidaciones.xlsx'
       );
     } catch (err) {
-      alert(`Error al exportar Sábana: ${err.response?.data?.detail || err.message || 'Error desconocido'}`);
+      avisar(`Error al exportar Sábana: ${err.response?.data?.detail || err.message || 'Error desconocido'}`, 'error');
     } finally {
       setIsExportandoSabana(false);
     }

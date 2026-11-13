@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react';
 import api from '../services/api';
 import { descargarExcel } from '../utils/exportUtils';
 import { ESTADO_LEVANTE, ESTADO_PAGO, MONEDA, TIPO_GASTO } from '../constants';
+import { useInteraccion } from '../context/interaccion';
 
 const ModalLiquidacionContenedor = ({ isOpen, idMaestro, onClose }) => {
+  const { avisar } = useInteraccion();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [tc, setTc] = useState('3.80');
@@ -24,7 +26,7 @@ const ModalLiquidacionContenedor = ({ isOpen, idMaestro, onClose }) => {
       });
       setData(res.data);
     } catch (err) {
-      alert(`Error al cargar liquidación: ${err.response?.data?.detail || err.message || 'Error desconocido'}`);
+      avisar(`Error al cargar liquidación: ${err.response?.data?.detail || err.message || 'Error desconocido'}`, 'error');
       onClose();
     } finally {
       setLoading(false);
@@ -51,7 +53,7 @@ const ModalLiquidacionContenedor = ({ isOpen, idMaestro, onClose }) => {
         `Liquidacion_Gastos_${data?.n_cont_fisico || data?.numero_factura || 'EXP'}.xlsx`
       );
     } catch (err) {
-      alert(`Error al exportar Excel: ${err.response?.data?.detail || err.message || 'Error desconocido'}`);
+      avisar(`Error al exportar Excel: ${err.response?.data?.detail || err.message || 'Error desconocido'}`, 'error');
     } finally {
       setIsExportingExcel(false);
     }
@@ -61,7 +63,7 @@ const ModalLiquidacionContenedor = ({ isOpen, idMaestro, onClose }) => {
   const handleExportarPdf = () => {
     const area = document.getElementById('area-impresion-liquidacion');
     if (!area) {
-      alert('Error: No se encontró el área de liquidación para exportar.');
+      avisar('Error: No se encontró el área de liquidación para exportar.', 'error');
       return;
     }
 

@@ -9,6 +9,7 @@ import useDebounce from '../hooks/useDebounce';
 import { descargarExcel } from '../utils/exportUtils';
 import { Download, Clock, Search, Settings, FileText, Banknote, Trash2, Pencil, CheckCircle2, AlertTriangle, Building2, Scale, Package, BarChart3, CreditCard } from 'lucide-react';
 import { CATEGORIA_PROVEEDOR, ESTADO_PAGO, MONEDA, TIPO_GASTO } from '../constants';
+import { useInteraccion } from '../context/interaccion';
 
 const selectDarkStyles = {
   control: (base, state) => ({
@@ -53,6 +54,7 @@ const selectDarkStyles = {
 };
 
 const Gastos = () => {
+  const { avisar, confirmar } = useInteraccion();
   const navigate = useNavigate();
   const location = useLocation();
   const [viewMode, setViewMode] = useState('LISTA'); // 'LISTA', 'NUEVO', 'MODIFICAR'
@@ -313,24 +315,24 @@ const Gastos = () => {
   const handleGuardar = async (e) => {
     e.preventDefault();
     if (!form.id_dam) {
-      alert("Por favor seleccione una DAM asociada.");
+      avisar("Por favor seleccione una DAM asociada.", 'advertencia');
       return;
     }
     if (!form.id_concepto) {
-      alert("Por favor seleccione un concepto de gasto.");
+      avisar("Por favor seleccione un concepto de gasto.", 'advertencia');
       return;
     }
     if (!form.id_proveedor) {
-      alert("Por favor seleccione un proveedor.");
+      avisar("Por favor seleccione un proveedor.", 'advertencia');
       return;
     }
     if (!form.id_tipo_doc) {
-      alert("Por favor seleccione un tipo de documento.");
+      avisar("Por favor seleccione un tipo de documento.", 'advertencia');
       return;
     }
     const monto = parseFloat(form.monto_original);
     if (isNaN(monto) || monto <= 0) {
-      alert("Por favor ingrese un monto total válido mayor a 0.");
+      avisar("Por favor ingrese un monto total válido mayor a 0.", 'advertencia');
       return;
     }
 
@@ -358,7 +360,7 @@ const Gastos = () => {
       toggleDrawer(false);
       setForm(estadoInicialForm);
     } catch (error) {
-      alert(`Error al guardar:\n${extractErrorMsg(error)}`);
+      avisar(`Error al guardar:\n${extractErrorMsg(error)}`, 'error');
     } finally {
       setIsGuardando(false);
     }
@@ -366,7 +368,7 @@ const Gastos = () => {
 
   const handleEliminarConfirm = async () => {
     if (!modalEliminar.motivo || modalEliminar.motivo.trim().length < 10) {
-      alert("Debe ingresar un motivo válido (mínimo 10 caracteres).");
+      avisar("Debe ingresar un motivo válido (mínimo 10 caracteres).", 'advertencia');
       return;
     }
     try {
@@ -375,13 +377,13 @@ const Gastos = () => {
       setSelectedId(null);
       await cargarListaGastos();
     } catch (error) { 
-      alert(`Error al eliminar:\n${extractErrorMsg(error)}`);
+      avisar(`Error al eliminar:\n${extractErrorMsg(error)}`, 'error');
     }
   };
 
   const handleReversarPagoConfirm = async () => {
     if (!modalReversarPago.motivo || modalReversarPago.motivo.trim().length < 10) {
-      alert("Debe ingresar un motivo de anulación válido (mínimo 10 caracteres).");
+      avisar("Debe ingresar un motivo de anulación válido (mínimo 10 caracteres).", 'advertencia');
       return;
     }
     setIsReversandoPago(true);
@@ -389,11 +391,11 @@ const Gastos = () => {
       const resAnulacion = await api.delete(`/pagos/${modalReversarPago.pago.id_pago}`, {
         data: { motivo: modalReversarPago.motivo.trim() }
       });
-      avisarReversionDam(resAnulacion);
+      avisarReversionDam(resAnulacion, confirmar);
       setModalReversarPago({ open: false, pago: null, motivo: '' });
       await cargarListaGastos();
     } catch (error) {
-      alert(`Error al reversar pago:\n${extractErrorMsg(error)}`);
+      avisar(`Error al reversar pago:\n${extractErrorMsg(error)}`, 'error');
     } finally {
       setIsReversandoPago(false);
     }
@@ -417,7 +419,7 @@ const Gastos = () => {
 
       await descargarExcel('/gastos/exportar', params, 'Reporte_Gastos.xlsx');
     } catch (error) {
-      alert(`Error al exportar reporte: ${error.response?.data?.detail || error.message || 'Error desconocido'}`);
+      avisar(`Error al exportar reporte: ${error.response?.data?.detail || error.message || 'Error desconocido'}`, 'error');
     } finally {
       setIsExportando(false);
     }

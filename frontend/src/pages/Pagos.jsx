@@ -8,6 +8,7 @@ import Paginador from '../components/Paginador';
 import useDebounce from '../hooks/useDebounce';
 import { Scale, FileText, Landmark, Banknote, Search, CreditCard, Zap, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { ESTADO_PAGO, MONEDA, ROL } from '../constants';
+import { mensajeDeError, useInteraccion } from '../context/interaccion';
 
 const selectDarkStyles = {
   control: (base, state) => ({
@@ -52,6 +53,7 @@ const selectDarkStyles = {
 };
 
 const Pagos = () => {
+  const { avisar, confirmar, pedirDatos } = useInteraccion();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -126,16 +128,28 @@ const Pagos = () => {
     }
   };
   const registrarTcOficial = async () => {
-    const venta = window.prompt('TC oficial SUNAT de HOY — precio de VENTA (ej. 3.7520):', tcOficial?.precio_venta ?? '');
-    if (!venta) return;
-    const compra = window.prompt('TC oficial SUNAT de HOY — precio de COMPRA (ej. 3.7450):', tcOficial?.precio_compra ?? '');
-    if (!compra) return;
+    // Formato de tipo de cambio: número positivo con hasta 4 decimales (ej. 3.7520)
+    const validarTc = (valor) => (/^\d{1,2}(\.\d{1,4})?$/.test(valor) && parseFloat(valor) > 0
+      ? null : 'Ingrese un número positivo con hasta 4 decimales (ej. 3.7520).');
+    const datos = await pedirDatos({
+      titulo: tcOficial ? 'Corregir TC oficial SUNAT de hoy' : 'Registrar TC oficial SUNAT de hoy',
+      mensaje: 'Copie los valores publicados por SUNAT para la fecha de hoy.',
+      textoAceptar: 'Guardar tipo de cambio',
+      campos: [
+        { nombre: 'venta', etiqueta: 'Precio de VENTA', placeholder: 'ej. 3.7520', modoEntrada: 'decimal',
+          valorInicial: tcOficial?.precio_venta ?? '', validar: validarTc },
+        { nombre: 'compra', etiqueta: 'Precio de COMPRA', placeholder: 'ej. 3.7450', modoEntrada: 'decimal',
+          valorInicial: tcOficial?.precio_compra ?? '', validar: validarTc },
+      ],
+    });
+    if (!datos) return;
     try {
-      const res = await api.put('/tipo-cambio/', { fecha: hoyISO(), precio_compra: parseFloat(compra), precio_venta: parseFloat(venta) });
+      // Se envían como texto: el servidor los guarda como decimales exactos (sin errores de coma flotante)
+      const res = await api.put('/tipo-cambio/', { fecha: hoyISO(), precio_compra: datos.compra, precio_venta: datos.venta });
       setTcOficial(res.data);
+      avisar('✅ Tipo de cambio del día guardado.', 'exito');
     } catch (err) {
-      const detail = err.response?.data?.detail;
-      alert(`No se pudo registrar el TC: ${Array.isArray(detail) ? detail.map(d => d.msg).join(' ') : (detail || 'Error desconocido')}`);
+      avisar(`No se pudo registrar el TC: ${mensajeDeError(err)}`, 'error');
     }
   };
   const tcSugerido = tcOficial?.precio_venta ? String(parseFloat(tcOficial.precio_venta)) : '3.75';
@@ -278,7 +292,7 @@ const Pagos = () => {
     e.preventDefault();
     if (isSubmitting) return;
     if (esUsuarioOperaciones) {
-      alert("Operación denegada: Solo Tesorería o el Administrador pueden liquidar pagos.");
+      avisar("Operación denegada: Solo Tesorería o el Administrador pueden liquidar pagos.", 'advertencia');
       return;
     }
     if (!form.voucher_id) {
@@ -292,17 +306,18 @@ const Pagos = () => {
 
     // Confirmación explícita del contenedor y la DAM: evita pagar al contenedor equivocado cuando
     // dos números se parecen (ej. GF-26522 vs GF-26222). El pago puede dar levante automáticamente.
-    const confirmado = window.confirm(
-      `CONFIRME EL DESTINO DEL PAGO\n\n` +
-      `Contenedor / Factura:   ${selectedGasto.maestro_factura || '-'}\n` +
-      `DAM:                    ${selectedGasto.dam_numero || '-'}\n` +
-      `Importador:             ${selectedGasto.importador_nombre || '-'}\n` +
-      `Concepto:               ${selectedGasto.concepto_nombre || '-'}\n` +
-      `Importe:                ${form.moneda} ${parseFloat(form.importe).toFixed(2)}\n\n` +
-      `Verifique el número del contenedor contra el documento de pago.\n` +
-      `Si este pago completa la proforma u OMC, la DAM puede obtener el levante automáticamente.\n\n` +
-      `¿Registrar el pago?`
-    );
+    const confirmado = await confirmar({
+      titulo: 'Confirme el destino del pago',
+      mensaje:
+        `Contenedor / Factura:  ${selectedGasto.maestro_factura || '-'}\n` +
+        `DAM:  ${selectedGasto.dam_numero || '-'}\n` +
+        `Importador:  ${selectedGasto.importador_nombre || '-'}\n` +
+        `Concepto:  ${selectedGasto.concepto_nombre || '-'}\n` +
+        `Importe:  ${form.moneda} ${parseFloat(form.importe).toFixed(2)}\n\n` +
+        `Verifique el número del contenedor contra el documento de pago.\n` +
+        `Si este pago completa la proforma u OMC, la DAM puede obtener el levante automáticamente.`,
+      textoAceptar: 'Registrar el pago',
+    });
     if (!confirmado) return;
 
     setIsSubmitting(true);
@@ -372,7 +387,7 @@ const Pagos = () => {
 
   const handleEliminarPagoHistorial = async () => {
     if (!modalEliminarPago.motivo || modalEliminarPago.motivo.trim().length < 10) {
-      alert("Debe ingresar un motivo de anulación válido (mínimo 10 caracteres).");
+      avisar("Debe ingresar un motivo de anulación válido (mínimo 10 caracteres).", 'advertencia');
       return;
     }
     setIsEliminandoPago(true);
@@ -380,7 +395,7 @@ const Pagos = () => {
       const resAnulacion = await api.delete(`/pagos/${modalEliminarPago.pago.id_pago}`, {
         data: { motivo: modalEliminarPago.motivo.trim() }
       });
-      avisarReversionDam(resAnulacion);
+      avisarReversionDam(resAnulacion, confirmar);
       setModalEliminarPago({ open: false, pago: null, motivo: '' });
       await cargarPagosHistorial();
       await cargarGastos();

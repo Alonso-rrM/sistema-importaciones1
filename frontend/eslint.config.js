@@ -41,6 +41,8 @@ export default defineConfig([
       'react-hooks/set-state-in-effect': 'warn',
       'react-hooks/purity': 'warn',
       'react-refresh/only-export-components': 'warn',
+      // Avisos y confirmaciones: usar useInteraccion() (avisar / confirmar / pedirDatos), no los del navegador
+      'no-alert': 'error',
       // Protección contra errores de digitación en estados, monedas, categorías, etc.
       'no-restricted-syntax': ['error', ...reglaValoresFijos],
     },

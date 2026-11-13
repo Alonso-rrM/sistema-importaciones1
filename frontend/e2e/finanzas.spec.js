@@ -1,7 +1,7 @@
 // Flujos de dinero desde las pantallas: registrar un gasto, pagarlo con un voucher, anular el pago
 // y corregir el tipo de cambio del día.
 import { test, expect } from '@playwright/test';
-import { campoTrasRotulo, elegirOpcion, esperarAviso, iniciarSesion, responderDialogo, vigilarErrores } from './ayudas.js';
+import { api, campoTrasRotulo, elegirOpcion, esperarAviso, iniciarSesion, responderDialogo, vigilarErrores } from './ayudas.js';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -55,18 +55,53 @@ test('corregir el tipo de cambio del día desde Pagos', async ({ page }) => {
   await page.goto('/app/pagos');
   await expect(page.getByText('TC SUNAT hoy: 3.7520')).toBeVisible();
 
-  // Diálogos nativos (venta y luego compra) o el formulario propio de la aplicación
-  const respuestas = ['3.7600', '3.7500'];
-  const manejador = (d) => d.accept(respuestas.shift());
-  page.on('dialog', manejador);
+  // Un valor con formato inválido no se acepta: el diálogo lo indica y no se cierra
   await page.getByRole('button', { name: 'Corregir' }).click();
-  const propio = page.locator('[data-dialogo]');
-  if (await propio.isVisible().catch(() => false)) {
-    await propio.locator('input').nth(0).fill('3.7600');
-    await propio.locator('input').nth(1).fill('3.7500');
-    await propio.locator('[data-dialogo-aceptar]').click();
-  }
+  const dialogo = page.locator('[data-dialogo]');
+  await dialogo.locator('input').nth(0).fill('3,76');
+  await dialogo.locator('[data-dialogo-aceptar]').click();
+  await expect(dialogo.getByText('hasta 4 decimales')).toBeVisible();
+  await dialogo.locator('[data-dialogo-cancelar]').click();
+
+  await responderDialogo(page, () => page.getByRole('button', { name: 'Corregir' }).click(), '3.7600', '3.7500');
   await expect(page.getByText('TC SUNAT hoy: 3.7600')).toBeVisible();
-  page.off('dialog', manejador);
   expect(errores).toEqual([]);
+});
+
+test('anular un pago de la proforma avisa que la DAM perdió el levante', async ({ page }) => {
+  await iniciarSesion(page);
+  // Preparación por API: DAM canal verde con tributos y percepción pagados (el sistema le da levante)
+  const importador = (await api(page, 'GET', '/importadores/')).find((i) => i.nombre === 'IMPORTADORA E2E SAC');
+  const sunat = (await api(page, 'GET', '/proveedores/')).find((p) => p.nombre === 'SUNAT');
+  const conceptos = await api(page, 'GET', '/conceptos/');
+  const doc = (await api(page, 'GET', '/tipos-documento/'))[0];
+  const banco = (await api(page, 'GET', '/bancos/'))[0];
+  const maestro = await api(page, 'POST', '/maestros/', { numero_factura: 'GF-E2E-REV', id_importador: importador.id_importador, tipo_valor: 'DEFINITIVO' });
+  const dam = await api(page, 'POST', '/dams/', { id_maestro: maestro.id_maestro, numero_de_dam: '118-2026-10-000777', canal_control: 'VERDE' });
+  const voucher = await api(page, 'POST', '/vouchers/', {
+    banco_id: banco.id_banco, id_importador: importador.id_importador, numero_operacion: 'OP-E2E-REV',
+    monto_total: '500.00', moneda: 'PEN', fecha_transferencia: new Date().toISOString().slice(0, 10),
+  });
+  for (const [nombre, monto] of [['TRIBUTOS', '100.00'], ['PERCEPCION', '20.00']]) {
+    const concepto = conceptos.find((c) => c.nombre === nombre);
+    const gasto = await api(page, 'POST', '/gastos/', {
+      id_dam: dam.id_dam, id_concepto: concepto.id_concepto, id_proveedor: sunat.id_proveedor, id_tipo_doc: doc.id_tipo_doc,
+      monto_original: monto, moneda: 'PEN', numero_documento: `118-26-10-000777-${nombre.slice(0, 3)}`,
+    });
+    await api(page, 'POST', '/pagos/', { id_gasto: gasto.id_gasto, voucher_id: voucher.id_voucher, moneda: 'PEN', importe: monto, tipo_cambio: '1' });
+  }
+
+  // Anulación desde la pantalla: debe aparecer el aviso de reversión, que hay que reconocer
+  await page.goto('/app/pagos');
+  await page.getByRole('button', { name: /Historial/ }).click();
+  const fila = page.locator('tr', { hasText: 'OP-E2E-REV' }).first();
+  await fila.getByRole('button', { name: 'Anular' }).click();
+  await page.getByPlaceholder('Justifique la razón de anulación').fill('Prueba e2e: el pago era de otro contenedor');
+  await page.getByRole('button', { name: 'Confirmar Anulación' }).click();
+  const aviso = page.locator('[data-dialogo]');
+  await expect(aviso.getByText('cambió el estado aduanero')).toBeVisible();
+  await expect(aviso.getByText('118-2026-10-000777')).toBeVisible();
+  await expect(aviso.locator('[data-dialogo-cancelar]')).toHaveCount(0);   // solo se puede reconocer
+  await aviso.locator('[data-dialogo-aceptar]').click();
+  await expect(aviso).toBeHidden();
 });

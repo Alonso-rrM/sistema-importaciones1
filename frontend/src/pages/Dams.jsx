@@ -6,8 +6,10 @@ import Paginador from '../components/Paginador';
 import { descargarExcel } from '../utils/exportUtils';
 import { Download, Clock, Search, Settings, FileText, Banknote, Trash2, Zap, CheckCircle2, AlertTriangle, Unlock, CreditCard } from 'lucide-react';
 import { CANAL_CONTROL, ESTADO_DAM, ESTADO_PAGO, TIPO_VALOR } from '../constants';
+import { useInteraccion } from '../context/interaccion';
 
 const Dams = () => {
+  const { avisar, confirmar } = useInteraccion();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -141,8 +143,8 @@ const Dams = () => {
     setHasUnsavedChanges(true);
   };
 
-  const handleSelect = (d) => {
-    if (hasUnsavedChanges && !window.confirm("⚠️ Tienes cambios sin guardar. ¿Deseas descartarlos y cambiar de registro?")) return;
+  const handleSelect = async (d) => {
+    if (hasUnsavedChanges && !(await confirmar({ titulo: 'Cambios sin guardar', mensaje: 'Tienes cambios sin guardar. ¿Deseas descartarlos y cambiar de registro?', textoAceptar: 'Descartar cambios', peligro: true }))) return;
     setSelectedId(d.id_dam);
     setViewMode('MODIFICAR');
     setFormData({
@@ -157,8 +159,8 @@ const Dams = () => {
     cargarGastosDeDam(d.numero_de_dam);
   };
 
-  const handleNuevo = () => {
-    if (hasUnsavedChanges && !window.confirm("⚠️ Tienes cambios sin guardar. ¿Deseas descartarlos y crear uno nuevo?")) return;
+  const handleNuevo = async () => {
+    if (hasUnsavedChanges && !(await confirmar({ titulo: 'Cambios sin guardar', mensaje: 'Tienes cambios sin guardar. ¿Deseas descartarlos y crear uno nuevo?', textoAceptar: 'Descartar cambios', peligro: true }))) return;
     setSelectedId(null);
     setViewMode('NUEVO');
     setFormData(estadoInicial);
@@ -168,8 +170,8 @@ const Dams = () => {
 
   const handleGuardar = async (e) => {
     e.preventDefault();
-    if (!formData.id_maestro) return alert("Debe seleccionar un Maestro de Importación.");
-    if (!formData.numero_de_dam.trim()) return alert("El N° de DAM es obligatorio.");
+    if (!formData.id_maestro) return avisar("Debe seleccionar un Maestro de Importación.", 'advertencia');
+    if (!formData.numero_de_dam.trim()) return avisar("El N° de DAM es obligatorio.", 'advertencia');
 
     setIsGuardando(true);
     try {
@@ -195,38 +197,42 @@ const Dams = () => {
 
       await cargarDams();
       setHasUnsavedChanges(false);
-      alert("✅ Declaración DAM guardada exitosamente.");
+      avisar("✅ Declaración DAM guardada exitosamente.", 'exito');
     } catch (error) {
       const detail = error.response?.data?.detail;
       const msg = typeof detail === 'string' ? detail : (Array.isArray(detail) ? detail.map(d => `${d.loc ? d.loc.slice(-1) : 'campo'}: ${d.msg}`).join('\n') : 'Error al guardar');
-      alert(`Error al guardar:\n${msg}`);
+      avisar(`Error al guardar:\n${msg}`, 'error');
     } finally {
       setIsGuardando(false);
     }
   };
 
   const handleCambiarEstadoDam = async (nuevoEstado) => {
-    if (!window.confirm(`¿Cambiar el estado de la DAM a: ${nuevoEstado}?`)) return;
+    if (!(await confirmar({
+      titulo: 'Cambiar estado de la DAM',
+      mensaje: `¿Cambiar el estado de la DAM a: ${nuevoEstado}?`,
+      textoAceptar: 'Cambiar estado',
+    }))) return;
     try {
       await api.put(`/dams/${selectedId}`, { estado_dam: nuevoEstado });
       setFormData(prev => ({ ...prev, estado_dam: nuevoEstado }));
       cargarDams();
     } catch (err) {
-      alert(`Error al actualizar estado: ${err.response?.data?.detail || 'Error desconocido'}`);
+      avisar(`Error al actualizar estado: ${err.response?.data?.detail || 'Error desconocido'}`, 'error');
     }
   };
 
   const handleEliminarConfirm = async () => {
-    if (!modalEliminar.motivo || modalEliminar.motivo.length < 10) return alert("Debe ingresar un motivo válido de al menos 10 caracteres.");
+    if (!modalEliminar.motivo || modalEliminar.motivo.length < 10) return avisar("Debe ingresar un motivo válido de al menos 10 caracteres.", 'advertencia');
     try {
       await api.delete(`/dams/${modalEliminar.id}`, { data: { motivo: modalEliminar.motivo } });
       setModalEliminar({ open: false, id: null, motivo: '' });
       setSelectedId(null);
       setViewMode(null);
       cargarDams();
-      alert("Declaración DAM eliminada.");
+      avisar("✅ Declaración DAM eliminada.", 'exito');
     } catch (error) {
-      alert(`Error al eliminar: ${error.response?.data?.detail || 'Error desconocido'}`);
+      avisar(`Error al eliminar: ${error.response?.data?.detail || 'Error desconocido'}`, 'error');
     }
   };
 
@@ -244,7 +250,7 @@ const Dams = () => {
 
       await descargarExcel('/dams/exportar', params, 'Reporte_Dams.xlsx');
     } catch (error) {
-      alert(`Error al exportar reporte: ${error.response?.data?.detail || error.message || 'Error desconocido'}`);
+      avisar(`Error al exportar reporte: ${error.response?.data?.detail || error.message || 'Error desconocido'}`, 'error');
     } finally {
       setIsExportando(false);
     }
@@ -416,7 +422,7 @@ const Dams = () => {
           <>
             <header className="p-4 border-b border-slate-800 bg-slate-800/80 flex flex-wrap items-center justify-between gap-3 shrink-0">
               <div className="flex items-center gap-3">
-                <button onClick={() => { if (!hasUnsavedChanges || window.confirm("¿Descartar cambios?")) { setViewMode(null); setHasUnsavedChanges(false); } }} className="lg:hidden p-1.5 bg-slate-700 text-slate-300 rounded hover:bg-slate-600">⬅</button>
+                <button onClick={async () => { if (!hasUnsavedChanges || await confirmar({ titulo: 'Cambios sin guardar', mensaje: '¿Descartar los cambios sin guardar?', textoAceptar: 'Descartar cambios', peligro: true })) { setViewMode(null); setHasUnsavedChanges(false); } }} className="lg:hidden p-1.5 bg-slate-700 text-slate-300 rounded hover:bg-slate-600">⬅</button>
                 <div>
                   <div className="flex items-center gap-2">
                     <h1 className="text-base font-bold font-mono text-white">

@@ -35,31 +35,16 @@ export async function iniciarSesion(page) {
 }
 
 /**
- * Responde a la confirmación o pregunta que dispara `accion`, sea un diálogo nativo del navegador
- * (window.confirm / window.prompt) o un diálogo propio de la aplicación (role="dialog" con data-dialogo).
- * `respuesta`: texto a ingresar (para preguntas) o null para solo aceptar.
+ * Responde al diálogo propio de la aplicación (role="dialog", data-dialogo) que abre `accion`.
+ * `respuestas`: textos para los campos del diálogo, en orden (vacío para solo confirmar).
  */
-export async function responderDialogo(page, accion, respuesta = null) {
-  let nativo = false;
-  const manejador = async (dialogo) => {
-    nativo = true;
-    if (respuesta !== null && dialogo.type() === 'prompt') await dialogo.accept(respuesta);
-    else await dialogo.accept();
-  };
-  page.once('dialog', manejador);
+export async function responderDialogo(page, accion, ...respuestas) {
   await accion();
-  const propio = page.locator('[data-dialogo]');
-  try {
-    await propio.waitFor({ state: 'visible', timeout: 1500 });
-  } catch {
-    page.off('dialog', manejador);
-    if (!nativo) throw new Error('Se esperaba un diálogo de confirmación y no apareció.');
-    return;
-  }
-  page.off('dialog', manejador);
-  if (respuesta !== null) await propio.locator('input, textarea').first().fill(respuesta);
-  await propio.locator('[data-dialogo-aceptar]').click();
-  await expect(propio).toBeHidden();
+  const dialogo = page.locator('[data-dialogo]');
+  await expect(dialogo).toBeVisible();
+  for (const [i, texto] of respuestas.entries()) await dialogo.locator('input, textarea').nth(i).fill(texto);
+  await dialogo.locator('[data-dialogo-aceptar]').click();
+  await expect(dialogo).toBeHidden();
 }
 
 /** Espera un aviso de la aplicación que contenga el texto (banner de la pantalla o aviso flotante). */
@@ -81,12 +66,16 @@ export function campoTrasRotulo(page, rotulo) {
   return page.getByText(rotulo, { exact: false }).first().locator('xpath=following::input[1]');
 }
 
-/**
- * Acepta los avisos informativos nativos (window.alert) que muestre la pantalla, para que no bloqueen la prueba.
- * Cuando la aplicación usa avisos propios, simplemente no hay nada que aceptar.
- */
-export function aceptarAvisosNativos(page) {
-  page.on('dialog', async (dialogo) => {
-    if (dialogo.type() === 'alert') await dialogo.accept();
+
+const API = `http://localhost:${process.env.E2E_PUERTO_API || 8010}`;
+
+/** Llamada directa a la API con la sesión de la página (para preparar datos dentro de una prueba). */
+export async function api(page, metodo, ruta, datos) {
+  const respuesta = await page.request.fetch(`${API}${ruta}`, {
+    method: metodo,
+    data: datos,
+    headers: { 'X-Requested-With': 'XMLHttpRequest' },
   });
+  if (!respuesta.ok()) throw new Error(`${metodo} ${ruta} -> ${respuesta.status()} ${await respuesta.text()}`);
+  return respuesta.json();
 }
