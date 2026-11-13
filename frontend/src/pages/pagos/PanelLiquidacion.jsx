@@ -8,12 +8,10 @@ import Select from 'react-select';
 import { Banknote, CreditCard, Scale, ShieldCheck, Zap } from 'lucide-react';
 import api from '../../services/api';
 import useConsulta from '../../hooks/useConsulta';
-import { estiloSelectOscuro } from '../../components/estilosSelect';
+import { ESTILO_SELECT_MORADO as ESTILO_SELECT } from '../../components/estilosSelect';
 import { ESTADO_PAGO, MONEDA } from '../../constants';
 import { mensajeDeError, useInteraccion } from '../../context/interaccion';
 import { nuevaClaveIdempotencia } from '../../utils/idempotencia';
-
-const ESTILO_SELECT = estiloSelectOscuro('#a855f7');
 
 const hoy = () => new Date().toISOString().split('T')[0];
 

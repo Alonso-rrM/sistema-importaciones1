@@ -1,221 +1,115 @@
-import { useState, useEffect, useMemo } from 'react';
+/**
+ * VOUCHERS BANCARIOS: depósitos de cada importador que financian los pagos.
+ * Partes en pages/vouchers/: BandejaVouchers · FormularioVoucher · PagosDelVoucher · ModalEliminarVoucher
+ */
+import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Ticket, Scale, Pencil, Trash2, Banknote, Plus, FileText, AlertTriangle } from 'lucide-react';
 import api from '../services/api';
-import { avisarReversionDam } from '../utils/reversion';
-import Select from 'react-select';
-import Paginador from '../components/Paginador';
+import useConsulta from '../hooks/useConsulta';
 import useDebounce from '../hooks/useDebounce';
-import { Ticket, Scale, Search, Building2, Pencil, Trash2, Banknote, CreditCard, Lock, RotateCcw, Plus, FileText, AlertTriangle, Ban } from 'lucide-react';
 import { MONEDA } from '../constants';
-import { useInteraccion } from '../context/interaccion';
+import { mensajeDeError, useInteraccion } from '../context/interaccion';
+import BandejaVouchers from './vouchers/BandejaVouchers';
+import FormularioVoucher from './vouchers/FormularioVoucher';
+import PagosDelVoucher from './vouchers/PagosDelVoucher';
+import ModalEliminarVoucher from './vouchers/ModalEliminarVoucher';
+import { FILTRO_SALDO } from './vouchers/filtros';
 
-const selectDarkStyles = {
-  control: (base, state) => ({
-    ...base,
-    backgroundColor: '#020617',
-    borderColor: state.isFocused ? '#14b8a6' : '#334155',
-    boxShadow: state.isFocused ? '0 0 0 1px #14b8a6' : 'none',
-    '&:hover': { borderColor: '#475569' },
-    color: '#f8fafc',
-    fontSize: '0.8125rem',
-    borderRadius: '0.5rem',
-    minHeight: '38px'
-  }),
-  menu: (base) => ({
-    ...base,
-    backgroundColor: '#0f172a',
-    border: '1px solid #334155',
-    zIndex: 60
-  }),
-  option: (base, state) => ({
-    ...base,
-    backgroundColor: state.isSelected ? '#0d9488' : state.isFocused ? '#1e293b' : 'transparent',
-    color: '#f8fafc',
-    fontSize: '0.8125rem',
-    cursor: 'pointer'
-  }),
-  singleValue: (base) => ({
-    ...base,
-    color: '#f8fafc',
-    fontSize: '0.8125rem'
-  }),
-  input: (base) => ({
-    ...base,
-    color: '#f8fafc',
-    fontSize: '0.8125rem'
-  }),
-  placeholder: (base) => ({
-    ...base,
-    color: '#94a3b8',
-    fontSize: '0.8125rem'
-  })
+const FORMULARIO_VACIO = {
+  banco_id: null,
+  id_importador: null,
+  numero_operacion: '',
+  monto_total: '',
+  moneda: MONEDA.USD,
+  fecha_transferencia: ''
 };
 
+const formularioDesdeVoucher = (v) => ({
+  banco_id: v.banco_id || null,
+  id_importador: v.id_importador || null,
+  numero_operacion: v.numero_operacion || '',
+  monto_total: v.monto_total !== undefined && v.monto_total !== null ? String(v.monto_total) : '',
+  moneda: v.moneda || MONEDA.USD,
+  fecha_transferencia: v.fecha_transferencia ? String(v.fecha_transferencia).slice(0, 10) : '',
+  version: v.version
+});
+
 const Vouchers = () => {
-  const { avisar, confirmar } = useInteraccion();
+  const { avisar } = useInteraccion();
   const navigate = useNavigate();
   const [viewMode, setViewMode] = useState('DETALLE'); // 'DETALLE', 'NUEVO', 'MODIFICAR'
   const [selectedId, setSelectedId] = useState(null);
 
-  const [vouchers, setVouchers] = useState([]);
-  const [opcionesBancos, setOpcionesBancos] = useState([]);
-  const [opcionesImportadores, setOpcionesImportadores] = useState([]);
-  
   const [searchTerm, setSearchTerm] = useState('');
   const debouncedSearch = useDebounce(searchTerm, 400);
-  const [filtroSaldo, setFiltroSaldo] = useState('TODOS'); // 'TODOS', 'CON_SALDO', 'AGOTADOS'
-
+  const [filtroSaldo, setFiltroSaldo] = useState(FILTRO_SALDO.TODOS);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalRegistros, setTotalRegistros] = useState(0);
-  const [isLoading, setIsLoading] = useState(false);
 
   const [isGuardando, setIsGuardando] = useState(false);
+  const [voucherAEliminar, setVoucherAEliminar] = useState(null);
+  const [formData, setFormData] = useState(FORMULARIO_VACIO);
 
-  // Modal de eliminación por auditoría
-  const [modalEliminar, setModalEliminar] = useState({ open: false, voucher: null, motivo: '' });
-  const [isEliminando, setIsEliminando] = useState(false);
-
-  // Pagos vinculados al voucher seleccionado
-  const [pagosVinculados, setPagosVinculados] = useState([]);
-  const [isLoadingPagosVinculados, setIsLoadingPagosVinculados] = useState(false);
-  const [modalReversarPagoVoucher, setModalReversarPagoVoucher] = useState({ open: false, pago: null, motivo: '' });
-  const [isReversandoPagoVoucher, setIsReversandoPagoVoucher] = useState(false);
-
-  const estadoInicial = {
-    banco_id: null,
-    id_importador: null,
-    numero_operacion: '',
-    monto_total: '',
-    moneda: MONEDA.USD,
-    fecha_transferencia: ''
-  };
-  const [formData, setFormData] = useState(estadoInicial);
-
-  useEffect(() => {
-    cargarCatalogos();
+  // ----- Catálogos para los desplegables -----
+  const consultarCatalogos = useCallback(async () => {
+    const [resBancos, resImportadores] = await Promise.all([api.get('/bancos/'), api.get('/importadores/')]);
+    const bancos = resBancos.data?.data || resBancos.data || [];
+    const importadores = resImportadores.data?.data || resImportadores.data || [];
+    return {
+      bancos: bancos.map((b) => ({ value: b.id_banco, label: b.nombre })),
+      importadores: importadores.map((i) => ({ value: i.id_importador, label: i.nombre })),
+    };
   }, []);
+  const { datos: catalogos } = useConsulta(consultarCatalogos, {
+    inicial: { bancos: [], importadores: [] },
+    alFallar: (error) => console.error('Error al cargar catálogos:', error),
+  });
+  const opcionesBancos = catalogos.bancos;
+  const opcionesImportadores = catalogos.importadores;
 
-  useEffect(() => {
-    cargarVouchers();
-  }, [debouncedSearch, page, limit, filtroSaldo]);
+  // ----- Bandeja de vouchers -----
+  const consultarVouchers = useCallback(() => {
+    const params = { page, limit, search: debouncedSearch.trim() || undefined };
+    if (filtroSaldo === FILTRO_SALDO.CON_SALDO) params.saldo_mayor_cero = true;
+    if (filtroSaldo === FILTRO_SALDO.AGOTADOS) params.saldo_cero = true;
+    return api.get('/vouchers/', { params }).then((r) => r.data);
+  }, [page, limit, debouncedSearch, filtroSaldo]);
+  const { datos: paginaVouchers, cargando: isLoading, recargar } = useConsulta(consultarVouchers, {
+    alFallar: () => avisar('No se pudo conectar con el servidor de vouchers.', 'error'),
+  });
+  const vouchers = paginaVouchers?.data || [];
+  const totalPages = paginaVouchers?.total_paginas || 1;
+  const totalRegistros = paginaVouchers?.total_registros || 0;
+  const cargarVouchers = () => recargar().catch(() => avisar('No se pudo conectar con el servidor de vouchers.', 'error'));
 
-  useEffect(() => {
-    if (selectedId) {
-      cargarPagosVinculados(selectedId);
-    } else {
-      setPagosVinculados([]);
-    }
-  }, [selectedId]);
-
-  const cargarCatalogos = async () => {
-    try {
-      const [resBancos, resImportadores] = await Promise.all([
-        api.get('/bancos/'),
-        api.get('/importadores/')
-      ]);
-      const bancosList = resBancos.data?.data || resBancos.data || [];
-      const importadoresList = resImportadores.data?.data || resImportadores.data || [];
-
-      setOpcionesBancos(bancosList.map(b => ({ value: b.id_banco, label: b.nombre })));
-      setOpcionesImportadores(importadoresList.map(i => ({ value: i.id_importador, label: i.nombre })));
-    } catch (error) {
-      console.error('Error al cargar catálogos:', error);
-    }
-  };
-
-  const cargarVouchers = async () => {
-    setIsLoading(true);
-    try {
-      const params = {
-        page,
-        limit,
-        search: debouncedSearch.trim() || undefined
-      };
-      if (filtroSaldo === 'CON_SALDO') params.saldo_mayor_cero = true;
-      if (filtroSaldo === 'AGOTADOS') params.saldo_cero = true;
-
-      const res = await api.get('/vouchers/', { params });
-      const dataList = res.data?.data || [];
-      setVouchers(dataList);
-      setTotalPages(res.data?.total_paginas || 1);
-      setTotalRegistros(res.data?.total_registros || 0);
-
-      if (selectedId) {
-        const found = dataList.find(v => v.id_voucher === selectedId);
-        if (found && viewMode === 'DETALLE') {
-          syncFormData(found);
-        } else if (!found && dataList.length > 0 && viewMode === 'DETALLE') {
-          setSelectedId(dataList[0].id_voucher);
-          syncFormData(dataList[0]);
-        }
-      } else if (dataList.length > 0 && viewMode === 'DETALLE') {
-        setSelectedId(dataList[0].id_voucher);
-        syncFormData(dataList[0]);
-      }
-    } catch (error) {
-      console.error('Error al cargar vouchers:', error);
-      avisar('No se pudo conectar con el servidor de vouchers.', 'error');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const syncFormData = (v) => {
-    setFormData({
-      banco_id: v.banco_id || null,
-      id_importador: v.id_importador || null,
-      numero_operacion: v.numero_operacion || '',
-      monto_total: v.monto_total !== undefined && v.monto_total !== null ? String(v.monto_total) : '',
-      moneda: v.moneda || MONEDA.USD,
-      fecha_transferencia: v.fecha_transferencia ? String(v.fecha_transferencia).slice(0, 10) : '',
-      version: v.version
-    });
-  };
-
+  // Voucher mostrado: el elegido o, en modo detalle, el primero de la bandeja
+  const selectedVoucher = vouchers.find((v) => v.id_voucher === selectedId)
+    || (viewMode === 'DETALLE' ? vouchers[0] || null : null);
 
   const handleSelect = (v) => {
     setSelectedId(v.id_voucher);
     setViewMode('DETALLE');
-    syncFormData(v);
   };
 
   const handleNuevo = () => {
     setSelectedId(null);
     setViewMode('NUEVO');
-    setFormData(estadoInicial);
+    setFormData(FORMULARIO_VACIO);
   };
 
   const handleModificar = () => {
     if (!selectedVoucher) return;
+    setSelectedId(selectedVoucher.id_voucher);
+    setFormData(formularioDesdeVoucher(selectedVoucher));
     setViewMode('MODIFICAR');
-    syncFormData(selectedVoucher);
   };
 
-  const handleCancelarEdicion = () => {
-    if (selectedVoucher) {
-      setViewMode('DETALLE');
-      syncFormData(selectedVoucher);
-    } else {
-      setViewMode('DETALLE');
-      if (vouchers.length > 0) {
-        handleSelect(vouchers[0]);
-      }
-    }
-  };
+  const handleCancelarEdicion = () => setViewMode('DETALLE');
 
-  const selectedVoucher = useMemo(() => {
-    return vouchers.find(v => v.id_voucher === selectedId) || null;
-  }, [vouchers, selectedId]);
-
-  const tienePagos = useMemo(() => {
-    if (!selectedVoucher) return false;
-    const total = parseFloat(selectedVoucher.monto_total || 0);
-    const saldo = parseFloat(selectedVoucher.saldo_disponible || 0);
-    return Math.abs(total - saldo) > 0.009;
-  }, [selectedVoucher]);
-
+  const tienePagos = selectedVoucher
+    ? Math.abs(parseFloat(selectedVoucher.monto_total || 0) - parseFloat(selectedVoucher.saldo_disponible || 0)) > 0.009
+    : false;
   const voucherTieneUso = tienePagos;
 
   const handleGuardar = async (e) => {
@@ -223,7 +117,6 @@ const Vouchers = () => {
     if (!formData.banco_id) return avisar('Debe seleccionar una entidad bancaria.', 'error');
     if (!formData.id_importador) return avisar('Debe seleccionar la empresa importadora.', 'error');
     if (!formData.numero_operacion.trim()) return avisar('Debe ingresar el número de operación.', 'error');
-    
     const monto = parseFloat(formData.monto_total);
     if (isNaN(monto) || monto <= 0) return avisar('El monto total debe ser mayor a 0.', 'error');
 
@@ -233,100 +126,31 @@ const Vouchers = () => {
         banco_id: parseInt(formData.banco_id, 10),
         id_importador: parseInt(formData.id_importador, 10),
         numero_operacion: formData.numero_operacion.trim(),
-        monto_total: monto,
+        monto_total: String(formData.monto_total).trim(),   // texto: decimal exacto en el servidor
         moneda: formData.moneda,
         fecha_transferencia: formData.fecha_transferencia || null
       };
-
       if (viewMode === 'NUEVO') {
         const res = await api.post('/vouchers/', payload);
         avisar('✅ Voucher registrado exitosamente.', 'exito');
         await cargarVouchers();
         setSelectedId(res.data?.id_voucher || null);
-        setViewMode('DETALLE');
-      } else if (viewMode === 'MODIFICAR') {
-        await api.put(`/vouchers/${selectedId}`, { ...payload, version: formData.version });
+      } else {
+        await api.put(`/vouchers/${selectedVoucher.id_voucher}`, { ...payload, version: formData.version });
         avisar('✅ Voucher actualizado exitosamente.', 'exito');
         await cargarVouchers();
-        setViewMode('DETALLE');
       }
+      setViewMode('DETALLE');
     } catch (error) {
-      const err = error.response?.data?.detail || 'Error al guardar voucher.';
-      avisar(`❌ ${err}`, 'error');
+      avisar(`❌ ${mensajeDeError(error, 'Error al guardar voucher.')}`, 'error');
     } finally {
       setIsGuardando(false);
     }
   };
 
-  const handleEliminarConfirm = async () => {
-    if (!modalEliminar.motivo || modalEliminar.motivo.trim().length < 10) {
-      return avisar('Debe ingresar un motivo de eliminación válido (mínimo 10 caracteres).', 'advertencia');
-    }
-    setIsEliminando(true);
-    try {
-      await api.delete(`/vouchers/${modalEliminar.voucher.id_voucher}`, {
-        data: { motivo: modalEliminar.motivo.trim() }
-      });
-      avisar(`✅ Voucher #${modalEliminar.voucher.id_voucher} eliminado correctamente.`, 'exito');
-      setModalEliminar({ open: false, voucher: null, motivo: '' });
-      setSelectedId(null);
-      await cargarVouchers();
-    } catch (error) {
-      const err = error.response?.data?.detail || 'No se pudo eliminar el voucher.';
-      avisar(`❌ ${err}`, 'error');
-    } finally {
-      setIsEliminando(false);
-    }
-  };
-
-  const cargarPagosVinculados = async (idVoucher) => {
-    if (!idVoucher) {
-      setPagosVinculados([]);
-      return;
-    }
-    setIsLoadingPagosVinculados(true);
-    try {
-      const res = await api.get(`/vouchers/${idVoucher}/pagos`);
-      setPagosVinculados(res.data || []);
-    } catch (error) {
-      console.error('Error al cargar pagos vinculados:', error);
-      setPagosVinculados([]);
-    } finally {
-      setIsLoadingPagosVinculados(false);
-    }
-  };
-
-  const handleReversarPagoVoucher = async () => {
-    if (!modalReversarPagoVoucher.motivo || modalReversarPagoVoucher.motivo.trim().length < 10) {
-      return avisar('Debe ingresar un motivo de anulación válido (mínimo 10 caracteres).', 'advertencia');
-    }
-    setIsReversandoPagoVoucher(true);
-    try {
-      const resAnulacion = await api.delete(`/pagos/${modalReversarPagoVoucher.pago.id_pago}`, {
-        data: { motivo: modalReversarPagoVoucher.motivo.trim() }
-      });
-      avisarReversionDam(resAnulacion, confirmar);
-      avisar(`✅ Pago #${modalReversarPagoVoucher.pago.id_pago} reversado. El saldo fue devuelto al voucher.`, 'exito');
-      setModalReversarPagoVoucher({ open: false, pago: null, motivo: '' });
-      await cargarVouchers();
-      if (selectedId) {
-        await cargarPagosVinculados(selectedId);
-      }
-    } catch (error) {
-      const err = error.response?.data?.detail || 'Error al reversar pago.';
-      avisar(`❌ ${err}`, 'error');
-    } finally {
-      setIsReversandoPagoVoucher(false);
-    }
-  };
-
-  const bancoSeleccionadoNombre = useMemo(() => {
-    return opcionesBancos.find(b => b.value === (selectedVoucher?.banco_id || formData.banco_id))?.label || 'N/A';
-  }, [opcionesBancos, selectedVoucher, formData.banco_id]);
-
-  const importadorSeleccionadoNombre = useMemo(() => {
-    return opcionesImportadores.find(i => i.value === (selectedVoucher?.id_importador || formData.id_importador))?.label || 'N/A';
-  }, [opcionesImportadores, selectedVoucher, formData.id_importador]);
+  const nombreDe = (opciones, id) => opciones.find((o) => o.value === id)?.label || 'N/A';
+  const bancoSeleccionadoNombre = nombreDe(opcionesBancos, selectedVoucher?.banco_id || formData.banco_id);
+  const importadorSeleccionadoNombre = nombreDe(opcionesImportadores, selectedVoucher?.id_importador || formData.id_importador);
 
   return (
     <div className="flex-1 flex flex-col h-full bg-slate-950 text-slate-100 overflow-hidden font-sans">
@@ -372,151 +196,12 @@ const Vouchers = () => {
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-5 p-5 min-h-0 overflow-hidden">
         
         {/* BANDEJA IZQUIERDA (38%) */}
-        <section className="lg:col-span-5 flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl min-h-0">
-          
-          <div className="p-3.5 border-b border-slate-800 bg-slate-900/60 space-y-2.5 shrink-0">
-            <div className="relative">
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
-                placeholder="Buscar por Nº de Operación..."
-                className="w-full pl-9 pr-4 py-2 text-xs bg-slate-950 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500 transition-all"
-              />
-              <span className="absolute inset-y-0 left-3 flex items-center text-slate-400 text-xs">
-                <Search size={14} className="inline-block shrink-0" />
-              </span>
-              {searchTerm && (
-                <button onClick={() => setSearchTerm('')} className="absolute inset-y-0 right-3 flex items-center text-slate-400 hover:text-white text-xs">✕</button>
-              )}
-            </div>
-
-            <div className="flex items-center gap-1.5 text-[11px]">
-              <button
-                type="button"
-                onClick={() => { setFiltroSaldo('CON_SALDO'); setPage(1); }}
-                className={`px-3 py-1 rounded-md font-semibold transition-colors ${
-                  filtroSaldo === 'CON_SALDO'
-                    ? 'bg-teal-600 text-white shadow'
-                    : 'bg-slate-800 text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                Con Saldo
-              </button>
-              <button
-                type="button"
-                onClick={() => { setFiltroSaldo('TODOS'); setPage(1); }}
-                className={`px-3 py-1 rounded-md font-semibold transition-colors ${
-                  filtroSaldo === 'TODOS'
-                    ? 'bg-teal-600 text-white shadow'
-                    : 'bg-slate-800 text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                Todos ({totalRegistros})
-              </button>
-              <button
-                type="button"
-                onClick={() => { setFiltroSaldo('AGOTADOS'); setPage(1); }}
-                className={`px-3 py-1 rounded-md font-semibold transition-colors ${
-                  filtroSaldo === 'AGOTADOS'
-                    ? 'bg-teal-600 text-white shadow'
-                    : 'bg-slate-800 text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                Agotados
-              </button>
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-y-auto divide-y divide-slate-800/80 p-2 space-y-1 min-h-0">
-            {isLoading ? (
-              <div className="p-8 text-center text-slate-400 text-xs flex flex-col items-center gap-2">
-                <div className="w-6 h-6 border-2 border-teal-500 border-t-transparent rounded-full animate-spin"></div>
-                <span>Cargando vouchers bancarios...</span>
-              </div>
-            ) : vouchers.length === 0 ? (
-              <div className="p-8 text-center text-slate-500 text-xs">
-                No se encontraron vouchers con los criterios seleccionados.
-              </div>
-            ) : (
-              vouchers.map((v) => {
-                const isSelected = selectedId === v.id_voucher;
-                const saldoNum = parseFloat(v.saldo_disponible);
-                const totalNum = parseFloat(v.monto_total);
-                const simbolo = v.moneda === MONEDA.PEN ? 'S/' : '$';
-                const tieneSaldo = saldoNum > 0.009;
-
-                const bName = opcionesBancos.find(b => b.value === v.banco_id)?.label || 'Banco';
-                const iName = opcionesImportadores.find(i => i.value === v.id_importador)?.label || 'Importador';
-
-                return (
-                  <div
-                    key={v.id_voucher}
-                    onClick={() => handleSelect(v)}
-                    className={`p-3 rounded-lg cursor-pointer transition-all border ${
-                      isSelected
-                        ? 'row-selected'
-                        : 'bg-white dark:bg-slate-900/60 hover:bg-slate-50 dark:hover:bg-slate-800/70 border-slate-200 dark:border-slate-800/80'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono font-bold text-xs text-teal-400">#{v.id_voucher}</span>
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                          tieneSaldo
-                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                            : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
-                        }`}>
-                          {tieneSaldo ? 'DISPONIBLE' : 'AGOTADO'}
-                        </span>
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-300 border border-slate-700">
-                          {v.moneda}
-                        </span>
-                      </div>
-
-                      <div className="text-right">
-                        <span className="text-[10px] text-slate-400 block">Saldo</span>
-                        <span className={`font-mono font-bold text-xs tabular-nums ${tieneSaldo ? 'text-emerald-400' : 'text-slate-500'}`}>
-                          {simbolo} {saldoNum.toFixed(2)}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="mt-2 text-xs">
-                      <div className="font-semibold text-slate-200 truncate">
-                        {bName} · Op: {v.numero_operacion}
-                      </div>
-                      <div className="text-[11px] text-slate-400 truncate mt-0.5 flex items-center">
-                        <Building2 size={12} className="inline-block shrink-0 mr-1 text-slate-400" />
-                        <span>{iName}</span>
-                      </div>
-                    </div>
-
-                    <div className="mt-2 pt-2 border-t border-slate-800/60 flex items-center justify-between text-[11px] text-slate-400">
-                      <span className="text-[10px] font-mono text-slate-500">
-                        Fecha: {v.fecha_transferencia || 'S/F'}
-                      </span>
-                      <span className="text-[10px] font-mono text-slate-400">
-                        Total: {simbolo} {totalNum.toFixed(2)}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-
-          <div className="p-2 border-t border-slate-800 bg-slate-900/90 shrink-0">
-            <Paginador
-              page={page}
-              totalPages={totalPages}
-              setPage={setPage}
-              limit={limit}
-              setLimit={setLimit}
-              totalRegistros={totalRegistros}
-            />
-          </div>
-        </section>
+        <BandejaVouchers
+          vouchers={vouchers} isLoading={isLoading} selectedId={selectedVoucher?.id_voucher ?? null} handleSelect={handleSelect}
+          opcionesBancos={opcionesBancos} opcionesImportadores={opcionesImportadores}
+          searchTerm={searchTerm} setSearchTerm={setSearchTerm} filtroSaldo={filtroSaldo} setFiltroSaldo={setFiltroSaldo}
+          page={page} setPage={setPage} limit={limit} setLimit={setLimit} totalPages={totalPages} totalRegistros={totalRegistros}
+        />
 
         {/* PANEL DERECHO WORKSTATION (62%) */}
         <section className="lg:col-span-7 flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl min-h-0">
@@ -569,7 +254,7 @@ const Vouchers = () => {
                         <span>Modificar</span>
                       </button>
                       <button
-                        onClick={() => setModalEliminar({ open: true, voucher: selectedVoucher, motivo: '' })}
+                        onClick={() => setVoucherAEliminar(selectedVoucher)}
                         className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-rose-300 border border-rose-500/30 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer"
                       >
                         <Trash2 size={13} className="shrink-0" />
@@ -680,208 +365,14 @@ const Vouchers = () => {
                   )}
 
                   {/* SECCIÓN DE PAGOS VINCULADOS A ESTE VOUCHER */}
-                  <div className="pt-3 border-t border-slate-800 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                        <CreditCard size={14} className="shrink-0 text-purple-400" />
-                        <span>Pagos Financiados por este Voucher</span>
-                      </h4>
-                      <span className="text-[10px] font-mono text-slate-400">
-                        {pagosVinculados.length} {pagosVinculados.length === 1 ? 'pago' : 'pagos'}
-                      </span>
-                    </div>
-
-                    {isLoadingPagosVinculados ? (
-                      <div className="py-4 text-center text-slate-500 text-xs">
-                        <div className="w-4 h-4 border-2 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-1"></div>
-                        <span>Cargando pagos vinculados...</span>
-                      </div>
-                    ) : pagosVinculados.length === 0 ? (
-                      <div className="py-4 text-center text-slate-500 text-xs bg-slate-900/40 rounded-lg border border-slate-800/60">
-                        Este voucher no tiene pagos vinculados activos. Saldo 100% íntegro.
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {pagosVinculados.map(pago => (
-                          <div
-                            key={pago.id_pago}
-                            className="bg-slate-900 border border-slate-800 rounded-lg p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
-                          >
-                            <div className="space-y-0.5">
-                              <div className="flex items-center gap-2">
-                                <span className="font-mono font-bold text-slate-200">Pago #{pago.id_pago}</span>
-                                <span className="text-slate-500 text-[10px]">•</span>
-                                <span className="font-mono text-slate-400 text-[10px]">{pago.fecha_pago || 'S/F'}</span>
-                                <span className="text-slate-500 text-[10px]">•</span>
-                                <span className="text-purple-300 font-semibold">{pago.concepto_nombre || 'Gasto'}</span>
-                              </div>
-                              <div className="text-[11px] text-slate-400 flex items-center gap-2">
-                                <span>DAM: <strong className="text-slate-300 font-mono">{pago.dam_numero || 'S/D'}</strong></span>
-                                <span>•</span>
-                                <span>Comprobante: <span className="text-slate-300">{pago.gasto_documento || 'N/A'}</span></span>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-800">
-                              <div className="text-right">
-                                <div className="font-mono font-bold text-emerald-400">
-                                  {pago.moneda === MONEDA.PEN ? 'S/' : '$'} {parseFloat(pago.importe).toFixed(2)}
-                                </div>
-                                {pago.pago_moneda_cruzada && (
-                                  <div className="text-[10px] text-amber-400 font-mono">
-                                    Debitado: {parseFloat(pago.monto_moneda_origen).toFixed(2)} {selectedVoucher.moneda}
-                                  </div>
-                                )}
-                              </div>
-
-                              <button
-                                type="button"
-                                onClick={() => setModalReversarPagoVoucher({ open: true, pago, motivo: '' })}
-                                className="px-2.5 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer"
-                                title="Anular este pago y restituir el saldo al voucher"
-                              >
-                                <Trash2 size={13} className="shrink-0" />
-                                <span>Reversar</span>
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                  <PagosDelVoucher key={selectedVoucher.id_voucher} voucher={selectedVoucher} onPagoReversado={cargarVouchers} />
                 </div>
               ) : (
-                <form onSubmit={handleGuardar} className="bg-slate-950/80 border border-slate-800 rounded-xl p-5 space-y-4">
-                  <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-                    <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                      <Pencil size={15} className="text-teal-400 shrink-0" />
-                      <span>{viewMode === 'NUEVO' ? 'Registro de Depósito Bancario' : 'Modificación de Voucher'}</span>
-                    </h3>
-                  </div>
-
-                  {viewMode === 'MODIFICAR' && tienePagos && (
-                    <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs flex items-center gap-2">
-                      <Lock size={14} className="shrink-0 text-amber-400" />
-                      <span><strong>Protección Contable Activa:</strong> Este voucher ya tiene pagos amortizados. El Monto, la Moneda y el Importador están bloqueados por integridad de libros.</span>
-                    </div>
-                  )}
-
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-xs font-bold text-slate-300 uppercase tracking-wide mb-1.5">
-                          Entidad Bancaria *
-                        </label>
-                        <Select
-                          options={opcionesBancos}
-                          value={opcionesBancos.find(b => b.value === formData.banco_id) || null}
-                          onChange={op => setFormData({ ...formData, banco_id: op ? op.value : null })}
-                          placeholder="Seleccionar banco..."
-                          isClearable
-                          styles={selectDarkStyles}
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-bold text-slate-300 uppercase tracking-wide mb-1.5">
-                          Empresa Importadora Titular *
-                        </label>
-                        <Select
-                          options={opcionesImportadores}
-                          value={opcionesImportadores.find(i => i.value === formData.id_importador) || null}
-                          onChange={op => setFormData({ ...formData, id_importador: op ? op.value : null })}
-                          placeholder="Seleccionar importador..."
-                          isDisabled={viewMode === 'MODIFICAR' && tienePagos}
-                          isClearable
-                          styles={selectDarkStyles}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      <div>
-                        <label className="block text-xs font-bold text-slate-300 uppercase tracking-wide mb-1.5">
-                          N° de Operación Bancaria *
-                        </label>
-                        <input
-                          type="text"
-                          required
-                          value={formData.numero_operacion}
-                          onChange={e => setFormData({ ...formData, numero_operacion: e.target.value })}
-                          placeholder="Ej. OP-987654"
-                          className="w-full text-xs font-mono bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white focus:outline-none focus:border-teal-500"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-bold text-slate-300 uppercase tracking-wide mb-1.5">
-                          Moneda del Depósito *
-                        </label>
-                        <select
-                          value={formData.moneda}
-                          onChange={e => setFormData({ ...formData, moneda: e.target.value })}
-                          disabled={viewMode === 'MODIFICAR' && tienePagos}
-                          className="w-full text-xs font-bold bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white disabled:bg-slate-950 disabled:text-slate-500 focus:outline-none focus:border-teal-500"
-                        >
-                          <option value={MONEDA.USD}>USD - Dólares ($)</option>
-                          <option value={MONEDA.PEN}>PEN - Soles (S/)</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-bold text-slate-300 uppercase tracking-wide mb-1.5">
-                          Monto Total Depositado *
-                        </label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          required
-                          value={formData.monto_total}
-                          onChange={e => setFormData({ ...formData, monto_total: e.target.value })}
-                          disabled={viewMode === 'MODIFICAR' && tienePagos}
-                          placeholder="0.00"
-                          className="w-full text-xs font-mono font-bold bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-right text-emerald-400 disabled:bg-slate-950 disabled:text-slate-500 focus:outline-none focus:border-teal-500"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-300 uppercase tracking-wide mb-1.5">
-                        Fecha de Transferencia / Depósito
-                      </label>
-                      <input
-                        type="date"
-                        value={formData.fecha_transferencia}
-                        onChange={e => setFormData({ ...formData, fecha_transferencia: e.target.value })}
-                        className="w-full sm:w-1/3 text-xs bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white focus:outline-none focus:border-teal-500"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="pt-4 border-t border-slate-800 flex items-center justify-end gap-3">
-                    <button
-                      type="button"
-                      onClick={handleCancelarEdicion}
-                      className="px-4 py-2 border border-slate-700 text-slate-300 hover:bg-slate-800 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
-                    >
-                      Cancelar
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={isGuardando}
-                      className="px-6 py-2 bg-teal-600 hover:bg-teal-500 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-all shadow-lg shadow-teal-600/20 flex items-center gap-2 cursor-pointer"
-                    >
-                      {isGuardando ? (
-                        <>
-                          <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                          <span>Guardando...</span>
-                        </>
-                      ) : (
-                        <span>Guardar Voucher</span>
-                      )}
-                    </button>
-                  </div>
-                </form>
+                <FormularioVoucher
+                  formData={formData} setFormData={setFormData} viewMode={viewMode} isGuardando={isGuardando}
+                  handleGuardar={handleGuardar} handleCancelarEdicion={handleCancelarEdicion}
+                  opcionesBancos={opcionesBancos} opcionesImportadores={opcionesImportadores} tienePagos={tienePagos}
+                />
               )}
 
             </div>
@@ -890,166 +381,13 @@ const Vouchers = () => {
 
       </div>
 
-      {/* MODAL DE ELIMINACIÓN DE AUDITORÍA */}
-      {modalEliminar.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-slate-900 border border-slate-800 rounded-xl shadow-2xl w-full max-w-md overflow-hidden text-slate-100">
-            <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950">
-              <div className="flex items-center gap-2 text-rose-400 font-bold text-sm">
-                <AlertTriangle size={16} className="shrink-0" />
-                <h3>Eliminar Voucher #{modalEliminar.voucher?.id_voucher}</h3>
-              </div>
-              <button onClick={() => setModalEliminar({ open: false, voucher: null, motivo: '' })} className="text-slate-400 hover:text-white text-xs">✕</button>
-            </div>
-            
-            <div className="p-5 space-y-4">
-              {voucherTieneUso ? (
-                <div className="p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-lg text-rose-300 text-xs space-y-2">
-                  <div className="font-bold flex items-center gap-1.5 text-rose-400 text-sm">
-                    <Ban size={15} className="shrink-0" />
-                    <span>Eliminación Bloqueada</span>
-                  </div>
-                  <p>
-                    Este voucher no puede eliminarse porque tiene un saldo consumido de <strong>{modalEliminar.voucher?.moneda} {(parseFloat(modalEliminar.voucher?.monto_total || 0) - parseFloat(modalEliminar.voucher?.saldo_disponible || 0)).toFixed(2)}</strong>.
-                  </p>
-                  <p className="text-slate-300">
-                    Para poder eliminar este voucher, primero debe anular o reversar los pagos asociados que consumieron dicho saldo (usando los botones <em>"Reversar"</em> en la sección de Pagos Financiados).
-                  </p>
-                </div>
-              ) : (
-                <>
-                  <p className="text-xs text-slate-300">
-                    La eliminación de un voucher bancario es auditada por Tesorería. Por favor justifique el motivo de anulación:
-                  </p>
-                  
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
-                      Motivo de Anulación (Mínimo 10 caracteres) *
-                    </label>
-                    <textarea
-                      rows={3}
-                      value={modalEliminar.motivo}
-                      onChange={e => setModalEliminar({ ...modalEliminar, motivo: e.target.value })}
-                      placeholder="Explique detalladamente la razón de anulación del voucher..."
-                      className="w-full text-xs p-3 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:border-rose-500 resize-none"
-                    />
-                  </div>
-                </>
-              )}
-            </div>
-            
-            <div className="px-5 py-3.5 bg-slate-950 border-t border-slate-800 flex items-center justify-end gap-2.5">
-              <button
-                type="button"
-                onClick={() => setModalEliminar({ open: false, voucher: null, motivo: '' })}
-                className="px-3.5 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-800 border border-slate-700 rounded-lg transition-colors cursor-pointer"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleEliminarConfirm}
-                disabled={voucherTieneUso || isEliminando || modalEliminar.motivo.trim().length < 10}
-                className="px-4 py-1.5 text-xs font-bold bg-rose-600 hover:bg-rose-500 disabled:opacity-40 text-white rounded-lg transition-all shadow-md shadow-rose-600/20 flex items-center gap-1.5 cursor-pointer"
-              >
-                {isEliminando ? (
-                  <>
-                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    <span>Eliminando...</span>
-                  </>
-                ) : (
-                  <span>Confirmar Eliminación</span>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL DE REVERSIÓN DE PAGO INDIVIDUAL DESDE VOUCHER */}
-      {modalReversarPagoVoucher.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-slate-900 border border-slate-800 rounded-xl shadow-2xl w-full max-w-md overflow-hidden text-slate-100">
-            <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950">
-              <div className="flex items-center gap-2 text-rose-400 font-bold text-sm">
-                <RotateCcw size={16} className="shrink-0" />
-                <h3>Reversar Pago #{modalReversarPagoVoucher.pago?.id_pago}</h3>
-              </div>
-              <button 
-                type="button"
-                onClick={() => setModalReversarPagoVoucher({ open: false, pago: null, motivo: '' })} 
-                className="text-slate-400 hover:text-white text-xs cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-            
-            <div className="p-5 space-y-4">
-              <div className="bg-slate-950 border border-slate-800 p-3 rounded-lg text-xs space-y-1">
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Importe a Reversar:</span>
-                  <span className="font-mono font-bold text-emerald-400">
-                    {modalReversarPagoVoucher.pago?.moneda === MONEDA.PEN ? 'S/' : '$'} {parseFloat(modalReversarPagoVoucher.pago?.importe || 0).toFixed(2)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Voucher / Op:</span>
-                  <span className="text-teal-400 font-mono font-bold">
-                    {selectedVoucher?.numero_operacion}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Gasto Vinculado:</span>
-                  <span className="text-slate-200">
-                    {modalReversarPagoVoucher.pago?.gasto_documento || (modalReversarPagoVoucher.pago?.id_gasto ? `Gasto #${modalReversarPagoVoucher.pago?.id_gasto}` : 'N/A')}
-                  </span>
-                </div>
-              </div>
-
-              <p className="text-xs text-slate-300">
-                Al reversar este pago, el monto amortizado será reintegrado automáticamente al saldo disponible de este voucher.
-              </p>
-              
-              <div>
-                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
-                  Motivo de Anulación (Mínimo 10 caracteres) *
-                </label>
-                <textarea 
-                  rows={3} 
-                  value={modalReversarPagoVoucher.motivo} 
-                  onChange={e => setModalReversarPagoVoucher({ ...modalReversarPagoVoucher, motivo: e.target.value })} 
-                  placeholder="Justifique la razón de reversión para auditoría..." 
-                  className="w-full text-xs p-3 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:border-rose-500 resize-none"
-                />
-              </div>
-            </div>
-            
-            <div className="px-5 py-3.5 bg-slate-950 border-t border-slate-800 flex items-center justify-end gap-2.5">
-              <button 
-                type="button" 
-                onClick={() => setModalReversarPagoVoucher({ open: false, pago: null, motivo: '' })} 
-                className="px-3.5 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-800 border border-slate-700 rounded-lg transition-colors cursor-pointer"
-              >
-                Cancelar
-              </button>
-              <button 
-                type="button" 
-                onClick={handleReversarPagoVoucher} 
-                disabled={isReversandoPagoVoucher || modalReversarPagoVoucher.motivo.trim().length < 10} 
-                className="px-4 py-1.5 text-xs font-bold bg-rose-600 hover:bg-rose-500 disabled:opacity-40 text-white rounded-lg transition-all shadow-md shadow-rose-600/20 flex items-center gap-1.5 cursor-pointer"
-              >
-                {isReversandoPagoVoucher ? (
-                  <>
-                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    <span>Reversando...</span>
-                  </>
-                ) : (
-                  <span>Confirmar Reversión</span>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
+      {voucherAEliminar && (
+        <ModalEliminarVoucher
+          voucher={voucherAEliminar}
+          voucherTieneUso={voucherTieneUso}
+          onCerrar={() => setVoucherAEliminar(null)}
+          onEliminado={async () => { setSelectedId(null); await cargarVouchers(); }}
+        />
       )}
 
     </div>

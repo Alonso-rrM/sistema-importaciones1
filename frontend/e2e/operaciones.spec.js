@@ -1,6 +1,6 @@
 // Operaciones desde las pantallas: crear un expediente (contenedor) con su DAM, y crear y eliminar un voucher.
 import { test, expect } from '@playwright/test';
-import { campoTrasRotulo, elegirOpcion, iniciarSesion, vigilarErrores } from './ayudas.js';
+import { api, campoTrasRotulo, elegirOpcion, esperarAviso, iniciarSesion, vigilarErrores } from './ayudas.js';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -65,4 +65,38 @@ test('en DAMs, seleccionar una DAM muestra sus gastos', async ({ page }) => {
   await page.goto('/app/dams');
   await page.getByText('118-2026-10-000001').first().click();
   await expect(page.getByText('TRIBUTOS').first()).toBeVisible();
+});
+
+test('en Vouchers, reversar un pago devuelve el saldo al voucher', async ({ page }) => {
+  await iniciarSesion(page);
+  const importador = (await api(page, 'GET', '/importadores/')).find((i) => i.nombre === 'IMPORTADORA E2E SAC');
+  const banco = (await api(page, 'GET', '/bancos/'))[0];
+  const flete = (await api(page, 'GET', '/gastos/', null)).data.find((g) => g.concepto_nombre === 'FLETE LOCAL' && g.moneda === 'USD');
+  const voucher = await api(page, 'POST', '/vouchers/', {
+    banco_id: banco.id_banco, id_importador: importador.id_importador, numero_operacion: 'OP-E2E-VR',
+    monto_total: '300.00', moneda: 'USD', fecha_transferencia: new Date().toISOString().slice(0, 10),
+  });
+  await api(page, 'POST', '/pagos/', { id_gasto: flete.id_gasto, voucher_id: voucher.id_voucher, moneda: 'USD', importe: '50.00', tipo_cambio: '1' });
+
+  await page.goto('/app/vouchers');
+  await page.getByPlaceholder('Buscar por Nº de Operación').fill('OP-E2E-VR');
+  await page.getByText('OP-E2E-VR').first().click();
+  await expect(page.getByText('Pagos Financiados por este Voucher')).toBeVisible();
+  await page.getByRole('button', { name: 'Reversar' }).first().click();
+  await page.getByPlaceholder('Justifique la razón de reversión').fill('Prueba e2e: reversar desde Vouchers');
+  await page.getByRole('button', { name: 'Confirmar Reversión' }).click();
+  await expect(page.getByText('Este voucher no tiene pagos vinculados activos')).toBeVisible();
+});
+
+test('modificar el número de operación de un voucher', async ({ page }) => {
+  await iniciarSesion(page);
+  await page.goto('/app/vouchers');
+  await page.getByPlaceholder('Buscar por Nº de Operación').fill('OP-E2E-VR');
+  await page.getByText('OP-E2E-VR').first().click();
+  await page.getByRole('button', { name: 'Modificar' }).click();
+  await page.getByPlaceholder('Ej. OP-987654').fill('OP-E2E-VR-2');
+  await page.getByRole('button', { name: 'Guardar Voucher' }).click();
+  await esperarAviso(page, 'actualizado exitosamente');
+  await page.getByPlaceholder('Buscar por Nº de Operación').fill('OP-E2E-VR-2');
+  await expect(page.getByText('OP-E2E-VR-2').first()).toBeVisible();
 });

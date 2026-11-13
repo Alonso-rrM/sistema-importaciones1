@@ -10,48 +10,8 @@ import { descargarExcel } from '../utils/exportUtils';
 import { Download, Clock, Search, Settings, FileText, Banknote, Trash2, Pencil, CheckCircle2, AlertTriangle, Building2, Scale, Package, BarChart3, CreditCard } from 'lucide-react';
 import { CATEGORIA_PROVEEDOR, ESTADO_PAGO, MONEDA, TIPO_GASTO } from '../constants';
 import { useInteraccion } from '../context/interaccion';
+import { ESTILO_SELECT_TEAL } from '../components/estilosSelect';
 
-const selectDarkStyles = {
-  control: (base, state) => ({
-    ...base,
-    backgroundColor: '#020617', // slate-950
-    borderColor: state.isFocused ? '#14b8a6' : '#334155', // teal-500 : slate-700
-    boxShadow: state.isFocused ? '0 0 0 1px #14b8a6' : 'none',
-    '&:hover': { borderColor: '#475569' },
-    color: '#f8fafc',
-    fontSize: '0.8125rem',
-    borderRadius: '0.5rem',
-    minHeight: '38px'
-  }),
-  menu: (base) => ({
-    ...base,
-    backgroundColor: '#0f172a', // slate-900
-    border: '1px solid #334155',
-    zIndex: 60
-  }),
-  option: (base, state) => ({
-    ...base,
-    backgroundColor: state.isSelected ? '#0d9488' : state.isFocused ? '#1e293b' : 'transparent',
-    color: '#f8fafc',
-    fontSize: '0.8125rem',
-    cursor: 'pointer'
-  }),
-  singleValue: (base) => ({
-    ...base,
-    color: '#f8fafc',
-    fontSize: '0.8125rem'
-  }),
-  input: (base) => ({
-    ...base,
-    color: '#f8fafc',
-    fontSize: '0.8125rem'
-  }),
-  placeholder: (base) => ({
-    ...base,
-    color: '#94a3b8',
-    fontSize: '0.8125rem'
-  })
-};
 
 const Gastos = () => {
   const { avisar, confirmar } = useInteraccion();
@@ -1092,7 +1052,7 @@ const Gastos = () => {
                   }} 
                   placeholder="Filtrar DAMs por factura maestro..." 
                   isClearable 
-                  styles={selectDarkStyles}
+                  styles={ESTILO_SELECT_TEAL}
                 />
               </div>
 
@@ -1125,7 +1085,7 @@ const Gastos = () => {
                   }} 
                   placeholder="Seleccione la DAM vinculada..." 
                   isClearable 
-                  styles={selectDarkStyles}
+                  styles={ESTILO_SELECT_TEAL}
                 />
               </div>
 
@@ -1139,7 +1099,7 @@ const Gastos = () => {
                   onChange={(op) => setForm({ ...form, id_concepto: op ? op.value : null })} 
                   placeholder="Seleccione concepto contable..." 
                   isClearable 
-                  styles={selectDarkStyles}
+                  styles={ESTILO_SELECT_TEAL}
                 />
               </div>
 
@@ -1179,7 +1139,7 @@ const Gastos = () => {
                   onChange={(op) => setForm({ ...form, id_proveedor: op ? op.value : null })} 
                   placeholder="Seleccione proveedor con RUC..." 
                   isClearable 
-                  styles={selectDarkStyles}
+                  styles={ESTILO_SELECT_TEAL}
                 />
               </div>
 
@@ -1194,7 +1154,7 @@ const Gastos = () => {
                     onChange={(op) => setForm({ ...form, id_tipo_doc: op ? op.value : null })} 
                     placeholder="Tipo de comprobante..." 
                     isClearable 
-                    styles={selectDarkStyles}
+                    styles={ESTILO_SELECT_TEAL}
                   />
                 </div>
 
