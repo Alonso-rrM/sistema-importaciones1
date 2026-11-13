@@ -20,7 +20,7 @@ VALORES_ESPERADOS = {
     "EstadoRegistro": ["ACTIVO", "INACTIVO"],
     "Moneda": ["USD", "PEN"],
     "EstadoPago": ["PENDIENTE", "PARCIAL", "PAGADO"],
-    "TipoValor": ["DEFINITIVO", "GARANTIZADO", "PROVISIONAL"],
+    "TipoValor": ["DEFINITIVO", "GARANTIZADO"],
     "EstadoDocumentario": [
         "SIN NUMERAR", "EN PROCESO", "ATE. PARCIAL", "CON LEVANTE (PEND. INGRESO)",
         "EN ALMACÉN (PEND. OMC)", "ATE. TOTAL",

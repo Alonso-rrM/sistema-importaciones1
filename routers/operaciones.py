@@ -54,7 +54,6 @@ def validar_dam_garantizada(dam: schemas.DetalleDamCreate):
 ESTRATEGIAS_VALIDACION_DAM = {
     TipoValor.DEFINITIVO: validar_dam_definitiva,
     TipoValor.GARANTIZADO: validar_dam_garantizada,
-    TipoValor.PROVISIONAL: validar_dam_garantizada  # Retrocompatibilidad
 }
 
 # --- MÁQUINA DE ESTADOS DAM: TRANSICIONES MANUALES PERMITIDAS ---
@@ -68,7 +67,7 @@ TRANSICIONES_MANUALES_DAM = {
     },
     EstadoDam.OBSERVADA: {
         EstadoDam.EN_REVISION: {TipoValor.DEFINITIVO},             # Subir sustento (definitivo)
-        EstadoDam.CON_LEVANTE_GARANTIA_ACTIVA: {TipoValor.GARANTIZADO, TipoValor.PROVISIONAL},  # Art. 160 LGA
+        EstadoDam.CON_LEVANTE_GARANTIA_ACTIVA: {TipoValor.GARANTIZADO},  # Art. 160 LGA
     },
     EstadoDam.EN_REVISION: {
         EstadoDam.CON_LEVANTE: None,                       # Diligencia conforme

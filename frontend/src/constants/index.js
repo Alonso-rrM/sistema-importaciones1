@@ -38,7 +38,6 @@ export const ESTADO_PAGO = Object.freeze({
 export const TIPO_VALOR = Object.freeze({
   DEFINITIVO: 'DEFINITIVO',
   GARANTIZADO: 'GARANTIZADO',
-  PROVISIONAL: 'PROVISIONAL',   // Nombre antiguo de GARANTIZADO (registros históricos)
 });
 
 export const ESTADO_DOCUMENTARIO = Object.freeze({

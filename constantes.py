@@ -60,7 +60,6 @@ class EstadoPago(StrEnum):
 class TipoValor(StrEnum):
     DEFINITIVO = "DEFINITIVO"
     GARANTIZADO = "GARANTIZADO"
-    PROVISIONAL = "PROVISIONAL"   # Nombre antiguo de GARANTIZADO; se conserva por los registros históricos
 
 
 class EstadoDocumentario(StrEnum):

@@ -79,7 +79,7 @@ Archivos clave:
 | 4 | Ordenar el frontend: componentes y hooks comunes, diálogos propios | Pendiente |
 | 5 | Validación de lo que digita la usuaria (RUC, DAM, comprobantes, montos) | Pendiente |
 | 6 | Limpieza: README, `.env.example`, archivos sobrantes | Pendiente |
-| — | Registro del C.D.A. de SUNAT (ver sección 7) | En análisis |
+| — | Registro del C.D.A. de SUNAT (ver sección 8) | En análisis |
 
 Deuda conocida y aceptada por ahora:
 
@@ -95,8 +95,6 @@ Deuda conocida y aceptada por ahora:
   `obtener_datos_liquidacion_contenedor` y `kpi_gastos_maestro` (operaciones), `obtener_analytics_cockpit` y
   `exportar_sabana_liquidaciones` (reportes). Tienen poca cobertura de pruebas: antes de partirlas, agregar
   verificaciones de su salida.
-- `PROVISIONAL` (nombre antiguo de GARANTIZADO) se trata como garantizado al validar la DAM, pero no en las
-  transiciones automáticas (da "CON LEVANTE" en vez de "CON LEVANTE (GARANTÍA ACTIVA)"). Se conservó tal cual.
 
 ## 6. Cómo verificar
 
@@ -122,7 +120,14 @@ npm run build
 
 GitHub Actions (`.github/workflows/ci.yml`) corre todo lo anterior en cada subida.
 
-## 7. Contexto del C.D.A. (trabajo siguiente)
+## 7. Decisiones de negocio vigentes
+
+- El tipo de valor de un contenedor es solo **DEFINITIVO** o **GARANTIZADO**. "PROVISIONAL" ya no existe:
+  la migración `d5a92e7c1b38` convierte los registros antiguos a GARANTIZADO.
+- Ajuste de céntimos ("ZD"): si tras un pago quedan USD/S/ 0.05 o menos por diferencias de cambio, el sistema
+  crea un pago de ajuste y cierra el gasto. Si se anula el pago que lo originó, el ajuste también se anula.
+
+## 8. Contexto del C.D.A. (trabajo siguiente)
 
 - C.D.A. = Código de Documento Aduanero: número con el que SUNAT identifica cada documento con deuda.
 - Cada concepto de gasto del Estado (tributos, percepción, OMC...) tiene **su propio C.D.A.** con su monto.
