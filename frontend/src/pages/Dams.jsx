@@ -1,21 +1,58 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import useDebounce from '../hooks/useDebounce';
+import useConsulta from '../hooks/useConsulta';
 import Paginador from '../components/Paginador';
 import { descargarExcel } from '../utils/exportUtils';
 import { Download, Clock, Search, Settings, FileText, Banknote, Trash2, Zap, CheckCircle2, AlertTriangle, Unlock, CreditCard } from 'lucide-react';
 import { CANAL_CONTROL, ESTADO_DAM, ESTADO_PAGO, TIPO_VALOR } from '../constants';
 import { useInteraccion } from '../context/interaccion';
 
+const FORMULARIO_VACIO = {
+  id_maestro: '',
+  numero_de_dam: '',
+  serie: '',
+  canal_control: CANAL_CONTROL.VERDE,
+  monto_valor_provisional_usd: '',
+  estado_dam: ESTADO_DAM.NUMERADA
+};
+
+const formularioDesdeDam = (d) => ({
+  id_maestro: d.id_maestro != null ? String(d.id_maestro) : '',
+  numero_de_dam: d.numero_de_dam || '',
+  serie: d.serie || '',
+  canal_control: d.canal_control || CANAL_CONTROL.VERDE,
+  monto_valor_provisional_usd: d.monto_valor_provisional_usd != null ? String(d.monto_valor_provisional_usd) : '',
+  estado_dam: d.estado_dam || ESTADO_DAM.NUMERADA
+});
+
+/**
+ * Estado inicial de la pantalla según cómo se llegó a ella: desde Logística se puede abrir una DAM
+ * ya existente (fromDam) o empezar una nueva para un contenedor (fromMaestro).
+ */
+function estadoInicialDesde(navegacion) {
+  if (navegacion?.fromDam) {
+    const d = navegacion.fromDam;
+    return { selectedId: d.id_dam, viewMode: 'MODIFICAR', formData: formularioDesdeDam(d), damGastos: d.numero_de_dam, cambios: false };
+  }
+  if (navegacion?.fromMaestro) {
+    return {
+      selectedId: null, viewMode: 'NUEVO', damGastos: null, cambios: true,
+      formData: { ...FORMULARIO_VACIO, id_maestro: String(navegacion.fromMaestro.id_maestro || '') },
+    };
+  }
+  return { selectedId: null, viewMode: null, formData: FORMULARIO_VACIO, damGastos: null, cambios: false };
+}
+
 const Dams = () => {
   const { avisar, confirmar } = useInteraccion();
   const location = useLocation();
   const navigate = useNavigate();
+  const [inicio] = useState(() => estadoInicialDesde(location.state));
 
-  const [dams, setDams] = useState([]);
-  const [selectedId, setSelectedId] = useState(null);
-  const [viewMode, setViewMode] = useState(null); // null = Solo bandeja, 'NUEVO', 'MODIFICAR'
+  const [selectedId, setSelectedId] = useState(inicio.selectedId);
+  const [viewMode, setViewMode] = useState(inicio.viewMode); // null = Solo bandeja, 'NUEVO', 'MODIFICAR'
 
   const [searchTerm, setSearchTerm] = useState('');
   const debouncedSearch = useDebounce(searchTerm, 400);
@@ -28,31 +65,25 @@ const Dams = () => {
 
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalRegistros, setTotalRegistros] = useState(0);
 
-  const [maestros, setMaestros] = useState([]);
-  const [gastosVinculados, setGastosVinculados] = useState([]);
-  const [isLoadingGastos, setIsLoadingGastos] = useState(false);
+  // DAM cuyos gastos se muestran en la ficha (por su número)
+  const [damGastos, setDamGastos] = useState(inicio.damGastos);
 
   const [isGuardando, setIsGuardando] = useState(false);
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(inicio.cambios);
   const [modalEliminar, setModalEliminar] = useState({ open: false, id: null, motivo: '' });
   const [isExportando, setIsExportando] = useState(false);
 
-  const estadoInicial = {
-    id_maestro: '',
-    numero_de_dam: '',
-    serie: '',
-    canal_control: CANAL_CONTROL.VERDE,
-    monto_valor_provisional_usd: '',
-    estado_dam: ESTADO_DAM.NUMERADA
-  };
-
-  const [formData, setFormData] = useState(estadoInicial);
+  const [formData, setFormData] = useState(inicio.formData);
 
   // Rol del usuario decodificado
   // Rol solo para la interfaz (los permisos reales los valida el backend)
+
+
+  const consultarMaestros = useCallback(() => api.get('/maestros/lookup').then((r) => r.data || []), []);
+  const { datos: maestros } = useConsulta(consultarMaestros, {
+    inicial: [], alFallar: (error) => console.error('Error al cargar maestros lookup:', error),
+  });
 
   const maestrosMap = useMemo(() => {
     const map = {};
@@ -60,61 +91,44 @@ const Dams = () => {
     return map;
   }, [maestros]);
 
-  useEffect(() => {
-    cargarMaestros();
-  }, []);
-
-  useEffect(() => {
-    cargarDams();
+  const consultarDams = useCallback(() => {
+    const aforoBool = aforoFiltro === 'REALIZADO' ? true : aforoFiltro === 'PENDIENTE' ? false : undefined;
+    return api.get('/dams/', {
+      params: {
+        search: debouncedSearch.trim() || undefined,
+        page,
+        limit,
+        canal_control: canalFiltro || undefined,
+        aforo_realizado: aforoBool,
+        tipo_valor: tipoValorFiltro || undefined
+      }
+    }).then((r) => r.data);
   }, [debouncedSearch, page, limit, canalFiltro, aforoFiltro, tipoValorFiltro]);
+  const { datos: paginaDams, recargar: recargarDams } = useConsulta(consultarDams, {
+    alFallar: (error) => console.error('Error al cargar DAMs:', error),
+  });
+  const dams = paginaDams?.data || [];
+  const totalPages = paginaDams?.total_paginas || 1;
+  const totalRegistros = paginaDams?.total_registros || 0;
+  const cargarDams = () => recargarDams().catch((error) => console.error('Error al cargar DAMs:', error));
 
-  // Si proviene desde Logistica.jsx con estado precargado
+  const consultarGastos = useCallback(
+    () => api.get('/gastos/', { params: { search: damGastos, limit: 100 } }).then((r) => r.data?.data || []),
+    [damGastos],
+  );
+  const { datos: gastosVinculados, cargando: isLoadingGastos, recargar: recargarGastos } = useConsulta(
+    damGastos ? consultarGastos : null,
+    { inicial: [], alFallar: (error) => console.error('Error al cargar gastos de DAM:', error) },
+  );
+  const mostrarGastosDe = (numeroDam) => {
+    if (numeroDam === damGastos) recargarGastos().catch(() => {});
+    else setDamGastos(numeroDam || null);
+  };
+
+  // Si se llegó desde Logística con datos precargados, se limpian del historial para que no se repitan
   useEffect(() => {
-    if (location.state?.fromDam) {
-      handleSelect(location.state.fromDam);
-      window.history.replaceState({}, document.title);
-    } else if (location.state?.fromMaestro) {
-      const fromM = location.state.fromMaestro;
-      setSelectedId(null);
-      setViewMode('NUEVO');
-      setFormData({
-        ...estadoInicial,
-        id_maestro: String(fromM.id_maestro || '')
-      });
-      setHasUnsavedChanges(true);
-      window.history.replaceState({}, document.title);
-    }
+    if (location.state?.fromDam || location.state?.fromMaestro) window.history.replaceState({}, document.title);
   }, [location.state]);
-
-  const cargarMaestros = async () => {
-    try {
-      const response = await api.get('/maestros/lookup');
-      setMaestros(response.data || []);
-    } catch (error) {
-      console.error("Error al cargar maestros lookup:", error);
-    }
-  };
-
-  const cargarDams = async () => {
-    try {
-      const aforoBool = aforoFiltro === 'REALIZADO' ? true : aforoFiltro === 'PENDIENTE' ? false : undefined;
-      const response = await api.get('/dams/', {
-        params: { 
-          search: debouncedSearch.trim() || undefined, 
-          page, 
-          limit,
-          canal_control: canalFiltro || undefined,
-          aforo_realizado: aforoBool,
-          tipo_valor: tipoValorFiltro || undefined
-        }
-      });
-      setDams(response.data?.data || []);
-      setTotalPages(response.data?.total_paginas || 1);
-      setTotalRegistros(response.data?.total_registros || 0);
-    } catch (error) {
-      console.error("Error al cargar DAMs:", error);
-    }
-  };
 
   const limpiarFiltros = () => {
     setSearchTerm('');
@@ -125,19 +139,6 @@ const Dams = () => {
   };
   const hayFiltrosActivos = !!(searchTerm || canalFiltro || aforoFiltro || tipoValorFiltro);
 
-  const cargarGastosDeDam = async (dam_numero) => {
-    if (!dam_numero) return;
-    setIsLoadingGastos(true);
-    try {
-      const res = await api.get('/gastos/', { params: { search: dam_numero, limit: 100 } });
-      setGastosVinculados(res.data?.data || []);
-    } catch (error) {
-      console.error("Error al cargar gastos de DAM:", error);
-    } finally {
-      setIsLoadingGastos(false);
-    }
-  };
-
   const handleFormChange = (campo, valor) => {
     setFormData(prev => ({ ...prev, [campo]: valor }));
     setHasUnsavedChanges(true);
@@ -147,25 +148,18 @@ const Dams = () => {
     if (hasUnsavedChanges && !(await confirmar({ titulo: 'Cambios sin guardar', mensaje: 'Tienes cambios sin guardar. ¿Deseas descartarlos y cambiar de registro?', textoAceptar: 'Descartar cambios', peligro: true }))) return;
     setSelectedId(d.id_dam);
     setViewMode('MODIFICAR');
-    setFormData({
-      id_maestro: d.id_maestro != null ? String(d.id_maestro) : '',
-      numero_de_dam: d.numero_de_dam || '',
-      serie: d.serie || '',
-      canal_control: d.canal_control || CANAL_CONTROL.VERDE,
-      monto_valor_provisional_usd: d.monto_valor_provisional_usd != null ? String(d.monto_valor_provisional_usd) : '',
-      estado_dam: d.estado_dam || ESTADO_DAM.NUMERADA
-    });
+    setFormData(formularioDesdeDam(d));
     setHasUnsavedChanges(false);
-    cargarGastosDeDam(d.numero_de_dam);
+    mostrarGastosDe(d.numero_de_dam);
   };
 
   const handleNuevo = async () => {
     if (hasUnsavedChanges && !(await confirmar({ titulo: 'Cambios sin guardar', mensaje: 'Tienes cambios sin guardar. ¿Deseas descartarlos y crear uno nuevo?', textoAceptar: 'Descartar cambios', peligro: true }))) return;
     setSelectedId(null);
     setViewMode('NUEVO');
-    setFormData(estadoInicial);
+    setFormData(FORMULARIO_VACIO);
     setHasUnsavedChanges(true);
-    setGastosVinculados([]);
+    setDamGastos(null);
   };
 
   const handleGuardar = async (e) => {
@@ -190,12 +184,12 @@ const Dams = () => {
         const res = await api.post('/dams/', payload);
         setSelectedId(res.data.id_dam);
         setViewMode('MODIFICAR');
-        cargarGastosDeDam(payload.numero_de_dam);
+        mostrarGastosDe(payload.numero_de_dam);
       } else {
         await api.put(`/dams/${selectedId}`, payload);
       }
 
-      await cargarDams();
+      await recargarDams();
       setHasUnsavedChanges(false);
       avisar("✅ Declaración DAM guardada exitosamente.", 'exito');
     } catch (error) {

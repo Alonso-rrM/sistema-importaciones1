@@ -47,3 +47,22 @@ test('crear un voucher y eliminarlo con su motivo', async ({ page }) => {
   await expect(page.getByText('OP-E2E-UI-9')).toHaveCount(0);
   expect(errores).toEqual([]);
 });
+
+test('desde Logística, "Ver detalle" abre la DAM con sus gastos', async ({ page }) => {
+  const errores = vigilarErrores(page);
+  await iniciarSesion(page);
+  await page.goto('/app/logistica');
+  await page.getByText('GF-E2E-1', { exact: false }).first().click();
+  await page.getByRole('button', { name: 'Ver detalle ➔' }).first().click();
+  await expect(page).toHaveURL(/\/app\/dams/);
+  await expect(page.getByText('DAM 118-2026-10-000001').first()).toBeVisible();
+  await expect(page.getByText('FLETE LOCAL').first()).toBeVisible();   // gastos vinculados a la DAM
+  expect(errores).toEqual([]);
+});
+
+test('en DAMs, seleccionar una DAM muestra sus gastos', async ({ page }) => {
+  await iniciarSesion(page);
+  await page.goto('/app/dams');
+  await page.getByText('118-2026-10-000001').first().click();
+  await expect(page.getByText('TRIBUTOS').first()).toBeVisible();
+});
