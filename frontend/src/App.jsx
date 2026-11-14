@@ -4,6 +4,7 @@ import ProveedorInteraccion from './components/ProveedorInteraccion'
 import Login from './pages/Login'
 import Setup from './pages/Setup'
 import AdminPanel from './pages/AdminPanel'
+import Usuarios from './pages/Usuarios'
 import Layout from './components/Layout'
 import Proveedores from './pages/Proveedores'
 import Importadores from './pages/Importadores'
@@ -58,6 +59,7 @@ function App() {
 
             {/* Administración / Carga Masiva (SuperAdmin) */}
             <Route path="admin" element={<AdminPanel />} />
+            <Route path="usuarios" element={<Usuarios />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/login" replace />} />

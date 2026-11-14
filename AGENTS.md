@@ -46,6 +46,12 @@ Archivos clave:
   `reset_database.sql` (borra todos los datos) y `preparar_base_e2e.py` (solo pruebas).
 - `.env.example`: todas las variables de entorno con su explicación. Si agregas una variable, documéntala ahí.
 - `constantes.DATOS_ROLES_INICIALES`: nombre y descripción de los roles; lo usan `/setup` y `seed_inicial.py`.
+- Usuarios: `routers/usuarios.py` (listar, crear, modificar rol/correo/activo, restablecer contraseña y
+  `PUT /usuarios/me/clave` para la propia) con las reglas de `domain/usuarios.py` (el Administrador no se quita
+  el acceso; siempre queda uno activo). Pantalla: `frontend/src/pages/Usuarios.jsx`.
+- Sesiones: el token lleva `iat`; `dependencies.get_current_user` rechaza los emitidos antes de
+  `Usuario.clave_cambiada_en` (cambiar una contraseña cierra las sesiones anteriores). El usuario, su rol y si
+  está activo se leen de la base en cada petición: desactivar o cambiar el rol rige de inmediato.
 
 Frontend (`frontend/src/`):
 
@@ -131,9 +137,9 @@ Deuda conocida y aceptada por ahora:
   creación rápida (`components/ModalCrearProveedorRapido.jsx`) solo ofrece Nacional e Internacional.
 - `Dams.jsx`, `Vouchers.jsx`, `Reportes.jsx` y `AdminPanel.jsx` siguen siendo archivos largos (sin advertencias);
   se pueden partir igual que Gastos y Logística cuando haya que tocarlos.
-- No hay pantalla de usuarios: la API solo permite CREARLOS (`POST /usuarios/`, o `scripts/crear_usuario.py`).
-  No se pueden listar, desactivar ni cambiar su contraseña sin entrar a la base. Las bases ya instaladas
-  conservan los nombres de rol con que nacieron (solo cambia el texto; el sistema compara el número).
+- Las bases ya instaladas conservan los nombres de rol con que nacieron (solo cambia el texto; el sistema compara
+  el número). Se pueden renombrar desde la base si se desea uniformarlos con `DATOS_ROLES_INICIALES`.
+- Los usuarios no se eliminan, se desactivan (conservan su historial en la bitácora).
 - Funciones de consulta y reportes todavía largas (120-180 líneas): `listar_gastos` (finanzas),
   `obtener_datos_liquidacion_contenedor` y `kpi_gastos_maestro` (operaciones), `obtener_analytics_cockpit` y
   `exportar_sabana_liquidaciones` (reportes). Tienen poca cobertura de pruebas: antes de partirlas, agregar
@@ -179,6 +185,8 @@ GitHub Actions (`.github/workflows/ci.yml`) corre todo lo anterior en cada subid
 
 - Los almacenes guardan su `ubicacion` (migración `e7b41c9a2f60`); antes la pantalla la pedía y se perdía.
 - "+ Registrar Gasto" desde una DAM abre Gastos con esa DAM y su contenedor ya elegidos.
+- Cuentas de usuario: el nombre de usuario no se cambia (es su identidad en la bitácora); las cuentas se
+  desactivan, no se borran. Las reglas de usuario, correo y contraseña están en `domain/validaciones.py`.
 - Formatos (fase 5):
   - RUC: 11 dígitos, empieza con 10, 15, 16, 17 o 20 y su dígito verificador (módulo 11 de SUNAT) debe cuadrar.
     Obligatorio en importadores y agentes; opcional en proveedores peruanos; libre en proveedores del exterior.

@@ -3,11 +3,14 @@ import { Outlet, NavLink, useNavigate, Navigate } from 'react-router-dom';
 import { useTheme } from '../context/tema';
 import api from '../services/api';
 import { obtenerUsuario, guardarUsuario, limpiarSesionLocal } from '../utils/session';
-import { BarChart3, Package, FileText, Building2, Users, Briefcase, Factory, Tags, FileDigit, Landmark, Ticket, Banknote, Scale, ShieldCheck, Settings, Sun, Moon, LogOut } from 'lucide-react';
+import { BarChart3, Package, FileText, Building2, Users, Briefcase, Factory, Tags, FileDigit, Landmark, Ticket, Banknote, Scale, ShieldCheck, Settings, Sun, Moon, LogOut, UserCog, KeyRound } from 'lucide-react';
 import { ROL } from '../constants';
+import { mensajeDeError, useInteraccion } from '../context/interaccion';
+import { validarClave } from '../utils/validaciones';
 
 function Layout() {
   const navigate = useNavigate();
+  const { avisar, pedirDatos } = useInteraccion();
   const { isDark, toggleTheme } = useTheme();
   const usuario = obtenerUsuario();
   const userRole = usuario?.id_rol ?? null;
@@ -35,6 +38,32 @@ function Layout() {
     try { await api.post('/logout'); } catch { /* aunque falle la red, se limpia la sesión local */ }
     limpiarSesionLocal();
     navigate('/login');
+  };
+
+  // Cambio de la contraseña propia: al confirmarse, el servidor cierra las sesiones y se vuelve a ingresar
+  const cambiarMiClave = async () => {
+    const datos = await pedirDatos({
+      titulo: 'Cambiar mi contraseña',
+      mensaje: 'Al cambiarla deberá ingresar nuevamente con la nueva contraseña.',
+      campos: [
+        { nombre: 'actual', etiqueta: 'Contraseña actual', tipo: 'password' },
+        { nombre: 'nueva', etiqueta: 'Nueva contraseña', tipo: 'password', validar: (v) => validarClave(v).error },
+        { nombre: 'repetir', etiqueta: 'Repita la nueva contraseña', tipo: 'password' },
+      ],
+      textoAceptar: 'Cambiar contraseña',
+    });
+    if (!datos) return;
+    if (datos.nueva !== datos.repetir) {
+      avisar('Las contraseñas nuevas no coinciden.', 'advertencia');
+      return;
+    }
+    try {
+      await api.put('/usuarios/me/clave', { clave_actual: datos.actual, clave_nueva: datos.nueva });
+      avisar('✅ Contraseña cambiada. Ingrese con la nueva contraseña.', 'exito');
+      await cerrarSesion();
+    } catch (error) {
+      avisar(mensajeDeError(error, 'No se pudo cambiar la contraseña.'), 'error');
+    }
   };
 
   const navClass = ({ isActive }) => 
@@ -71,6 +100,7 @@ function Layout() {
             {userRole === ROL.SUPERADMIN && (
               <>
                 <div className="w-6 h-px bg-slate-700 my-1 mx-auto"></div>
+                <NavLink to="/app/usuarios" className={navClass} title="Usuarios"><UserCog size={18} className="shrink-0" /></NavLink>
                 <NavLink to="/app/admin" className={navClass} title="Administración & Carga Masiva"><Settings size={18} className="shrink-0" /></NavLink>
               </>
             )}
@@ -84,6 +114,9 @@ function Layout() {
             title={isDark ? "Cambiar a Modo Claro" : "Cambiar a Modo Oscuro"}
           >
             {isDark ? <Sun size={15} className="shrink-0" /> : <Moon size={15} className="shrink-0" />}
+          </button>
+          <button type="button" onClick={cambiarMiClave} className="relative h-8 w-8 rounded-full bg-slate-700 border border-slate-600 flex items-center justify-center text-slate-300 hover:ring-2 hover:ring-amber-500 transition-all cursor-pointer" title="Cambiar mi contraseña">
+            <KeyRound size={15} className="shrink-0" />
           </button>
           <button onClick={cerrarSesion} className="relative h-8 w-8 rounded-full bg-slate-700 border border-slate-600 flex items-center justify-center font-semibold text-slate-300 hover:ring-2 hover:ring-rose-500 transition-all cursor-pointer" title="Cerrar Sesión">
             <LogOut size={15} className="shrink-0" />

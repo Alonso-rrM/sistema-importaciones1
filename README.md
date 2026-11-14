@@ -67,14 +67,14 @@ El frontend llama a la API por `/api`, que Vite reenvía al puerto 8000 (`fronte
    usuario). Alternativa por consola: `python scripts/seed_inicial.py` con `ADMIN_PASSWORD` en el `.env`.
 2. Opcional: cargue los catálogos de ejemplo (bancos, conceptos, agentes, importadores) desde `plantillas/`,
    desde el Panel de Administración o con `python scripts/cargar_plantillas.py`.
-3. Cree los usuarios de Logística, Tesorería y Auditoría. **Todavía no hay pantalla de usuarios**: se crean
-   por consola (la contraseña se pide por teclado):
+3. Cree los usuarios de Logística, Tesorería y Auditoría en la pantalla **Usuarios** (ícono de persona con
+   engranaje, solo para el Administrador). Ahí también se cambia el rol o el correo, se desactiva una cuenta y se
+   restablece una contraseña. Cada usuario cambia la suya con el botón de la llave (abajo a la izquierda).
+   Alternativa por consola: `python scripts/crear_usuario.py --usuario mperez --correo mperez@empresa.com --rol logistica`.
 
-   ```bash
-   python scripts/crear_usuario.py --usuario mperez --correo mperez@empresa.com --rol logistica
-   ```
-
-   Roles: `administrador`, `logistica`, `tesoreria`, `auditoria`.
+   Desactivar una cuenta o cambiar su contraseña cierra sus sesiones abiertas en su siguiente acción;
+   un cambio de rol también rige desde su siguiente acción. El sistema no permite que el Administrador se quite
+   el acceso a sí mismo ni que quede sin ningún Administrador activo.
 
 ## Roles
 

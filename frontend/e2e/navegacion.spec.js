@@ -18,6 +18,7 @@ const PANTALLAS = [
   ['pagos', /F001-0*1|FLETE LOCAL/],
   ['auditoria', /Auditor[ií]a/i],
   ['admin', /Carga|Administraci[oó]n/i],
+  ['usuarios', /Usuarios del Sistema/],
 ];
 
 test.describe('sin sesión previa', () => {
