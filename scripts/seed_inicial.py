@@ -30,17 +30,7 @@ load_dotenv()
 from database import SessionLocal
 from security import get_password_hash
 import models
-from constantes import Rol
-
-# -----------------------------------------------------------
-# CONFIGURACION: Roles del sistema
-# -----------------------------------------------------------
-ROLES_INICIALES = [
-    {"id_rol": Rol.SUPERADMIN, "nombre": "SuperAdmin", "descripcion": "Acceso total al sistema. Gestion de usuarios y configuracion."},
-    {"id_rol": Rol.OPERACIONES, "nombre": "Operaciones", "descripcion": "Gestion de maestros, DAMs y gastos logisticos."},
-    {"id_rol": Rol.FINANZAS, "nombre": "Finanzas", "descripcion": "Gestion de pagos, vouchers y reportes financieros."},
-    {"id_rol": Rol.AUDITOR, "nombre": "Auditor", "descripcion": "Solo lectura. Acceso a logs de auditoria y reportes."},
-]
+from constantes import DATOS_ROLES_INICIALES, Rol   # roles: los mismos que crea /setup
 
 # -----------------------------------------------------------
 # CONFIGURACION: Usuario Administrador Inicial
@@ -66,7 +56,7 @@ def run():
         # PASO 1: Crear Roles
         print("\n[1/2] Creando roles del sistema...")
         roles_creados = 0
-        for rol_data in ROLES_INICIALES:
+        for rol_data in DATOS_ROLES_INICIALES:
             existe = db.query(models.CatRol).filter(models.CatRol.id_rol == rol_data["id_rol"]).first()
             if not existe:
                 db.add(models.CatRol(**rol_data))

@@ -9,6 +9,7 @@ import os
 import requests
 
 from domain.razon_social import acortar_razon_social
+from domain.validaciones import ValorInvalido, normalizar_ruc
 
 URL_CONSULTA_RUC = "https://apiperu.dev/api/ruc/{ruc}"
 TIEMPO_ESPERA_SEGUNDOS = 5
@@ -28,8 +29,11 @@ class ErrorConsultaRuc(Exception):
 
 
 def validar_formato_ruc(ruc: str) -> None:
-    if len(ruc) != 11 or not ruc.isdigit():
-        raise ErrorConsultaRuc(400, "El RUC debe tener 11 dígitos numéricos.")
+    """Un RUC mal digitado (largo, prefijo o dígito verificador) no se consulta: se avisa de inmediato."""
+    try:
+        normalizar_ruc(ruc)
+    except ValorInvalido as exc:
+        raise ErrorConsultaRuc(400, str(exc)) from None
 
 
 def consultar_ruc(ruc: str) -> dict:

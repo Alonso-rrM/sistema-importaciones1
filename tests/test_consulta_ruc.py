@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 import main
 from dependencies import get_current_user
 
-RUC = "20123456789"
+RUC = "20100047218"   # RUC real (dígito verificador correcto)
 
 
 @pytest.fixture
@@ -56,11 +56,14 @@ def test_ruc_valido_devuelve_razon_social_y_nombre_sugerido(cliente, monkeypatch
     }]
 
 
-@pytest.mark.parametrize("ruc", ["123", "2012345678X", "201234567890"])
-def test_ruc_mal_formado_se_rechaza_sin_consultar(cliente, monkeypatch, ruc):
+@pytest.mark.parametrize("ruc, motivo", [
+    ("123", "11 dígitos"), ("2012345678X", "11 dígitos"), ("201234567890", "11 dígitos"),
+    ("20100047219", "dígito verificador"),   # un dígito mal digitado: ni siquiera se consulta a SUNAT
+])
+def test_ruc_mal_formado_se_rechaza_sin_consultar(cliente, monkeypatch, ruc, motivo):
     llamadas = simular_apiperu(monkeypatch, cuerpo=respuesta_ok())
     r = cliente.get(f"/sunat/ruc/{ruc}")
-    assert r.status_code == 400 and "11 dígitos" in r.json()["detail"]
+    assert r.status_code == 400 and motivo in r.json()["detail"]
     assert llamadas == []
 
 

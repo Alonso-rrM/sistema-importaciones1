@@ -7,7 +7,7 @@ from typing import Optional
 import secrets
 
 import models
-from constantes import Rol
+from constantes import DATOS_ROLES_INICIALES, Rol
 from schemas import Username, PasswordSegura, Email
 from services.errores import error_interno
 from fastapi.responses import JSONResponse
@@ -65,15 +65,9 @@ def inicializar_sistema(payload: SetupInicialRequest, db: Session = Depends(get_
 
     try:
         # 1. Crear los 4 roles del sistema
-        roles = [
-            models.CatRol(id_rol=Rol.SUPERADMIN, nombre="Administrador", descripcion="Acceso total. Gestión de usuarios y configuración."),
-            models.CatRol(id_rol=Rol.OPERACIONES, nombre="Logistica", descripcion="Gestión de maestros, DAMs y gastos logísticos."),
-            models.CatRol(id_rol=Rol.FINANZAS, nombre="Tesoreria", descripcion="Gestión de pagos, vouchers y reportes financieros."),
-            models.CatRol(id_rol=Rol.AUDITOR, nombre="Auditor", descripcion="Solo lectura. Acceso a logs y reportes."),
-        ]
-        for rol in roles:
-            if not db.query(models.CatRol).filter(models.CatRol.id_rol == rol.id_rol).first():
-                db.add(rol)
+        for datos_rol in DATOS_ROLES_INICIALES:
+            if not db.query(models.CatRol).filter(models.CatRol.id_rol == datos_rol["id_rol"]).first():
+                db.add(models.CatRol(**datos_rol))
         db.flush()
 
         # 2. Crear el usuario SuperAdmin
@@ -124,7 +118,7 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db
         data={"sub": user.username, "id_rol": user.id_rol, "id_usuario": user.id_usuario}
     )
 
-    # Modo script/API (ej. inversor_masivo.py): el token se entrega en el cuerpo para usarlo como Bearer.
+    # Modo script/API (ej. scripts/cargar_plantillas.py): el token se entrega en el cuerpo para usarlo como Bearer.
     if request.headers.get("X-Auth-Mode", "").lower() == "bearer":
         return {"access_token": access_token, "token_type": "bearer"}
 

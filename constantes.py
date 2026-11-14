@@ -32,6 +32,15 @@ ROLES_FINANZAS = [Rol.SUPERADMIN, Rol.FINANZAS]
 ROLES_AUDITORIA = [Rol.SUPERADMIN, Rol.AUDITOR]
 ROLES_OPERACIONES_Y_FINANZAS = [Rol.SUPERADMIN, Rol.OPERACIONES, Rol.FINANZAS]
 
+# Nombre y descripción con que nacen los roles. Lo usan /setup (routers/auth.py) y scripts/seed_inicial.py,
+# para que la base quede igual por cualquiera de los dos caminos. El sistema solo compara el número (id_rol).
+DATOS_ROLES_INICIALES = [
+    {"id_rol": Rol.SUPERADMIN, "nombre": "Administrador", "descripcion": "Acceso total. Gestión de usuarios y configuración."},
+    {"id_rol": Rol.OPERACIONES, "nombre": "Logística", "descripcion": "Gestión de contenedores, DAMs y gastos logísticos."},
+    {"id_rol": Rol.FINANZAS, "nombre": "Tesorería", "descripcion": "Gestión de pagos, vouchers y tipo de cambio."},
+    {"id_rol": Rol.AUDITOR, "nombre": "Auditoría", "descripcion": "Solo lectura: bitácora, papelera y reportes."},
+]
+
 
 # ----------------------------------------------------------------------------------------------
 # Estados generales

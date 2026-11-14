@@ -154,3 +154,9 @@ def test_las_constantes_del_frontend_son_identicas_a_las_del_backend():
     assert set(frontend) == set(equivalencias)
     for nombre, enum in equivalencias.items():
         assert frontend[nombre] == {m.name: m.value for m in enum}, nombre
+
+
+def test_roles_iniciales_un_registro_por_rol():
+    """/setup y scripts/seed_inicial.py crean los roles desde la misma lista: uno por cada número de rol."""
+    assert sorted(r["id_rol"] for r in C.DATOS_ROLES_INICIALES) == sorted(C.Rol)
+    assert len({r["nombre"] for r in C.DATOS_ROLES_INICIALES}) == len(C.Rol)
