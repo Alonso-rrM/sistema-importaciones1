@@ -82,10 +82,10 @@ def cargar_datos_de_ejemplo():
         return respuesta.json()
 
     hoy = str(datetime.date.today())
-    imp = post("/importadores/", {"nombre": "IMPORTADORA E2E SAC", "ruc": "20100000001"})
-    prov = post("/proveedores/", {"nombre": "NAVIERA E2E", "ruc": "20100000002", "categoria": CategoriaProveedor.NACIONAL})
+    imp = post("/importadores/", {"nombre": "IMPORTADORA E2E SAC", "ruc": "20100000009"})
+    prov = post("/proveedores/", {"nombre": "NAVIERA E2E", "ruc": "20100000017", "categoria": CategoriaProveedor.NACIONAL})
     sunat = post("/proveedores/", {"nombre": "SUNAT", "ruc": "20131312955", "categoria": CategoriaProveedor.ESTADO_O_TRIBUTO})
-    post("/agentes/", {"nombre": "AGENCIA E2E", "ruc": "20100000003"})
+    post("/agentes/", {"nombre": "AGENCIA E2E", "ruc": "20100000025"})
     post("/almacenes/", {"nombre": "ALMACEN E2E"})
     banco = post("/bancos/", {"nombre": "BANCO E2E"})
     doc = post("/tipos-documento/", {"nombre_documento": "FACTURA", "multiplicador_financiero": 1})

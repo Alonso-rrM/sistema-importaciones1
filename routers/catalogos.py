@@ -7,11 +7,13 @@ import io
 import models
 import schemas
 from dependencies import get_db, get_current_user, RoleChecker
-from routers.catalogo_generico import DefinicionCatalogo, normalizar_ruc_opcional, registrar_catalogo
+from routers.catalogo_generico import DefinicionCatalogo, registrar_catalogo
 from services.carga_masiva import ALIAS_COLUMNA_NOMBRE, CONSTRUCTORES, construir_registro
 from domain.conceptos import clase_aduanera_sugerida
+from domain.validaciones import limpiar_texto, normalizar_ruc, normalizar_ruc_opcional
+from services.errores import rechazar_si_invalido
 from constantes import (
-    EstadoRegistro, ROLES_FINANZAS, ROLES_OPERACIONES, ROLES_OPERACIONES_Y_FINANZAS, ROLES_SOLO_ADMIN,
+    CategoriaProveedor, EstadoRegistro, ROLES_FINANZAS, ROLES_OPERACIONES, ROLES_OPERACIONES_Y_FINANZAS, ROLES_SOLO_ADMIN,
 )
 
 # Matriz RBAC de escritura en catálogos (1: Admin, 2: Logística, 3: Tesorería, 4: Auditoría = solo lectura)
@@ -49,10 +51,42 @@ def _concepto_alta(datos: dict) -> dict:
     return datos
 
 
-def _concepto_cambio(datos: dict) -> dict:
+def _concepto_cambio(datos: dict, registro=None) -> dict:
     # La clase nunca queda vacía ni se recalcula al renombrar: solo cambia si se envía un valor
     if datos.get("clase_aduanera") is None:
         datos.pop("clase_aduanera", None)
+    return datos
+
+
+
+def _sin_formato(ruc) -> str:
+    return "".join(str(ruc or "").split()).replace("-", "")
+
+
+def _ruc_peruano_cambio(datos: dict, registro) -> dict:
+    """Agentes e importadores: el RUC se valida solo si cambia (puede haber RUC antiguos sin validar)."""
+    if "ruc" in datos:
+        if _sin_formato(datos["ruc"]) == _sin_formato(registro.ruc):
+            datos.pop("ruc")
+        else:
+            datos["ruc"] = rechazar_si_invalido(normalizar_ruc, datos["ruc"])
+    return datos
+
+
+def _ruc_proveedor_cambio(datos: dict, registro) -> dict:
+    """
+    Proveedores: el RUC se valida si cambia él o la categoría. Peruanos (nacionales y el Estado): RUC opcional
+    pero válido. Del exterior: identificación tributaria libre.
+    """
+    if "ruc" not in datos:
+        return datos
+    categoria = datos.get("categoria") or registro.categoria
+    if _sin_formato(datos["ruc"]) == _sin_formato(registro.ruc) and categoria == registro.categoria:
+        datos.pop("ruc")
+    elif categoria == CategoriaProveedor.INTERNACIONAL:
+        datos["ruc"] = limpiar_texto(datos["ruc"])
+    else:
+        datos["ruc"] = rechazar_si_invalido(normalizar_ruc_opcional, datos["ruc"])
     return datos
 
 
@@ -71,6 +105,7 @@ CATALOGOS_ESTANDAR = [
         roles_escritura=ROLES_OPERATIVOS, singular="agente", plural="agentes",
         nombre_con_articulo="El agente", no_encontrado="Agente no encontrado",
         duplicado_alta=MENSAJE_NOMBRE_O_RUC_DUPLICADO, duplicado_cambio=MENSAJE_NOMBRE_O_RUC_DUPLICADO,
+        preparar_cambio=_ruc_peruano_cambio,
     ),
     DefinicionCatalogo(
         ruta="proveedores", modelo=models.CatProveedor, campo_id="id_proveedor",
@@ -78,7 +113,7 @@ CATALOGOS_ESTANDAR = [
         roles_escritura=ROLES_OPERATIVOS, singular="proveedor", plural="proveedores",
         nombre_con_articulo="El proveedor", no_encontrado="Proveedor no encontrado",
         duplicado_alta=MENSAJE_NOMBRE_O_RUC_DUPLICADO, duplicado_cambio=MENSAJE_NOMBRE_O_RUC_DUPLICADO,
-        preparar_alta=normalizar_ruc_opcional,
+        preparar_cambio=_ruc_proveedor_cambio,
     ),
     DefinicionCatalogo(
         ruta="almacenes", modelo=models.CatAlmacen, campo_id="id_almacen",
@@ -94,6 +129,7 @@ CATALOGOS_ESTANDAR = [
         roles_escritura=ROLES_OPERATIVOS, singular="importador", plural="importadores",
         nombre_con_articulo="El importador", no_encontrado="Importador no encontrado",
         duplicado_alta=MENSAJE_NOMBRE_O_RUC_DUPLICADO, duplicado_cambio=MENSAJE_NOMBRE_O_RUC_DUPLICADO,
+        preparar_cambio=_ruc_peruano_cambio,
     ),
     DefinicionCatalogo(
         ruta="conceptos", modelo=models.CatConceptoPago, campo_id="id_concepto",

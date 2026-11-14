@@ -5,9 +5,9 @@ import { esperarAviso, iniciarSesion, responderDialogo, vigilarErrores } from '.
 const CATALOGOS = [
   { ruta: 'bancos', boton: 'Nuevo Banco', nombre: 'BANCO PRUEBA UI', placeholderNombre: 'Ej. BCP, BBVA' },
   { ruta: 'almacenes', boton: 'Nuevo Almacén', nombre: 'ALMACEN PRUEBA UI', placeholderNombre: 'Ej. DP World Callao' },
-  { ruta: 'agentes', boton: 'Nuevo Agente', nombre: 'AGENCIA PRUEBA UI', placeholderNombre: 'agencia de aduanas', ruc: '20200000011', placeholderRuc: 'Ej. 20111222333' },
-  { ruta: 'importadores', boton: 'Nuevo Importador', nombre: 'IMPORTADOR PRUEBA UI', placeholderNombre: 'Nombre oficial o abreviado de la empresa', ruc: '20200000012', placeholderRuc: 'Ej. 20123456789' },
-  { ruta: 'proveedores', boton: 'Nuevo Proveedor', nombre: 'PROVEEDOR PRUEBA UI', placeholderNombre: 'Nombre oficial o abreviado del proveedor', ruc: '20200000013', placeholderRuc: 'Ej. 20987654321' },
+  { ruta: 'agentes', boton: 'Nuevo Agente', nombre: 'AGENCIA PRUEBA UI', placeholderNombre: 'agencia de aduanas', ruc: '20200000014', placeholderRuc: 'Ej. 20111222333' },
+  { ruta: 'importadores', boton: 'Nuevo Importador', nombre: 'IMPORTADOR PRUEBA UI', placeholderNombre: 'Nombre oficial o abreviado de la empresa', ruc: '20200000022', placeholderRuc: 'Ej. 20123456789' },
+  { ruta: 'proveedores', boton: 'Nuevo Proveedor', nombre: 'PROVEEDOR PRUEBA UI', placeholderNombre: 'Nombre oficial o abreviado del proveedor', ruc: '20200000031', placeholderRuc: 'Ej. 20987654321' },
   { ruta: 'comprobantes', boton: 'Nuevo Comprobante', nombre: 'NOTA DE CREDITO UI', placeholderNombre: 'Ej. Factura Comercial' },
   { ruta: 'conceptos', boton: 'Nuevo Concepto', nombre: 'CONCEPTO PRUEBA UI', placeholderNombre: 'Ej. Flete Internacional' },
 ];
@@ -79,7 +79,7 @@ test('proveedores: se puede registrar una entidad del Estado y filtrar por categ
   await iniciarSesion(page);
   await page.goto('/app/proveedores');
   await page.getByRole('button', { name: 'Nuevo Proveedor' }).first().click();
-  await page.getByPlaceholder('Ej. 20987654321').fill('20200000099');
+  await page.getByPlaceholder('Ej. 20987654321').fill('20200000090');
   await page.locator('form select').selectOption({ label: 'Estado / Tributo (SUNAT)' });
   await page.getByPlaceholder('Nombre oficial o abreviado del proveedor').fill('MUNICIPALIDAD DEL CALLAO');
   await page.locator('form button[type=submit]').click();

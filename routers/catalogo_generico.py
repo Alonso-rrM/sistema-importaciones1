@@ -18,7 +18,7 @@ Para agregar un catálogo nuevo basta con declarar su definición. Si un catálo
 propia al crear o modificar, se pasa en `preparar_alta` / `preparar_cambio` (sin tocar este archivo).
 """
 from dataclasses import dataclass
-from typing import Callable, List, Optional
+from typing import Callable, List
 
 from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel
@@ -32,7 +32,7 @@ from dependencies import RoleChecker, get_current_user, get_db
 MENSAJE_EN_USO = "No se puede eliminar porque este registro está siendo usado en otros módulos."
 
 
-def _sin_cambios(datos: dict) -> dict:
+def _sin_cambios(datos: dict, registro=None) -> dict:
     return datos
 
 
@@ -52,7 +52,8 @@ class DefinicionCatalogo:
     duplicado_alta: str                    # mensaje si el alta viola una restricción única
     duplicado_cambio: str                  # mensaje si la modificación viola una restricción única
     preparar_alta: Callable[[dict], dict] = _sin_cambios
-    preparar_cambio: Callable[[dict], dict] = _sin_cambios
+    # Recibe los datos enviados y el registro tal como está guardado (para validar solo lo que cambia)
+    preparar_cambio: Callable[[dict, object], dict] = _sin_cambios
 
 
 def _buscar(db: Session, d: DefinicionCatalogo, id_registro: int):
@@ -90,7 +91,7 @@ def registrar_catalogo(router: APIRouter, d: DefinicionCatalogo) -> None:
         registro = _buscar(db, d, id_registro)
         if not registro:
             raise HTTPException(status_code=404, detail=d.no_encontrado)
-        for campo, valor in d.preparar_cambio(datos.model_dump(exclude_unset=True)).items():
+        for campo, valor in d.preparar_cambio(datos.model_dump(exclude_unset=True), registro).items():
             setattr(registro, campo, valor)
         try:
             db.commit()
@@ -141,9 +142,3 @@ def registrar_catalogo(router: APIRouter, d: DefinicionCatalogo) -> None:
                          name=f"restaurar_{p}")
     router.add_api_route(f"{con_id}/fisico", eliminar_fisico, methods=["DELETE"], name=f"eliminar_{p}_fisico")
 
-
-def normalizar_ruc_opcional(datos: dict) -> dict:
-    """RUC vacío o con espacios -> None; si viene, sin espacios alrededor."""
-    ruc: Optional[str] = datos.get("ruc")
-    datos["ruc"] = str(ruc).strip() if ruc and str(ruc).strip() else None
-    return datos

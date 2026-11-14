@@ -9,11 +9,13 @@ Cada constructora recibe la fila ya limpia (dict) y devuelve el objeto a inserta
 debe ignorarse (por ejemplo, sin nombre). Si la fila tiene un dato inválido, lanza ValueError con un
 mensaje para la usuaria.
 """
+import re
 from typing import Callable, Optional
 
 import models
 from constantes import ClaseAduanera, TipoGasto
 from domain.conceptos import clase_aduanera_sugerida
+from domain.validaciones import normalizar_ruc_opcional
 
 # Encabezados que se aceptan como sinónimos de la columna "nombre"
 ALIAS_COLUMNA_NOMBRE = [
@@ -23,8 +25,14 @@ ALIAS_COLUMNA_NOMBRE = [
 
 
 def _ruc_desde_excel(valor) -> Optional[str]:
-    """Excel suele entregar el RUC como número (20123456789.0): se convierte a texto sin decimales."""
-    return str(int(float(valor))) if valor is not None else None
+    """
+    RUC de una celda, validado. Excel suele entregarlo como número (20123456789.0): se quita el ".0".
+    Si no es un RUC válido, la fila se rechaza con el motivo (ValorInvalido es un ValueError).
+    """
+    texto = str(valor).strip() if valor is not None else ""
+    if re.fullmatch(r"\d+\.0+", texto):
+        texto = texto.split(".")[0]
+    return normalizar_ruc_opcional(texto)
 
 
 def _rol(fila: dict):

@@ -1,5 +1,6 @@
 import os
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
@@ -8,6 +9,7 @@ from fastapi.responses import JSONResponse
 from security import COOKIE_SESION, CSRF_HEADER
 from dependencies import limiter
 from services.errores import ErrorDeNegocio
+from services.mensajes_validacion import traducir_errores
 from routers import auditoria, auth, catalogos, finanzas, integraciones, operaciones, reportes, usuarios
 
 # La documentación interactiva (/docs, /redoc, /openapi.json) expone el mapa completo de la API.
@@ -29,6 +31,12 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 async def responder_error_de_negocio(request: Request, exc: ErrorDeNegocio):
     """Reglas de negocio incumplidas en los servicios: misma respuesta que una HTTPException."""
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detalle})
+
+
+@app.exception_handler(RequestValidationError)
+async def responder_datos_invalidos(request: Request, exc: RequestValidationError):
+    """Datos que no cumplen el formato: misma forma de respuesta (422), con mensajes en español."""
+    return JSONResponse(status_code=422, content={"detail": traducir_errores(exc.errors())})
 
 
 cors_env = os.getenv("CORS_ORIGINS")

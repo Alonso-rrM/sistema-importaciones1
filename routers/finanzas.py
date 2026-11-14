@@ -9,7 +9,8 @@ from sqlalchemy.orm.exc import StaleDataError
 from sqlalchemy import func
 
 import models
-from services.errores import error_interno
+from services.errores import error_interno, rechazar_si_invalido
+from domain.validaciones import limpiar_texto, normalizar_comprobante
 import schemas
 from dependencies import get_db, get_current_user, RoleChecker
 from services.audit import registrar_auditoria, registrar_auditoria_sync
@@ -52,6 +53,37 @@ def validar_voucher_unico(db: Session, banco_id: int, numero_operacion: str, exc
 # 1. GASTOS
 # ==========================================
 
+def _numero_documento_segun_proveedor(proveedor: models.CatProveedor, numero: Optional[str]) -> Optional[str]:
+    """
+    Forma canónica del N° de documento de un gasto según quién lo emite:
+    proveedor nacional -> comprobante SERIE-CORRELATIVO (F001-00000123); del exterior o el Estado (C.D.A.,
+    liquidaciones de SUNAT) -> el texto tal como se digitó, sin espacios sobrantes.
+    """
+    if proveedor.categoria in (CategoriaProveedor.INTERNACIONAL, CategoriaProveedor.ESTADO_O_TRIBUTO):
+        return limpiar_texto(numero)
+    return rechazar_si_invalido(normalizar_comprobante, numero)
+
+
+def _rechazar_documento_repetido(db: Session, id_proveedor: int, id_tipo_doc: int, numero: Optional[str],
+                                 excepto_id: Optional[int] = None) -> None:
+    """Candado anti-duplicados: un mismo comprobante del mismo proveedor solo se registra una vez."""
+    if not numero:
+        return
+    consulta = db.query(models.RegistroGasto.id_gasto).filter(
+        models.RegistroGasto.id_proveedor == id_proveedor,
+        models.RegistroGasto.id_tipo_doc == id_tipo_doc,
+        models.RegistroGasto.numero_documento == numero,
+        models.RegistroGasto.estado_registro == EstadoRegistro.ACTIVO,
+    )
+    if excepto_id is not None:
+        consulta = consulta.filter(models.RegistroGasto.id_gasto != excepto_id)
+    if consulta.first():
+        raise HTTPException(
+            status_code=400,
+            detail=f"Duplicidad detectada: Ya existe un gasto registrado con el documento {numero} para este proveedor."
+        )
+
+
 @router.post("/gastos/", response_model=schemas.RegistroGasto)
 async def crear_gasto(
     request: Request,
@@ -69,28 +101,9 @@ async def crear_gasto(
     if dam_padre and dam_padre.maestro and dam_padre.maestro.estado_documentario == EstadoDocumentario.ATENCION_TOTAL and current_user.id_rol != Rol.SUPERADMIN:
         raise HTTPException(status_code=403, detail="Operación Denegada: El expediente se encuentra en ATENCIÓN TOTAL. No se pueden agregar nuevos gastos a una operación concluida.")
 
-    # 2. Normalización Estricta del Número de Documento
-    if proveedor.categoria != CategoriaProveedor.ESTADO_O_TRIBUTO and gasto.numero_documento and "-" in gasto.numero_documento:
-        partes = gasto.numero_documento.split("-", 1)
-        if len(partes) == 2:
-            serie = partes[0]
-            correlativo = partes[1].zfill(8) # Rellena con ceros a la izquierda hasta 8 dígitos
-            gasto.numero_documento = f"{serie}-{correlativo}"
-
-    # 3. Candado Lógico Anti-Duplicados Documentales
-    if gasto.numero_documento:
-        gasto_duplicado = db.query(models.RegistroGasto).filter(
-            models.RegistroGasto.id_proveedor == gasto.id_proveedor,
-            models.RegistroGasto.id_tipo_doc == gasto.id_tipo_doc,
-            models.RegistroGasto.numero_documento == gasto.numero_documento,
-            models.RegistroGasto.estado_registro == EstadoRegistro.ACTIVO
-        ).first()
-        
-        if gasto_duplicado:
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Duplicidad detectada: Ya existe un gasto registrado con el documento {gasto.numero_documento} para este proveedor."
-            )
+    # 2. Número de documento en su forma canónica (según el proveedor) y 3. candado anti-duplicados
+    gasto.numero_documento = _numero_documento_segun_proveedor(proveedor, gasto.numero_documento)
+    _rechazar_documento_repetido(db, gasto.id_proveedor, gasto.id_tipo_doc, gasto.numero_documento)
 
     # 4. Guardar en Base de Datos (Transacción Atómica ACID)
     try:
@@ -158,7 +171,22 @@ def actualizar_gasto(id_gasto: int, gasto_editado: schemas.RegistroGastoUpdate, 
             db.commit()
             db.refresh(db_gasto)
         return db_gasto
-        
+
+    # Documento: se normaliza y se revisa contra duplicados solo si cambia él o su emisor
+    # (un gasto antiguo con otro formato se puede seguir editando sin tocar su documento)
+    if any(campo in update_data and update_data[campo] != getattr(db_gasto, campo)
+           for campo in ("numero_documento", "id_proveedor", "id_tipo_doc")):
+        id_proveedor = update_data.get("id_proveedor") or db_gasto.id_proveedor
+        proveedor = db.query(models.CatProveedor).filter(models.CatProveedor.id_proveedor == id_proveedor).first()
+        if not proveedor:
+            raise HTTPException(status_code=404, detail="El proveedor especificado no existe.")
+        numero = update_data["numero_documento"] if "numero_documento" in update_data else db_gasto.numero_documento
+        numero = _numero_documento_segun_proveedor(proveedor, numero)
+        if "numero_documento" in update_data or numero != db_gasto.numero_documento:
+            update_data["numero_documento"] = numero
+        _rechazar_documento_repetido(db, id_proveedor, update_data.get("id_tipo_doc") or db_gasto.id_tipo_doc,
+                                     numero, excepto_id=id_gasto)
+
     for key, value in update_data.items():
         setattr(db_gasto, key, value)
         

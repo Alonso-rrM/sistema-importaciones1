@@ -9,7 +9,8 @@ from sqlalchemy import func
 
 import models
 from domain.finanzas import amortizacion_de_pago
-from services.errores import error_interno
+from services.errores import error_interno, rechazar_si_invalido
+from domain.validaciones import normalizar_numero_dam
 import schemas
 from dependencies import get_db, get_current_user, RoleChecker
 from services.audit import registrar_auditoria, registrar_auditoria_sync
@@ -50,6 +51,17 @@ def validar_dam_garantizada(dam: schemas.DetalleDamCreate):
             detail="Operación rechazada. Como el Maestro es 'GARANTIZADO', el monto de valor garantizado es obligatorio y debe ser mayor a 0."
         )
     return dam
+
+def _rechazar_dam_repetida(db: Session, numero_de_dam: str, excepto_id: Optional[int] = None) -> None:
+    """Un N° de DAM identifica una sola declaración: si ya está registrado, se informa dónde."""
+    consulta = db.query(models.DetalleDam).filter(models.DetalleDam.numero_de_dam == numero_de_dam)
+    if excepto_id is not None:
+        consulta = consulta.filter(models.DetalleDam.id_dam != excepto_id)
+    existente = consulta.first()
+    if existente:
+        factura = existente.maestro.numero_factura if existente.maestro else "otro contenedor"
+        raise HTTPException(status_code=400, detail=f"La DAM {numero_de_dam} ya está registrada (contenedor {factura}).")
+
 
 ESTRATEGIAS_VALIDACION_DAM = {
     TipoValor.DEFINITIVO: validar_dam_definitiva,
@@ -103,8 +115,18 @@ def validar_transicion_dam(estado_actual: str, estado_nuevo: str, tipo_valor: st
 # 1. MAESTRO IMPORTACIONES (OPERACIONES)
 # ==========================================
 
+def _rechazar_factura_repetida(db: Session, numero_factura: str, excepto_id: Optional[int] = None) -> None:
+    """El N° de factura identifica al expediente: si ya existe, se informa con un mensaje claro."""
+    consulta = db.query(models.MaestroImportacion.id_maestro).filter(models.MaestroImportacion.numero_factura == numero_factura)
+    if excepto_id is not None:
+        consulta = consulta.filter(models.MaestroImportacion.id_maestro != excepto_id)
+    if consulta.first():
+        raise HTTPException(status_code=400, detail=f"Ya existe un expediente con la factura {numero_factura}.")
+
+
 @router.post("/maestros/", response_model=schemas.MaestroImportacion)
 def crear_maestro(maestro: schemas.MaestroImportacionCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(RoleChecker(ROLES_OPERACIONES))):
+    _rechazar_factura_repetida(db, maestro.numero_factura)
     datos = maestro.model_dump()
     # Campos calculados por la máquina de estados: nunca se aceptan del cliente al crear
     datos.update({"estado_documentario": EstadoDocumentario.SIN_NUMERAR, "estado_levante": EstadoLevante.SIN_LEVANTE, "fecha_levante_maestro": None, "version": 1})
@@ -165,6 +187,16 @@ def actualizar_maestro(id_maestro: int, maestro_editado: schemas.MaestroImportac
     fecha_recepcion_final = update_data["fecha_recepcion_almacen"] if "fecha_recepcion_almacen" in update_data else db_maestro.fecha_recepcion_almacen
     if status_final == StatusLlegada.EN_ALMACEN and not fecha_recepcion_final:
         raise HTTPException(status_code=400, detail="Para pasar el contenedor a EN ALMACÉN debe indicar la fecha de recepción en almacén.")
+
+    if update_data.get("numero_factura") and update_data["numero_factura"] != db_maestro.numero_factura:
+        _rechazar_factura_repetida(db, update_data["numero_factura"], excepto_id=id_maestro)
+
+    # Fechas coherentes (se revisan solo si cambia alguna: puede haber expedientes antiguos inconsistentes)
+    if any(campo in update_data and update_data[campo] != getattr(db_maestro, campo) for campo in ("fecha_embarque", "fecha_arribo")):
+        embarque = update_data["fecha_embarque"] if "fecha_embarque" in update_data else db_maestro.fecha_embarque
+        arribo = update_data["fecha_arribo"] if "fecha_arribo" in update_data else db_maestro.fecha_arribo
+        if embarque and arribo and arribo < embarque:
+            raise HTTPException(status_code=422, detail="La fecha de arribo no puede ser anterior a la fecha de embarque.")
 
     # El tipo de valor (DEFINITIVO/GARANTIZADO) define qué levantes son legales: no puede cambiarse
     # cuando alguna DAM ya avanzó en su trámite aduanero (salvo Administrador).
@@ -816,6 +848,7 @@ def crear_dam(dam: schemas.DetalleDamCreate, db: Session = Depends(get_db), curr
     estrategia = ESTRATEGIAS_VALIDACION_DAM.get(maestro.tipo_valor)
     if estrategia:
         dam = estrategia(dam)
+    _rechazar_dam_repetida(db, dam.numero_de_dam)
 
     datos_dam = dam.model_dump()
     # Toda DAM nace en el estado inicial: el levante/aforo NUNCA se declara desde el cliente
@@ -863,6 +896,14 @@ def actualizar_dam(
                 raise HTTPException(status_code=403, detail="Operación Denegada: El contenedor destino está en ATENCIÓN TOTAL.")
         # La fecha de levante la sella el motor de estados, no el usuario
         update_data.pop("fecha_levante", None)
+
+    # El N° de DAM se valida solo si cambia (puede haber DAM antiguas registradas con otro formato)
+    if "numero_de_dam" in update_data:
+        if (update_data["numero_de_dam"] or "").strip() == db_dam.numero_de_dam:
+            update_data.pop("numero_de_dam")
+        else:
+            update_data["numero_de_dam"] = rechazar_si_invalido(normalizar_numero_dam, update_data["numero_de_dam"])
+            _rechazar_dam_repetida(db, update_data["numero_de_dam"], excepto_id=id_dam)
 
     estado_anterior = db_dam.estado_dam
     aforo_anterior = db_dam.aforo_realizado

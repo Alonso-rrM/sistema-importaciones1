@@ -1,7 +1,11 @@
 import logging
 import uuid
+from typing import Any, Callable
+
 from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
+
+from domain.validaciones import ValorInvalido
 
 logger = logging.getLogger("erp")
 
@@ -37,6 +41,14 @@ class ErrorDeNegocio(Exception):
         super().__init__(detalle)
         self.status_code = status_code
         self.detalle = detalle
+
+
+def rechazar_si_invalido(validador: Callable[[Any], Any], valor: Any) -> Any:
+    """Aplica una regla de domain/validaciones.py; si el valor no la cumple, responde 422 con su mensaje."""
+    try:
+        return validador(valor)
+    except ValorInvalido as exc:
+        raise ErrorDeNegocio(422, str(exc)) from None
 
 
 def error_interno_de_negocio(contexto: str, exc: Exception, status_code: int = 400) -> ErrorDeNegocio:

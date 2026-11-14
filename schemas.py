@@ -1,9 +1,12 @@
 import re as _re
 from typing import List, Optional, Dict, Any, Generic, TypeVar, Annotated
-from pydantic import BaseModel, ConfigDict, Field, AfterValidator
+from pydantic import BaseModel, ConfigDict, Field, AfterValidator, model_validator
 
 from datetime import date, datetime
 from decimal import Decimal
+from domain.validaciones import (
+    ValorInvalido, limpiar_texto, normalizar_numero_dam, normalizar_ruc, normalizar_ruc_opcional,
+)
 from constantes import (
     CategoriaProveedor,
     ClaseAduanera,
@@ -22,6 +25,33 @@ from constantes import (
 # Tipos financieros validados (blindaje contra montos negativos/cero y divisas inválidas).
 # Las monedas admitidas se definen una sola vez en constantes.Moneda.
 MontoPositivo = Annotated[Decimal, Field(gt=0, max_digits=15, decimal_places=2)]
+MontoNoNegativo = Annotated[Decimal, Field(ge=0, max_digits=15, decimal_places=2)]
+
+# --- Tipos para lo que digita la usuaria (reglas en domain/validaciones.py) ---
+# Solo se aplican a lo que se ESCRIBE: las respuestas aceptan registros antiguos tal como están.
+
+
+def _texto_obligatorio(valor: str) -> str:
+    limpio = limpiar_texto(valor)
+    if not limpio:
+        raise ValorInvalido("no puede quedar vacío.")
+    return limpio
+
+
+TextoObligatorio = Annotated[str, AfterValidator(_texto_obligatorio)]
+TextoOpcional = Annotated[Optional[str], AfterValidator(limpiar_texto)]
+
+
+def texto_opcional(largo_maximo: int):
+    """Texto opcional de hasta `largo_maximo` caracteres; vacío o solo espacios -> None."""
+    return Optional[Annotated[str, Field(max_length=largo_maximo), AfterValidator(limpiar_texto)]]
+Ruc = Annotated[str, AfterValidator(normalizar_ruc)]
+NumeroDam = Annotated[str, Field(max_length=100), AfterValidator(normalizar_numero_dam)]
+
+
+def _fechas_en_orden(embarque: Optional[date], arribo: Optional[date]) -> None:
+    if embarque and arribo and arribo < embarque:
+        raise ValorInvalido("La fecha de arribo no puede ser anterior a la fecha de embarque.")
 
 # --- Tipos de seguridad para cuentas de usuario ---
 
@@ -64,7 +94,7 @@ class PaginatedResponse(BaseModel, Generic[T]):
 # --- 1. ESQUEMAS PARA CATÁLOGOS ---
 
 class CatBancoCreate(BaseModel):
-    nombre: str
+    nombre: Annotated[TextoObligatorio, Field(max_length=100)]
 
 class CatBanco(BaseModel):
     id_banco: int
@@ -73,11 +103,11 @@ class CatBanco(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 class CatBancoUpdate(BaseModel):
-    nombre: Optional[str] = None
+    nombre: Optional[Annotated[TextoObligatorio, Field(max_length=100)]] = None
 
 class CatAgenteCreate(BaseModel):
-    nombre: str
-    ruc: str
+    nombre: Annotated[TextoObligatorio, Field(max_length=100)]
+    ruc: Ruc
 
 class CatAgente(BaseModel):
     id_agente: int
@@ -87,13 +117,23 @@ class CatAgente(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 class CatAgenteUpdate(BaseModel):
-    nombre: Optional[str] = None
-    ruc: Optional[str] = None
+    nombre: Optional[Annotated[TextoObligatorio, Field(max_length=100)]] = None
+    ruc: Optional[str] = None   # se valida en routers/catalogos.py solo si cambia (puede haber RUC antiguos)
 
 class CatProveedorCreate(BaseModel):
-    nombre: str
+    nombre: Annotated[TextoObligatorio, Field(max_length=200)]
     ruc: Optional[str] = None
     categoria: str = CategoriaProveedor.NACIONAL
+
+    @model_validator(mode="after")
+    def _validar_ruc(self):
+        # Proveedores peruanos (nacionales y el Estado): RUC opcional, pero si se indica debe ser válido.
+        # Del exterior: identificación tributaria libre (sin espacios sobrantes).
+        if self.categoria == CategoriaProveedor.INTERNACIONAL:
+            self.ruc = limpiar_texto(self.ruc)
+        else:
+            self.ruc = normalizar_ruc_opcional(self.ruc)
+        return self
 
 class CatProveedor(BaseModel):
     id_proveedor: int
@@ -104,13 +144,13 @@ class CatProveedor(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 class CatProveedorUpdate(BaseModel):
-    nombre: Optional[str] = None
-    ruc: Optional[str] = None
+    nombre: Optional[Annotated[TextoObligatorio, Field(max_length=200)]] = None
+    ruc: Optional[str] = None   # se valida en routers/catalogos.py solo si cambia (puede haber RUC antiguos)
     categoria: Optional[str] = None
 
 class CatAlmacenCreate(BaseModel):
-    nombre: str
-    ubicacion: Optional[str] = None
+    nombre: Annotated[TextoObligatorio, Field(max_length=100)]
+    ubicacion: texto_opcional(255) = None
 
 class CatAlmacen(BaseModel):
     id_almacen: int
@@ -120,12 +160,12 @@ class CatAlmacen(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 class CatAlmacenUpdate(BaseModel):
-    nombre: Optional[str] = None
-    ubicacion: Optional[str] = None
+    nombre: Optional[Annotated[TextoObligatorio, Field(max_length=100)]] = None
+    ubicacion: texto_opcional(255) = None
 
 class CatImportadorCreate(BaseModel):
-    nombre: str
-    ruc: str
+    nombre: Annotated[TextoObligatorio, Field(max_length=150)]
+    ruc: Ruc
 
 class CatImportador(BaseModel):
     id_importador: int
@@ -135,14 +175,14 @@ class CatImportador(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 class CatImportadorUpdate(BaseModel):
-    nombre: Optional[str] = None
-    ruc: Optional[str] = None
+    nombre: Optional[Annotated[TextoObligatorio, Field(max_length=150)]] = None
+    ruc: Optional[str] = None   # se valida en routers/catalogos.py solo si cambia (puede haber RUC antiguos)
 
 
 
 class CatConceptoPagoCreate(BaseModel):
-    nombre: str
-    descripcion: Optional[str] = None
+    nombre: Annotated[TextoObligatorio, Field(max_length=100)]
+    descripcion: TextoOpcional = None
     tipo_gasto: Optional[str] = TipoGasto.FIJO_DESPACHO
     # Papel en el despacho aduanero. Si no se envía, el servidor propone uno según el nombre.
     clase_aduanera: Optional[ClaseAduanera] = None
@@ -157,8 +197,8 @@ class CatConceptoPago(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 class CatConceptoPagoUpdate(BaseModel):
-    nombre: Optional[str] = None
-    descripcion: Optional[str] = None
+    nombre: Optional[Annotated[TextoObligatorio, Field(max_length=100)]] = None
+    descripcion: TextoOpcional = None
     tipo_gasto: Optional[str] = None
     clase_aduanera: Optional[ClaseAduanera] = None
 
@@ -169,10 +209,10 @@ class CatalogoDocumentoPagoBase(BaseModel):
     multiplicador_financiero: int
 
 class CatalogoDocumentoPagoCreate(CatalogoDocumentoPagoBase):
-    pass
+    nombre_documento: Annotated[TextoObligatorio, Field(max_length=50)]
 
 class CatalogoDocumentoPagoUpdate(BaseModel):
-    nombre_documento: Optional[str] = None
+    nombre_documento: Optional[Annotated[TextoObligatorio, Field(max_length=50)]] = None
     multiplicador_financiero: Optional[int] = None
 
 class CatalogoDocumentoPago(CatalogoDocumentoPagoBase):
@@ -207,13 +247,14 @@ class VoucherBancarioBase(BaseModel):
     fecha_transferencia: date
 
 class VoucherBancarioCreate(VoucherBancarioBase):
+    numero_operacion: Annotated[TextoObligatorio, Field(max_length=100)]
     monto_total: MontoPositivo
     moneda: Moneda
 
 class VoucherBancarioUpdate(BaseModel):
     banco_id: int | None = None
     id_importador: int | None = None
-    numero_operacion: str | None = None
+    numero_operacion: Optional[Annotated[TextoObligatorio, Field(max_length=100)]] = None
     monto_total: Decimal | None = Field(default=None, gt=0, max_digits=15, decimal_places=2)
     saldo_disponible: Decimal | None = None
     moneda: Moneda | None = None
@@ -252,7 +293,17 @@ class MaestroImportacionBase(BaseModel):
     version: int = 1
 
 class MaestroImportacionCreate(MaestroImportacionBase):
-    pass
+    numero_factura: Annotated[TextoObligatorio, Field(max_length=100)]
+    n_cont_fisico: texto_opcional(100) = None
+    documento_transporte: texto_opcional(100) = None
+    fob_usd: Optional[MontoNoNegativo] = None
+    flete_usd: Optional[MontoNoNegativo] = None
+    cfr_usd: Optional[MontoNoNegativo] = None
+
+    @model_validator(mode="after")
+    def _validar_fechas(self):
+        _fechas_en_orden(self.fecha_embarque, self.fecha_arribo)
+        return self
 
 class MaestroImportacion(MaestroImportacionBase):
     id_maestro: int
@@ -261,12 +312,12 @@ class MaestroImportacion(MaestroImportacionBase):
     model_config = ConfigDict(from_attributes=True)
 
 class MaestroImportacionUpdate(BaseModel):
-    numero_factura: str | None = None
-    n_cont_fisico: str | None = None
+    numero_factura: Optional[Annotated[TextoObligatorio, Field(max_length=100)]] = None
+    n_cont_fisico: texto_opcional(100) = None
     id_agente: int | None = None
     id_importador: int | None = None
     id_proveedor: int | None = None
-    documento_transporte: str | None = None
+    documento_transporte: texto_opcional(100) = None
     fecha_embarque: date | None = None
     fecha_arribo: date | None = None
     status_llegada: str | None = None
@@ -275,9 +326,9 @@ class MaestroImportacionUpdate(BaseModel):
     fecha_levante_maestro: date | None = None
     fecha_recepcion_almacen: date | None = None
     id_almacen: int | None = None
-    fob_usd: Decimal | None = None
-    flete_usd: Decimal | None = None
-    cfr_usd: Decimal | None = None
+    fob_usd: Optional[MontoNoNegativo] = None
+    flete_usd: Optional[MontoNoNegativo] = None
+    cfr_usd: Optional[MontoNoNegativo] = None
     venta_sucesiva: str | None = None
     tipo_valor: str | None = None
     version: int | None = None
@@ -309,7 +360,9 @@ class DamLookup(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 class DetalleDamCreate(DetalleDamBase):
-    pass
+    numero_de_dam: NumeroDam
+    serie: texto_opcional(50) = None
+    monto_valor_provisional_usd: Optional[MontoPositivo] = None
 
 class DetalleDam(DetalleDamBase):
     id_dam: int
@@ -318,10 +371,10 @@ class DetalleDam(DetalleDamBase):
 
 class DetalleDamUpdate(BaseModel):
     id_maestro: int | None = None
-    numero_de_dam: str | None = None
-    serie: str | None = None
+    numero_de_dam: str | None = None   # se valida en routers/operaciones.py solo si cambia (puede haber DAM antiguas)
+    serie: texto_opcional(50) = None
     canal_control: str | None = None
-    monto_valor_provisional_usd: Decimal | None = None
+    monto_valor_provisional_usd: Optional[MontoPositivo] = None
     aforo_realizado: bool | None = None  # <--- NUEVO OPCIONAL
     estado_dam: str | None = None
     fecha_levante: date | None = None
@@ -334,11 +387,11 @@ class RegistroGastoCreate(BaseModel):
     id_concepto: int
     id_proveedor: int
     id_tipo_doc: int
-    numero_documento: Optional[str] = None
+    numero_documento: texto_opcional(50) = None   # formato según el proveedor (routers/finanzas.py)
     fecha_vencimiento: Optional[date] = None
     monto_original: MontoPositivo
     moneda: Moneda = Moneda.USD
-    observaciones: Optional[str] = None
+    observaciones: TextoOpcional = None
 
 class PagoDetalleSimple(BaseModel):
     id_pago: int
@@ -382,11 +435,11 @@ class RegistroGastoUpdate(BaseModel):
     id_concepto: int | None = None
     id_proveedor: int | None = None
     id_tipo_doc: int | None = None
-    numero_documento: str | None = None
+    numero_documento: texto_opcional(50) = None
     fecha_vencimiento: date | None = None
     monto_original: Decimal | None = Field(default=None, gt=0, max_digits=15, decimal_places=2)
     moneda: Moneda | None = None
-    observaciones: str | None = None
+    observaciones: TextoOpcional = None
 
 
 # --- 5. ESQUEMAS PARA REGISTRO_PAGOS ---
