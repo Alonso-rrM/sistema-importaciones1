@@ -4,11 +4,14 @@
  * campos: formulario de alta/edición, en orden.
  *   tipo: 'texto' (por defecto) | 'ruc' (con consulta a SUNAT) | 'seleccion' (con `opciones`)
  *   requerido / mensajeRequerido, placeholder, ayuda, valorInicial, vacioComoNulo, ancho: 'medio'
+ *   validar(valor, formulario): mensaje de error o null. Al modificar, solo se aplica si el valor cambió
+ *   (puede haber registros antiguos que no cumplan la regla).
  * buscarEn: campos donde busca el cuadro de búsqueda.
  * tarjeta: qué más muestra cada fila de la bandeja.  ficha: qué muestra la ficha de detalle.
  */
 import { Briefcase, Building2, Factory, FileDigit, Landmark, Tags, Users } from 'lucide-react';
 import { CATEGORIA_PROVEEDOR, CLASE_ADUANERA, TIPO_GASTO } from '../../constants';
+import { validarRuc } from '../../utils/validaciones';
 import GastosDelConcepto from '../conceptos/GastosDelConcepto';
 
 const RUC_O_TEXTO = (r) => (r?.ruc ? `RUC: ${r.ruc}` : 'S/RUC');
@@ -16,6 +19,7 @@ const RUC_O_TEXTO = (r) => (r?.ruc ? `RUC: ${r.ruc}` : 'S/RUC');
 const campoRuc = (placeholder, requerido) => ({
   nombre: 'ruc', etiqueta: 'RUC (11 Dígitos)', tipo: 'ruc', placeholder, requerido,
   mensajeRequerido: 'El RUC es obligatorio.', vacioComoNulo: true, ancho: 'medio',
+  validar: (valor) => validarRuc(valor, { opcional: !requerido }).error,
 });
 
 const campoNombre = (etiqueta, placeholder, mensajeRequerido) => ({
@@ -148,7 +152,12 @@ export const PROVEEDORES = {
     advertenciaBorrado: 'tiene gastos vinculados',
   },
   campos: [
-    campoRuc('Ej. 20987654321', false),
+    {
+      ...campoRuc('Ej. 20987654321', false),
+      // Un proveedor del exterior no tiene RUC peruano: su identificación no se valida
+      validar: (valor, formulario) => (formulario.categoria === CATEGORIA_PROVEEDOR.INTERNACIONAL
+        ? null : validarRuc(valor, { opcional: true }).error),
+    },
     {
       nombre: 'categoria', etiqueta: 'Categoría', tipo: 'seleccion', requerido: true, ancho: 'medio',
       opciones: OPCIONES_CATEGORIA, valorInicial: CATEGORIA_PROVEEDOR.NACIONAL,

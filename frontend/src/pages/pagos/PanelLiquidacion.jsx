@@ -11,6 +11,7 @@ import useConsulta from '../../hooks/useConsulta';
 import { ESTILO_SELECT_MORADO as ESTILO_SELECT } from '../../components/estilosSelect';
 import { ESTADO_PAGO, MONEDA } from '../../constants';
 import { mensajeDeError, useInteraccion } from '../../context/interaccion';
+import { validarMonto } from '../../utils/validaciones';
 import { nuevaClaveIdempotencia } from '../../utils/idempotencia';
 
 const hoy = () => new Date().toISOString().split('T')[0];
@@ -91,13 +92,17 @@ export default function PanelLiquidacion({ gasto: selectedGasto, bancos, tcSuger
       setMensajeError('Debe seleccionar un Voucher bancario con saldo disponible.');
       return;
     }
-    if (!form.importe || parseFloat(form.importe) <= 0) {
-      setMensajeError('Debe ingresar un importe mayor a 0.');
+    const importe = validarMonto(form.importe, { etiqueta: 'El importe' });
+    if (importe.error) {
+      setMensajeError(importe.error);
       return;
     }
-    if (form.pago_moneda_cruzada && !(parseFloat(form.monto_moneda_origen) > 0)) {
-      setMensajeError('Ingrese el débito real del banco en la moneda del voucher.');
-      return;
+    if (form.pago_moneda_cruzada) {
+      const debito = validarMonto(form.monto_moneda_origen, { etiqueta: 'El débito real del banco' });
+      if (debito.error) {
+        setMensajeError(debito.error);
+        return;
+      }
     }
 
     // Confirmación explícita del contenedor y la DAM: evita pagar al contenedor equivocado cuando

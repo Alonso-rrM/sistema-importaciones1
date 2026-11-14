@@ -15,6 +15,7 @@ import ModalCrearProveedorRapido from '../components/ModalCrearProveedorRapido';
 import ModalAnularPago from '../components/ModalAnularPago';
 import { CATEGORIA_PROVEEDOR, ESTADO_PAGO, MONEDA } from '../constants';
 import { mensajeDeError, useInteraccion } from '../context/interaccion';
+import { validarDocumentoSegunProveedor, validarMonto } from '../utils/validaciones';
 import BandejaGastos from './gastos/BandejaGastos';
 import DetalleGasto from './gastos/DetalleGasto';
 import FormularioGasto from './gastos/FormularioGasto';
@@ -42,7 +43,9 @@ const lista = (res) => {
   return Array.isArray(datos?.data) ? datos.data : [];
 };
 
-const etiquetaProveedor = (p) => ({ value: p.id_proveedor, label: p.ruc ? `${p.ruc} - ${p.nombre}` : p.nombre });
+const etiquetaProveedor = (p) => ({
+  value: p.id_proveedor, label: p.ruc ? `${p.ruc} - ${p.nombre}` : p.nombre, categoria: p.categoria,
+});
 
 const CATALOGOS_VACIOS = Object.freeze({
   damsRaw: [], opcionesMaestros: [], opcionesConceptos: [], opcionesProveedores: [], opcionesTiposDoc: [],
@@ -231,10 +234,18 @@ const Gastos = () => {
       avisar(faltante[1], 'advertencia');
       return;
     }
-    const montoTexto = String(form.monto_original ?? '').trim();
-    const monto = parseFloat(montoTexto);
-    if (isNaN(monto) || monto <= 0) {
-      avisar('Por favor ingrese un monto total válido mayor a 0.', 'advertencia');
+    const monto = validarMonto(form.monto_original, { etiqueta: 'El monto total' });
+    // El formato del documento depende del proveedor; al modificar, solo se revisa si cambió él o el proveedor
+    const documentoCambio = viewMode === MODO.NUEVO
+      || String(form.numero_documento ?? '').trim() !== (selectedGasto?.numero_documento ?? '')
+      || form.id_proveedor !== selectedGasto?.id_proveedor;
+    const proveedor = opcionesProveedores.find((p) => p.value === form.id_proveedor);
+    const documento = documentoCambio
+      ? validarDocumentoSegunProveedor(proveedor?.categoria, form.numero_documento)
+      : { valor: form.numero_documento || null, error: null };
+    const error = monto.error || documento.error;
+    if (error) {
+      avisar(error, 'advertencia');
       return;
     }
 
@@ -245,10 +256,10 @@ const Gastos = () => {
         id_concepto: parseInt(form.id_concepto, 10),
         id_proveedor: parseInt(form.id_proveedor, 10),
         id_tipo_doc: parseInt(form.id_tipo_doc, 10),
-        numero_documento: form.numero_documento?.trim() || null,
+        numero_documento: documento.valor,
         fecha_vencimiento: form.fecha_vencimiento || null,
         // El monto viaja como texto: el backend lo lee como Decimal, sin errores de coma flotante
-        monto_original: montoTexto,
+        monto_original: monto.valor,
         moneda: form.moneda || MONEDA.USD,
         observaciones: form.observaciones?.trim() || null,
       };

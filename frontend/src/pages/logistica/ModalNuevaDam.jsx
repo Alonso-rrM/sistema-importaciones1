@@ -3,6 +3,7 @@ import { useEffect, useEffectEvent, useState } from 'react';
 import api from '../../services/api';
 import { CANAL_CONTROL, TIPO_VALOR } from '../../constants';
 import { mensajeDeError, useInteraccion } from '../../context/interaccion';
+import { validarMonto, validarNumeroDam } from '../../utils/validaciones';
 
 const DAM_VACIA = Object.freeze({ numero_de_dam: '', serie: '', canal_control: CANAL_CONTROL.VERDE, monto_valor_provisional_usd: '' });
 
@@ -19,19 +20,21 @@ export default function ModalNuevaDam({ expediente, onCerrar, onCreada }) {
 
   const crear = async (e) => {
     e.preventDefault();
-    if (!dam.numero_de_dam.trim()) {
-      avisar('El N° de DAM es obligatorio.', 'advertencia');
+    const numero = validarNumeroDam(dam.numero_de_dam);
+    const monto = validarMonto(dam.monto_valor_provisional_usd, { etiqueta: 'El monto garantizado', opcional: true });
+    const error = numero.error || monto.error;
+    if (error) {
+      avisar(error, 'advertencia');
       return;
     }
     setGuardando(true);
     try {
       await api.post('/dams/', {
         id_maestro: expediente.id_maestro,
-        numero_de_dam: dam.numero_de_dam.trim(),
+        numero_de_dam: numero.valor,
         serie: dam.serie?.trim() || null,
         canal_control: dam.canal_control || CANAL_CONTROL.VERDE,
-        // El monto viaja como texto: el backend lo lee como Decimal
-        monto_valor_provisional_usd: String(dam.monto_valor_provisional_usd).trim() || null,
+        monto_valor_provisional_usd: monto.valor,   // texto: el backend lo lee como Decimal
       });
       onCerrar();
       avisar('✅ DAM registrada correctamente.', 'exito');

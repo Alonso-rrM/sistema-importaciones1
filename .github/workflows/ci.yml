@@ -71,6 +71,8 @@ jobs:
         run: npm ci
       - name: Linter (ESLint, sin errores y sin advertencias nuevas)
         run: npm run lint:ci
+      - name: Reglas de validación (mismos casos que el backend)
+        run: npm test
       - name: Compilación
         run: npm run build
 

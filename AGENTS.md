@@ -28,7 +28,9 @@ Archivos clave:
   automáticas de la DAM (con su tabla documentada); `evaluar_gatillos_gastos_dam` solo la aplica.
 - `services/pagos.py`: registrar y anular pagos, partidos en pasos. Las rutas de `routers/finanzas.py` solo delegan.
 - `domain/`: reglas puras, sin base de datos: amortización de pagos (`finanzas.py`), sugerencia de clase
-  aduanera (`conceptos.py`), abreviación de razón social (`razon_social.py`).
+  aduanera (`conceptos.py`), abreviación de razón social (`razon_social.py`) y validación de lo que se digita
+  (`validaciones.py`: RUC con dígito verificador, N° de DAM, comprobantes; lanza `ValorInvalido`).
+- `services/mensajes_validacion.py`: traduce los errores 422 de Pydantic a español con el nombre del campo en pantalla.
 - `routers/catalogo_generico.py`: las seis rutas estándar de un catálogo. Bancos, agentes, proveedores,
   almacenes, importadores y conceptos se DECLARAN en `routers/catalogos.py`.
 - `services/carga_masiva.py`: constructoras por catálogo para la carga desde Excel (patrón Factory).
@@ -36,7 +38,9 @@ Archivos clave:
 - `services/sunat.py`: cliente de la consulta de RUC (ApiPeru). `routers/integraciones.py` solo lo expone.
 - `routers/operaciones.py`: contenedores y DAMs. `routers/finanzas.py`: gastos, vouchers, pagos y tipo de cambio.
 - `main.py`: solo arma la aplicación (configuración, middleware y routers).
-- `scripts/verificar_valores.py`: diagnóstico de SOLO LECTURA de valores fuera de catálogo en la base.
+- `scripts/verificar_valores.py`: diagnóstico de SOLO LECTURA de valores fuera de catálogo en la base y,
+  como informe aparte, de RUC, N° de DAM y comprobantes guardados que no cumplen las reglas de validación.
+- `tests/casos_validacion.json`: casos de validación que comparten el backend (pytest) y el frontend (`npm test`).
 
 Frontend (`frontend/src/`):
 
@@ -51,6 +55,8 @@ Frontend (`frontend/src/`):
 - `components/ModalAnularPago.jsx`: única forma de anular/reversar un pago (Pagos, Gastos y Vouchers);
   exporta `LARGO_MINIMO_MOTIVO`. `utils/reversion.js` avisa si la anulación le quitó el levante a una DAM.
 - `components/estilosSelect.js`: estilos de react-select (`ESTILO_SELECT_TEAL`, `ESTILO_SELECT_MORADO`).
+- `utils/validaciones.js`: copia de `domain/validaciones.py` para avisar antes de enviar (`validarRuc`,
+  `validarNumeroDam`, `validarComprobante`, `validarDocumentoSegunProveedor`, `validarMonto`); devuelven `{ valor, error }`.
 - `frontend/e2e/`: pruebas en navegador con Playwright (ver su `README.md`).
 
 ## 3. Rama de trabajo (importante)
@@ -90,6 +96,12 @@ Frontend (`frontend/src/`):
     `useEffectEvent` para manejadores dentro de efectos, modales que se montan solo cuando están abiertos).
 14. Frontend: los montos se envían al backend como TEXTO (el backend los lee como `Decimal`), nunca con `parseFloat`.
 15. Si cambias una pantalla, corre las pruebas e2e (sección 6) y agrega una para el flujo nuevo.
+16. Lo que digita la usuaria se valida con `domain/validaciones.py` (backend) y `utils/validaciones.js` (pantallas).
+    Si cambias una regla, cámbiala en los DOS y agrega su caso a `tests/casos_validacion.json`.
+17. Una validación nueva sobre un dato que ya existe se aplica solo cuando el dato se escribe o CAMBIA: un registro
+    antiguo debe poder verse y editarse sin tocar ese dato (ver `_ruc_peruano_cambio` en `routers/catalogos.py`).
+18. Los errores de formato se informan con `ValorInvalido` (en `schemas.py` como tipo `Annotated`, o con
+    `rechazar_si_invalido` de `services/errores.py` en las rutas). El mensaje se escribe en español, listo para la usuaria.
 
 ## 5. Estado del plan de mejora
 
@@ -100,7 +112,7 @@ Frontend (`frontend/src/`):
 | 2 | Clase aduanera del concepto en un campo (`clase_aduanera`), ya no por nombre | Hecha |
 | 3 | Ordenar el backend: servicio de pagos, catálogos genéricos, `main.py` más delgado, bitácora y máquina de estados | Hecha |
 | 4 | Ordenar el frontend: componentes y hooks comunes, diálogos propios, pruebas e2e | Hecha |
-| 5 | Validación de lo que digita la usuaria (RUC, DAM, comprobantes, montos) | Pendiente |
+| 5 | Validación de lo que digita la usuaria (RUC, DAM, comprobantes, montos) | Hecha |
 | 6 | Limpieza: README, `.env.example`, archivos sobrantes | Pendiente |
 | — | Registro del C.D.A. de SUNAT (ver sección 8) | En análisis |
 
@@ -108,6 +120,8 @@ Deuda conocida y aceptada por ahora:
 
 - Restricciones `CHECK` en la base y validación estricta de `tipo_valor`, `canal_control`, `categoria`
   y `status_llegada`: pendientes hasta revisar la base real con `scripts/verificar_valores.py`.
+- El campo RUC de las pantallas de catálogo solo admite dígitos: un proveedor del exterior con identificación
+  alfanumérica se registra sin RUC (el backend sí la acepta).
 - La categoría de proveedor `ESTADO_O_TRIBUTO` se elige en la pantalla de Proveedores, pero el modal de
   creación rápida (`components/ModalCrearProveedorRapido.jsx`) solo ofrece Nacional e Internacional.
 - `Dams.jsx`, `Vouchers.jsx`, `Reportes.jsx` y `AdminPanel.jsx` siguen siendo archivos largos (sin advertencias);
@@ -138,6 +152,7 @@ Frontend (desde `frontend/`):
 ```bash
 npm ci
 npm run lint:ci
+npm test
 npm run build
 ```
 
@@ -158,6 +173,16 @@ GitHub Actions (`.github/workflows/ci.yml`) corre todo lo anterior en cada subid
 
 - Los almacenes guardan su `ubicacion` (migración `e7b41c9a2f60`); antes la pantalla la pedía y se perdía.
 - "+ Registrar Gasto" desde una DAM abre Gastos con esa DAM y su contenedor ya elegidos.
+- Formatos (fase 5):
+  - RUC: 11 dígitos, empieza con 10, 15, 16, 17 o 20 y su dígito verificador (módulo 11 de SUNAT) debe cuadrar.
+    Obligatorio en importadores y agentes; opcional en proveedores peruanos; libre en proveedores del exterior.
+  - N° de DAM: se guarda como `118-2026-10-000123` (aduana-año-régimen-número). Se acepta digitarlo con año de
+    2 dígitos (`118-26-10-123`, como en el C.D.A.), sin ceros y con espacios, barras o puntos. Dos formas de
+    escribir la misma DAM son la misma DAM (el candado de repetidos las reconoce).
+  - N° de documento del gasto: proveedor nacional -> `SERIE-NÚMERO` con 8 dígitos (`F001-00000123`);
+    del exterior o el Estado (C.D.A., liquidaciones) -> se guarda tal como se digita.
+  - Montos: número con punto decimal, máximo 2 decimales; FOB y flete pueden ser 0.
+  - Expediente: la fecha de arribo no puede ser anterior a la de embarque.
 
 ## 8. Contexto del C.D.A. (trabajo siguiente)
 
@@ -166,6 +191,9 @@ GitHub Actions (`.github/workflows/ci.yml`) corre todo lo anterior en cada subid
   Una DAM tiene varios C.D.A.; un contenedor puede tener varias DAMs. Las facturas de proveedores no tienen C.D.A.
 - Ejemplo real: DAM `118-26-10-535304`; liquidación de cobranza `118-2026-382310` (percepción IGV, S/ 5,305.00)
   con C.D.A. `118-26-10-535304-25-4-01`. El C.D.A. parece ser el número de la DAM más un sufijo.
+- Ojo: el sistema guarda la DAM con año de 4 dígitos (`118-2026-10-535304`) y el C.D.A. la escribe con 2
+  (`118-26-10-535304-...`). Si se valida que un C.D.A. corresponde a su DAM, comparar con
+  `normalizar_numero_dam` aplicado a los cuatro primeros tramos del C.D.A.
 - Encaje previsto: proveedor SUNAT con categoría `ESTADO_O_TRIBUTO`, tipo de documento "C.D.A." en el catálogo
   de comprobantes y el C.D.A. en `numero_documento` del gasto.
 - Por confirmar con la usuaria: si los tributos propios de la DAM comparten un solo C.D.A. (afectaría el

@@ -114,8 +114,16 @@ export default function useCatalogo(definicion) {
   const guardar = async (evento) => {
     evento.preventDefault();
     for (const campo of definicion.campos) {
-      if (campo.requerido && !String(formulario[campo.nombre] ?? '').trim()) {
+      const valorCampo = formulario[campo.nombre] ?? '';
+      if (campo.requerido && !String(valorCampo).trim()) {
         avisar(campo.mensajeRequerido || `El campo ${campo.etiqueta} es obligatorio.`, 'error');
+        return;
+      }
+      // Al modificar, un valor que no cambió no se vuelve a validar (registros antiguos)
+      const sinCambios = modo === MODO.MODIFICAR && String(valorCampo) === String(seleccionado?.[campo.nombre] ?? '');
+      const error = !sinCambios && campo.validar?.(valorCampo, formulario);
+      if (error) {
+        avisar(error, 'advertencia');
         return;
       }
     }

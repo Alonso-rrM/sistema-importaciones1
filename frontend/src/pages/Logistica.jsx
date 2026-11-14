@@ -15,6 +15,7 @@ import ModalCrearProveedorRapido from '../components/ModalCrearProveedorRapido';
 import { FileText, Trash2, Unlock, Receipt, FolderOpen } from 'lucide-react';
 import { CATEGORIA_PROVEEDOR, ESTADO_DOCUMENTARIO, ESTADO_LEVANTE, ROL, STATUS_LLEGADA, TIPO_VALOR } from '../constants';
 import { mensajeDeError, useInteraccion } from '../context/interaccion';
+import { validarMonto } from '../utils/validaciones';
 import BandejaExpedientes from './logistica/BandejaExpedientes';
 import TermometroFinanciero from './logistica/TermometroFinanciero';
 import AvancePagos from './logistica/AvancePagos';
@@ -243,6 +244,18 @@ const Logistica = () => {
     }
     const payload = cuerpoDelFormulario(formData);
     if (!payload.numero_factura) return avisar('El campo N° Factura es obligatorio.', 'advertencia');
+    for (const [campo, etiqueta] of [['fob_usd', 'El FOB'], ['flete_usd', 'El flete']]) {
+      const { error } = validarMonto(formData[campo], { etiqueta, permitirCero: true, opcional: true });
+      if (error) return avisar(error, 'advertencia');
+    }
+    // Fechas coherentes: se revisan si cambió alguna (puede haber expedientes antiguos inconsistentes)
+    const guardado = maestros.find((m) => m.id_maestro === selectedId);
+    const fechasCambiaron = viewMode === 'NUEVO'
+      || payload.fecha_embarque !== (soloFecha(guardado?.fecha_embarque) || null)
+      || payload.fecha_arribo !== (soloFecha(guardado?.fecha_arribo) || null);
+    if (fechasCambiaron && payload.fecha_embarque && payload.fecha_arribo && payload.fecha_arribo < payload.fecha_embarque) {
+      return avisar('La fecha de arribo no puede ser anterior a la fecha de embarque.', 'advertencia');
+    }
 
     setIsGuardando(true);
     try {

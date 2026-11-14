@@ -10,6 +10,7 @@ import useConsulta from '../hooks/useConsulta';
 import useDebounce from '../hooks/useDebounce';
 import { MONEDA } from '../constants';
 import { mensajeDeError, useInteraccion } from '../context/interaccion';
+import { validarMonto } from '../utils/validaciones';
 import BandejaVouchers from './vouchers/BandejaVouchers';
 import FormularioVoucher from './vouchers/FormularioVoucher';
 import PagosDelVoucher from './vouchers/PagosDelVoucher';
@@ -117,8 +118,8 @@ const Vouchers = () => {
     if (!formData.banco_id) return avisar('Debe seleccionar una entidad bancaria.', 'error');
     if (!formData.id_importador) return avisar('Debe seleccionar la empresa importadora.', 'error');
     if (!formData.numero_operacion.trim()) return avisar('Debe ingresar el número de operación.', 'error');
-    const monto = parseFloat(formData.monto_total);
-    if (isNaN(monto) || monto <= 0) return avisar('El monto total debe ser mayor a 0.', 'error');
+    const monto = validarMonto(formData.monto_total, { etiqueta: 'El monto total' });
+    if (monto.error) return avisar(monto.error, 'error');
 
     setIsGuardando(true);
     try {
@@ -126,7 +127,7 @@ const Vouchers = () => {
         banco_id: parseInt(formData.banco_id, 10),
         id_importador: parseInt(formData.id_importador, 10),
         numero_operacion: formData.numero_operacion.trim(),
-        monto_total: String(formData.monto_total).trim(),   // texto: decimal exacto en el servidor
+        monto_total: monto.valor,   // texto: decimal exacto en el servidor
         moneda: formData.moneda,
         fecha_transferencia: formData.fecha_transferencia || null
       };

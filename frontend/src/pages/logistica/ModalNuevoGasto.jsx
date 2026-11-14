@@ -8,6 +8,7 @@ import api from '../../services/api';
 import ModalCrearProveedorRapido from '../../components/ModalCrearProveedorRapido';
 import { CATEGORIA_PROVEEDOR, MONEDA } from '../../constants';
 import { mensajeDeError, useInteraccion } from '../../context/interaccion';
+import { validarDocumentoSegunProveedor, validarMonto } from '../../utils/validaciones';
 
 export default function ModalNuevoGasto({
   expediente, damsVinculadas, opcionesConceptos, opcionesProveedores, opcionesTiposDoc, onProveedorCreado, onCerrar, onRegistrado,
@@ -43,10 +44,12 @@ export default function ModalNuevoGasto({
       avisar(faltante[1], 'advertencia');
       return;
     }
-    const montoTexto = String(gasto.monto_original).trim();
-    const monto = parseFloat(montoTexto);
-    if (isNaN(monto) || monto <= 0) {
-      avisar('El monto debe ser mayor a 0.', 'advertencia');
+    const monto = validarMonto(gasto.monto_original);
+    const proveedor = opcionesProveedores.find((p) => String(p.id_proveedor) === String(gasto.id_proveedor));
+    const documento = validarDocumentoSegunProveedor(proveedor?.categoria, gasto.numero_documento);
+    const error = monto.error || documento.error;
+    if (error) {
+      avisar(error, 'advertencia');
       return;
     }
     setGuardando(true);
@@ -56,8 +59,8 @@ export default function ModalNuevoGasto({
         id_concepto: parseInt(gasto.id_concepto, 10),
         id_proveedor: parseInt(gasto.id_proveedor, 10),
         id_tipo_doc: parseInt(gasto.id_tipo_doc, 10),
-        numero_documento: gasto.numero_documento?.trim() || null,
-        monto_original: montoTexto,
+        numero_documento: documento.valor,
+        monto_original: monto.valor,
         moneda: gasto.moneda || MONEDA.USD,
         observaciones: gasto.observaciones?.trim() || null,
       });

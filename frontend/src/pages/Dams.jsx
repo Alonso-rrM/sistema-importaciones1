@@ -7,7 +7,8 @@ import Paginador from '../components/Paginador';
 import { descargarExcel } from '../utils/exportUtils';
 import { Download, Clock, Search, Settings, FileText, Banknote, Trash2, Zap, CheckCircle2, AlertTriangle, Unlock, CreditCard } from 'lucide-react';
 import { CANAL_CONTROL, ESTADO_DAM, ESTADO_PAGO, TIPO_VALOR } from '../constants';
-import { useInteraccion } from '../context/interaccion';
+import { mensajeDeError, useInteraccion } from '../context/interaccion';
+import { validarMonto, validarNumeroDam } from '../utils/validaciones';
 
 const FORMULARIO_VACIO = {
   id_maestro: '',
@@ -170,18 +171,25 @@ const Dams = () => {
   const handleGuardar = async (e) => {
     e.preventDefault();
     if (!formData.id_maestro) return avisar("Debe seleccionar un Maestro de Importación.", 'advertencia');
-    if (!formData.numero_de_dam.trim()) return avisar("El N° de DAM es obligatorio.", 'advertencia');
+    // El N° de DAM se valida al crear y, al modificar, solo si cambió (puede haber DAM antiguas con otro formato).
+    // `damGastos` guarda el número tal como está registrado.
+    let numeroDam = formData.numero_de_dam.trim();
+    if (viewMode === 'NUEVO' || numeroDam !== damGastos) {
+      const { valor, error } = validarNumeroDam(numeroDam);
+      if (error) return avisar(error, 'advertencia');
+      numeroDam = valor;
+    }
+    const monto = validarMonto(formData.monto_valor_provisional_usd, { etiqueta: 'El monto garantizado', opcional: true });
+    if (monto.error) return avisar(monto.error, 'advertencia');
 
     setIsGuardando(true);
     try {
       const payload = {
         id_maestro: parseInt(formData.id_maestro, 10),
-        numero_de_dam: formData.numero_de_dam.trim(),
+        numero_de_dam: numeroDam,
         serie: formData.serie?.trim() || null,
         canal_control: formData.canal_control || CANAL_CONTROL.VERDE,
-        monto_valor_provisional_usd: formData.monto_valor_provisional_usd !== '' && formData.monto_valor_provisional_usd != null 
-          ? parseFloat(formData.monto_valor_provisional_usd) 
-          : null,
+        monto_valor_provisional_usd: monto.valor,   // texto: el backend lo lee como Decimal
         estado_dam: formData.estado_dam || ESTADO_DAM.NUMERADA
       };
 
@@ -189,18 +197,18 @@ const Dams = () => {
         const res = await api.post('/dams/', payload);
         setSelectedId(res.data.id_dam);
         setViewMode('MODIFICAR');
-        mostrarGastosDe(payload.numero_de_dam);
       } else {
         await api.put(`/dams/${selectedId}`, payload);
       }
+      // El formulario muestra el número como quedó registrado (118-26-10-5 -> 118-2026-10-000005)
+      setFormData((prev) => ({ ...prev, numero_de_dam: numeroDam }));
+      mostrarGastosDe(numeroDam);
 
       await recargarDams();
       setHasUnsavedChanges(false);
       avisar("✅ Declaración DAM guardada exitosamente.", 'exito');
     } catch (error) {
-      const detail = error.response?.data?.detail;
-      const msg = typeof detail === 'string' ? detail : (Array.isArray(detail) ? detail.map(d => `${d.loc ? d.loc.slice(-1) : 'campo'}: ${d.msg}`).join('\n') : 'Error al guardar');
-      avisar(`Error al guardar:\n${msg}`, 'error');
+      avisar(`Error al guardar:\n${mensajeDeError(error, 'Error al guardar')}`, 'error');
     } finally {
       setIsGuardando(false);
     }

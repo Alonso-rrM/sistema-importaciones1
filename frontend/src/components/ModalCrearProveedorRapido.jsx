@@ -2,6 +2,8 @@ import { useState } from 'react';
 import api from '../services/api';
 import { acortarRazonSocial } from '../utils/textUtils';
 import { CATEGORIA_PROVEEDOR } from '../constants';
+import { mensajeDeError } from '../context/interaccion';
+import { validarRuc } from '../utils/validaciones';
 
 const FormularioProveedorRapido = ({
   onClose,
@@ -60,16 +62,21 @@ const FormularioProveedorRapido = ({
     setMensaje({ texto: '', tipo: '' });
 
     const nombreLimpio = nombre.trim();
-    const rucLimpio = ruc.trim();
+    let rucLimpio = ruc.trim();
 
     if (!nombreLimpio) {
       mostrarAlerta('El nombre o razón social es obligatorio.', 'error');
       return;
     }
 
-    if (categoria === CATEGORIA_PROVEEDOR.NACIONAL && rucLimpio && (rucLimpio.length !== 11 || isNaN(rucLimpio))) {
-      mostrarAlerta('Si ingresas un RUC nacional, debe tener 11 dígitos.', 'error');
-      return;
+    // Proveedor peruano: RUC opcional, pero si se ingresa debe ser válido (dígito verificador incluido)
+    if (categoria !== CATEGORIA_PROVEEDOR.INTERNACIONAL) {
+      const { valor, error } = validarRuc(rucLimpio, { opcional: true });
+      if (error) {
+        mostrarAlerta(error, 'error');
+        return;
+      }
+      rucLimpio = valor ?? '';
     }
 
     setGuardando(true);
@@ -89,8 +96,7 @@ const FormularioProveedorRapido = ({
       onClose();
     } catch (err) {
       console.error('Error al registrar proveedor:', err);
-      const detalle = err.response?.data?.detail || err.message || 'Error al guardar proveedor';
-      mostrarAlerta(`Error: ${detalle}`, 'error');
+      mostrarAlerta(`Error: ${mensajeDeError(err, 'Error al guardar proveedor')}`, 'error');
     } finally {
       setGuardando(false);
     }

@@ -8,6 +8,10 @@ Para qué sirve: antes de agregar restricciones (CHECK) en la base y validacione
 hay que saber si existen registros antiguos con valores fuera del catálogo (por ejemplo, escritos con
 un error de tipeo). Si este script no reporta nada, es seguro activar esas restricciones.
 
+Además informa (sin afectar el resultado) los RUC, N° de DAM y comprobantes guardados que no cumplen
+las reglas de domain/validaciones.py. La API acepta esos registros antiguos tal como están y solo exige
+el formato cuando se cambia el dato; este informe sirve para corregirlos con calma si se desea.
+
 Uso (desde la raíz del proyecto):
     python scripts/verificar_valores.py                -> usa DATABASE_URL del entorno / .env
     python scripts/verificar_valores.py --url <URL>    -> revisa otra base
@@ -23,6 +27,9 @@ from dotenv import load_dotenv
 from sqlalchemy import create_engine, inspect, text
 
 import constantes as C
+from domain.validaciones import (
+    ValorInvalido, normalizar_comprobante, normalizar_numero_dam, normalizar_ruc_opcional,
+)
 
 # tabla -> {columna: (catálogo, admite_vacío)}
 REGLAS = {
@@ -50,6 +57,63 @@ REGLAS = {
     },
     "registro_pagos": {"moneda": (C.Moneda, False), "estado_registro": (C.EstadoRegistro, True)},
 }
+
+
+# (tabla, columna con id, columna revisada, regla, condición SQL extra, parámetros, descripción)
+_NO_EXTRANJERO = "(p.categoria IS NULL OR p.categoria NOT IN (:exterior, :estado))"
+FORMATOS = [
+    ("cat_importadores", "id_importador", "ruc", normalizar_ruc_opcional, "", {}, "RUC de importadores"),
+    ("cat_agentes", "id_agente", "ruc", normalizar_ruc_opcional, "", {}, "RUC de agentes"),
+    ("cat_proveedores", "id_proveedor", "ruc", normalizar_ruc_opcional,
+     "WHERE categoria IS NULL OR categoria <> :exterior", {"exterior": C.CategoriaProveedor.INTERNACIONAL},
+     "RUC de proveedores peruanos"),
+    ("detalle_dams", "id_dam", "numero_de_dam", normalizar_numero_dam, "", {}, "N° de DAM"),
+]
+LIMITE_EJEMPLOS = 20
+
+
+def _informar_formato(descripcion, filas, regla):
+    """Cuenta e imprime los valores que no cumplen la regla o que se guardarían de otra forma."""
+    invalidos, distintos, por_forma = [], [], {}
+    for id_, valor in filas:
+        if valor is None or not str(valor).strip():
+            continue
+        try:
+            canonico = regla(valor)
+        except ValorInvalido as exc:
+            invalidos.append((id_, valor, str(exc)))
+            continue
+        if canonico != valor:
+            distintos.append((id_, valor, canonico))
+        por_forma.setdefault(canonico, []).append((id_, valor))
+    repetidos = {forma: ids for forma, ids in por_forma.items() if len(ids) > 1}
+    for id_, valor, motivo in invalidos[:LIMITE_EJEMPLOS]:
+        print(f"[FORMATO NO VÁLIDO] {descripcion} (id {id_}): {valor!r} -> {motivo}")
+    for id_, valor, canonico in distintos[:LIMITE_EJEMPLOS]:
+        print(f"[FORMA DISTINTA] {descripcion} (id {id_}): {valor!r}; con la regla actual sería {canonico!r}")
+    for forma, ids in list(repetidos.items())[:LIMITE_EJEMPLOS]:
+        print(f"[REPETIDO SEGÚN LA REGLA] {descripcion}: {forma!r} aparece en los ids {[i for i, _ in ids]} ({[v for _, v in ids]})")
+    for lista, etiqueta in ((invalidos, "no válidos"), (distintos, "con otra forma")):
+        if len(lista) > LIMITE_EJEMPLOS:
+            print(f"   ... y {len(lista) - LIMITE_EJEMPLOS} más {etiqueta} en {descripcion}.")
+    return len(invalidos) + len(distintos) + len(repetidos)
+
+
+def revisar_formatos(conn, tablas) -> int:
+    """Informe de formatos (RUC, DAM, comprobantes). Devuelve la cantidad de observaciones."""
+    observaciones = 0
+    for tabla, col_id, columna, regla, condicion, parametros, descripcion in FORMATOS:
+        if tabla not in tablas:
+            continue
+        filas = conn.execute(text(f'SELECT "{col_id}", "{columna}" FROM "{tabla}" {condicion}'), parametros).all()
+        observaciones += _informar_formato(descripcion, filas, regla)
+    if {"registro_gastos", "cat_proveedores"} <= tablas:
+        filas = conn.execute(text(
+            "SELECT g.id_gasto, g.numero_documento FROM registro_gastos g "
+            f"JOIN cat_proveedores p ON p.id_proveedor = g.id_proveedor WHERE {_NO_EXTRANJERO}"
+        ), {"exterior": C.CategoriaProveedor.INTERNACIONAL, "estado": C.CategoriaProveedor.ESTADO_O_TRIBUTO}).all()
+        observaciones += _informar_formato("Comprobantes de proveedores nacionales", filas, normalizar_comprobante)
+    return observaciones
 
 
 def main():
@@ -93,7 +157,11 @@ def main():
                         hallazgos += 1
                         print(f"[FUERA DE CATÁLOGO] {tabla}.{columna}: {n} registro(s) con {valor!r}")
 
-    print(f"\nColumnas revisadas: {revisadas}. Valores fuera de catálogo: {hallazgos}.")
+        print("\n--- Formatos de RUC, N° de DAM y comprobantes (informativo) ---")
+        observaciones = revisar_formatos(conn, tablas)
+
+    print(f"\nFormatos: {observaciones} observación(es). Son registros antiguos: la API los acepta tal como están.")
+    print(f"Columnas revisadas: {revisadas}. Valores fuera de catálogo: {hallazgos}.")
     if hallazgos:
         print("Revise esos registros (o indique si el valor es legítimo y debe agregarse a constantes.py).")
         return 1

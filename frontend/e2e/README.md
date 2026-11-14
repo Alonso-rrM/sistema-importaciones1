@@ -32,4 +32,5 @@ Variables opcionales: `E2E_PYTHON` (intérprete de Python, por defecto `python`)
 | `operaciones.spec.js` | Crear un expediente con su DAM; crear y eliminar un voucher |
 | `gastos.spec.js` | Modificar un gasto, reversar uno de sus pagos, eliminarlo con motivo y registrarlo desde una DAM |
 | `logistica.spec.js` | Modificar un expediente, registrarle un gasto rápido y eliminarlo con motivo |
+| `validacion.spec.js` | Avisos de RUC, N° de DAM, comprobante y montos mal digitados, y su forma única al guardarse |
 | `ayudas.js` | Funciones comunes (iniciar sesión, responder diálogos, elegir opciones) |

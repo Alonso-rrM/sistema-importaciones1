@@ -1,4 +1,7 @@
 """Validación y normalización de lo que digita la usuaria (domain/validaciones.py)."""
+import json
+from pathlib import Path
+
 import pytest
 
 from domain.validaciones import (
@@ -137,3 +140,24 @@ def test_comprobante_invalido(texto, fragmento):
 
 def test_comprobante_es_idempotente():
     assert normalizar_comprobante("F001-00000123") == "F001-00000123"
+
+
+# ----------------------------------------------------------------- casos compartidos con el frontend
+
+_CASOS = json.loads((Path(__file__).parent / "casos_validacion.json").read_text(encoding="utf-8"))
+_REGLAS = {"ruc": normalizar_ruc, "numero_dam": normalizar_numero_dam, "comprobante": normalizar_comprobante}
+
+
+@pytest.mark.parametrize("regla, entrada, salida", [
+    (regla, entrada, salida) for regla in _REGLAS for entrada, salida in _CASOS[regla]["validos"]
+])
+def test_casos_compartidos_validos(regla, entrada, salida):
+    assert _REGLAS[regla](entrada) == salida
+
+
+@pytest.mark.parametrize("regla, entrada", [
+    (regla, entrada) for regla in _REGLAS for entrada in _CASOS[regla]["invalidos"]
+])
+def test_casos_compartidos_invalidos(regla, entrada):
+    with pytest.raises(ValorInvalido):
+        _REGLAS[regla](entrada)
