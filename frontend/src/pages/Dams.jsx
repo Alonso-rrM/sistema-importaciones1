@@ -139,6 +139,11 @@ const Dams = () => {
   };
   const hayFiltrosActivos = !!(searchTerm || canalFiltro || aforoFiltro || tipoValorFiltro);
 
+  // Abre Gastos con el formulario de registro ya apuntando a esta DAM (y a su contenedor)
+  const irARegistrarGasto = () => navigate('/app/gastos', {
+    state: { fromDam: { id_dam: selectedId, id_maestro: Number(formData.id_maestro) || null, numero_de_dam: formData.numero_de_dam } },
+  });
+
   const handleFormChange = (campo, valor) => {
     setFormData(prev => ({ ...prev, [campo]: valor }));
     setHasUnsavedChanges(true);
@@ -434,7 +439,7 @@ const Dams = () => {
               <div className="flex items-center gap-2">
                 {viewMode === 'MODIFICAR' && (
                   <>
-                    <button onClick={() => navigate('/app/gastos', { state: { fromDam: formData } })} className="px-3 py-1.5 rounded bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs shadow-sm transition-all flex items-center gap-1.5">
+                    <button onClick={() => irARegistrarGasto()} className="px-3 py-1.5 rounded bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs shadow-sm transition-all flex items-center gap-1.5">
                       <Banknote size={15} className="inline-block shrink-0" /> <span>+ Registrar Gasto</span>
                     </button>
                     <button onClick={() => setModalEliminar({ open: true, id: selectedId, motivo: '' })} className="px-2 py-1.5 rounded text-rose-400 hover:bg-rose-500/10 transition-colors" title="Eliminar DAM">
@@ -634,7 +639,7 @@ const Dams = () => {
                       <span className="px-1.5 py-0.5 rounded-full bg-slate-950 text-[10px] font-mono text-slate-300">{gastosVinculados.length}</span>
                     </div>
                     <button 
-                      onClick={() => navigate('/app/gastos', { state: { fromDam: formData } })}
+                      onClick={() => irARegistrarGasto()}
                       className="px-2.5 py-1 bg-teal-600 hover:bg-teal-500 text-white rounded text-[10px] font-bold shadow-sm transition-all"
                     >
                       + Registrar Gasto
