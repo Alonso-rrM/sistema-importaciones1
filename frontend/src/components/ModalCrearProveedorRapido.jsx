@@ -21,6 +21,9 @@ const FormularioProveedorRapido = ({
     setMensaje({ texto, tipo });
   };
 
+  // Nacionales y entidades del Estado tienen RUC peruano (se valida y se puede consultar en SUNAT)
+  const esPeruano = categoria !== CATEGORIA_PROVEEDOR.INTERNACIONAL;
+
   const handleBuscarSunat = async () => {
     const rucLimpio = ruc.trim();
     if (rucLimpio.length !== 11 || isNaN(rucLimpio)) {
@@ -51,7 +54,7 @@ const FormularioProveedorRapido = ({
   const handleRucKeyDown = (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      if (categoria === CATEGORIA_PROVEEDOR.NACIONAL) {
+      if (esPeruano) {
         handleBuscarSunat();
       }
     }
@@ -156,7 +159,7 @@ const FormularioProveedorRapido = ({
             <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
               Tipo de Proveedor
             </label>
-            <div className="grid grid-cols-2 gap-2 p-1 bg-slate-950 rounded-lg border border-slate-800">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 p-1 bg-slate-950 rounded-lg border border-slate-800">
               <button
                 type="button"
                 onClick={() => setCategoria(CATEGORIA_PROVEEDOR.NACIONAL)}
@@ -179,26 +182,40 @@ const FormularioProveedorRapido = ({
               >
                 🌏 Internacional (China / Ext.)
               </button>
+              <button
+                type="button"
+                onClick={() => setCategoria(CATEGORIA_PROVEEDOR.ESTADO_O_TRIBUTO)}
+                className={`py-1.5 px-3 rounded text-xs font-semibold transition ${
+                  categoria === CATEGORIA_PROVEEDOR.ESTADO_O_TRIBUTO
+                    ? 'bg-teal-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                🏛️ Estado / Tributo (SUNAT)
+              </button>
             </div>
           </div>
 
           {/* Campo RUC / Identificación Fiscal */}
           <div>
             <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-              {categoria === CATEGORIA_PROVEEDOR.NACIONAL ? 'RUC (11 dígitos) *' : 'Tax ID / Identificación Fiscal (Opcional)'}
+              {esPeruano ? 'RUC (11 dígitos) *' : 'Tax ID / Identificación Fiscal (Opcional)'}
             </label>
             <div className="flex gap-2">
               <input
                 type="text"
                 value={ruc}
-                onChange={(e) => setRuc(e.target.value.replace(/\D/g, '').slice(0, categoria === CATEGORIA_PROVEEDOR.NACIONAL ? 11 : 20))}
+                onChange={(e) => setRuc(esPeruano
+                  ? e.target.value.replace(/\D/g, '').slice(0, 11)
+                  // Identificación del exterior: letras, números y guion (máx. 11, el largo de la columna)
+                  : e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 11))}
                 onKeyDown={handleRucKeyDown}
-                placeholder={categoria === CATEGORIA_PROVEEDOR.NACIONAL ? 'Ej. 20123456789' : 'Ej. CN1234567 (opcional)'}
-                maxLength={categoria === CATEGORIA_PROVEEDOR.NACIONAL ? 11 : 20}
+                placeholder={esPeruano ? 'Ej. 20123456789' : 'Ej. CN1234567 (opcional)'}
+                maxLength={11}
                 className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 font-mono focus:border-teal-500 focus:outline-none"
                 autoFocus
               />
-              {categoria === CATEGORIA_PROVEEDOR.NACIONAL && (
+              {esPeruano && (
                 <button
                   type="button"
                   onClick={handleBuscarSunat}
@@ -220,7 +237,7 @@ const FormularioProveedorRapido = ({
                 </button>
               )}
             </div>
-            {categoria === CATEGORIA_PROVEEDOR.NACIONAL && (
+            {esPeruano && (
               <p className="text-[10px] text-slate-500 mt-1">
                 Presiona Enter o el botón SUNAT para autocompletar la razón social oficial.
               </p>
@@ -230,14 +247,14 @@ const FormularioProveedorRapido = ({
           {/* Campo Nombre / Razón Social */}
           <div>
             <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-              {categoria === CATEGORIA_PROVEEDOR.NACIONAL ? 'Razón Social / Nombre Comercial *' : 'Nombre de la Fábrica o Empresa *'}
+              {esPeruano ? 'Razón Social / Nombre Comercial *' : 'Nombre de la Fábrica o Empresa *'}
             </label>
             <input
               type="text"
               required
               value={nombre}
               onChange={(e) => setNombre(e.target.value)}
-              placeholder={categoria === CATEGORIA_PROVEEDOR.NACIONAL ? 'Ej. DISTRIBUIDORA LOGÍSTICA S.A.C.' : 'Ej. Yiwu Import & Export Ltd.'}
+              placeholder={esPeruano ? 'Ej. DISTRIBUIDORA LOGÍSTICA S.A.C.' : 'Ej. Yiwu Import & Export Ltd.'}
               className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:border-teal-500 focus:outline-none"
             />
           </div>
