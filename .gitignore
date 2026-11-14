@@ -29,3 +29,14 @@ venv.bak/
 .vscode/
 *.sqlite3
 *.db
+
+# Cachés de herramientas de prueba y lint
+.pytest_cache/
+.ruff_cache/
+
+# Archivos temporales de Office (se crean al abrir una plantilla en Excel)
+~$*
+
+# Sistema operativo
+.DS_Store
+Thumbs.db

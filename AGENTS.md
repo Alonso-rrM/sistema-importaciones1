@@ -1,6 +1,6 @@
 # Contexto para asistentes de IA (y para cualquier persona que retome el proyecto)
 
-> Lee este archivo completo antes de analizar o modificar el código.
+> Lee este archivo completo antes de analizar o modificar el código. La instalación y el uso están en `README.md`.
 > Se actualiza al cerrar cada fase del plan de mejora. Si algo aquí contradice al código, manda el código
 > y hay que corregir este archivo.
 
@@ -41,6 +41,11 @@ Archivos clave:
 - `scripts/verificar_valores.py`: diagnóstico de SOLO LECTURA de valores fuera de catálogo en la base y,
   como informe aparte, de RUC, N° de DAM y comprobantes guardados que no cumplen las reglas de validación.
 - `tests/casos_validacion.json`: casos de validación que comparten el backend (pytest) y el frontend (`npm test`).
+- `scripts/`: `init_db.py` (base nueva), `seed_inicial.py` (roles y administrador), `crear_usuario.py`,
+  `cargar_plantillas.py` (catálogos de `plantillas/*.xlsx` por la carga masiva de la API), `verificar_valores.py`,
+  `reset_database.sql` (borra todos los datos) y `preparar_base_e2e.py` (solo pruebas).
+- `.env.example`: todas las variables de entorno con su explicación. Si agregas una variable, documéntala ahí.
+- `constantes.DATOS_ROLES_INICIALES`: nombre y descripción de los roles; lo usan `/setup` y `seed_inicial.py`.
 
 Frontend (`frontend/src/`):
 
@@ -113,7 +118,7 @@ Frontend (`frontend/src/`):
 | 3 | Ordenar el backend: servicio de pagos, catálogos genéricos, `main.py` más delgado, bitácora y máquina de estados | Hecha |
 | 4 | Ordenar el frontend: componentes y hooks comunes, diálogos propios, pruebas e2e | Hecha |
 | 5 | Validación de lo que digita la usuaria (RUC, DAM, comprobantes, montos) | Hecha |
-| 6 | Limpieza: README, `.env.example`, archivos sobrantes | Pendiente |
+| 6 | Limpieza: README, `.env.example`, archivos sobrantes, roles iniciales unificados | Hecha |
 | — | Registro del C.D.A. de SUNAT (ver sección 8) | En análisis |
 
 Deuda conocida y aceptada por ahora:
@@ -126,8 +131,9 @@ Deuda conocida y aceptada por ahora:
   creación rápida (`components/ModalCrearProveedorRapido.jsx`) solo ofrece Nacional e Internacional.
 - `Dams.jsx`, `Vouchers.jsx`, `Reportes.jsx` y `AdminPanel.jsx` siguen siendo archivos largos (sin advertencias);
   se pueden partir igual que Gastos y Logística cuando haya que tocarlos.
-- Los roles iniciales tienen nombres distintos según se creen por `/setup` o por `scripts/seed_inicial.py`
-  (los números de rol coinciden; solo cambia el texto).
+- No hay pantalla de usuarios: la API solo permite CREARLOS (`POST /usuarios/`, o `scripts/crear_usuario.py`).
+  No se pueden listar, desactivar ni cambiar su contraseña sin entrar a la base. Las bases ya instaladas
+  conservan los nombres de rol con que nacieron (solo cambia el texto; el sistema compara el número).
 - Funciones de consulta y reportes todavía largas (120-180 líneas): `listar_gastos` (finanzas),
   `obtener_datos_liquidacion_contenedor` y `kpi_gastos_maestro` (operaciones), `obtener_analytics_cockpit` y
   `exportar_sabana_liquidaciones` (reportes). Tienen poca cobertura de pruebas: antes de partirlas, agregar

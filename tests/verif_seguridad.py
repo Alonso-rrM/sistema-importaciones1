@@ -471,7 +471,7 @@ chk("S6", "Sin cookie ni Bearer -> 401", r.status_code == 401, f"{r.status_code}
 r = anon.post("/login", data={"username": "teso", "password": "Clave123!"}, headers={"X-Auth-Mode": "bearer"})
 tok = r.json().get("access_token")
 r2 = anon.get("/me", headers={"Authorization": f"Bearer {tok}"})
-chk("S7", "Modo script (X-Auth-Mode: bearer) entrega token y funciona como Bearer (inversor_masivo.py)", bool(tok) and r2.status_code == 200, f"token={'sí' if tok else 'no'} /me={r2.status_code}")
+chk("S7", "Modo script (X-Auth-Mode: bearer) entrega token y funciona como Bearer (scripts/cargar_plantillas.py)", bool(tok) and r2.status_code == 200, f"token={'sí' if tok else 'no'} /me={r2.status_code}")
 
 forjada = _TC(main.app); forjada.cookies.set("erp_session", "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhZG1pbiJ9.firma-falsa")
 r = forjada.get("/me")
