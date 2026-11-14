@@ -1,7 +1,7 @@
 """
-La migración que crea cat_conceptos_pagos.clase_aduanera clasifica los conceptos EXISTENTES con SQL.
-Esta prueba ejecuta ese mismo SQL en PostgreSQL y comprueba que da el mismo resultado que la regla de
-Python (domain/conceptos.py), que era el comportamiento vigente antes de la migración.
+Las migraciones que clasifican los conceptos EXISTENTES (c3f8a1d27e45 crea clase_aduanera; a9e3b7c2d5f1
+pasa la percepción de la OMC a la clase OMC) se ejecutan aquí, en orden, en PostgreSQL. El resultado debe
+ser el mismo que la regla de Python (domain/conceptos.py) que se usa con los conceptos nuevos.
 Requiere TEST_DATABASE_URL; si no está definida, se omite.
 """
 import importlib.util
@@ -13,10 +13,11 @@ from domain.conceptos import clase_aduanera_sugerida
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RUTA_MIGRACION = os.path.join(REPO, "alembic", "versions", "c3f8a1d27e45_add_clase_aduanera_conceptos.py")
+RUTA_RECLASIFICACION = os.path.join(REPO, "alembic", "versions", "a9e3b7c2d5f1_percepcion_omc_a_clase_omc.py")
 
 NOMBRES = [
     "TRIBUTOS", "tributos aduaneros", "Pago de Tributo", "PERCEPCION", "PERCEPCIÓN IGV", "percepción",
-    "OMC", "Ajuste omc", "PERCEPCION OMC", "TRIBUTOS Y PERCEPCION", "TRIBUTOS OMC",
+    "OMC", "Ajuste omc", "PERCEPCION OMC", "Percepción de OMC", "TRIBUTOS Y PERCEPCION", "TRIBUTOS OMC",
     "FLETE LOCAL", "MULTAS", "ALMACENAJE", "Devolución de vacío", "THC", "",
 ]
 
@@ -29,9 +30,14 @@ def test_el_sql_de_la_migracion_clasifica_igual_que_la_regla_vigente():
         pytest.skip("TEST_DATABASE_URL no está definida: se omiten las pruebas que requieren PostgreSQL.")
     from sqlalchemy import create_engine, text
 
-    spec = importlib.util.spec_from_file_location("migracion_clase_aduanera", RUTA_MIGRACION)
-    migracion = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(migracion)
+    def cargar(nombre, ruta):
+        spec = importlib.util.spec_from_file_location(nombre, ruta)
+        modulo = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(modulo)
+        return modulo
+
+    migracion = cargar("migracion_clase_aduanera", RUTA_MIGRACION)
+    reclasificacion = cargar("migracion_percepcion_omc", RUTA_RECLASIFICACION)
 
     engine = create_engine(url)
     try:
@@ -42,6 +48,7 @@ def test_el_sql_de_la_migracion_clasifica_igual_que_la_regla_vigente():
             ))
             conn.execute(text("INSERT INTO cat_conceptos_pagos (nombre) VALUES (:n)"), [{"n": n} for n in NOMBRES])
             conn.execute(text(migracion.SQL_CLASIFICAR_EXISTENTES))
+            conn.execute(text(reclasificacion.SQL_RECLASIFICAR))
             resultado = dict(conn.execute(text("SELECT nombre, clase_aduanera FROM cat_conceptos_pagos")).all())
             conn.rollback()
     finally:

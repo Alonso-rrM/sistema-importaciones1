@@ -17,7 +17,8 @@ def test_sugerencia_por_nombre(nombre, esperada):
 
 @pytest.mark.parametrize("nombre, esperada", [
     ("TRIBUTOS Y PERCEPCION", "TRIBUTO"),   # TRIBUTO tiene prioridad sobre PERCEPCION
-    ("PERCEPCION OMC", "PERCEPCION"),       # PERCEPCION tiene prioridad sobre OMC
+    ("PERCEPCION OMC", "OMC"),              # la percepción de la OMC es de la etapa OMC, no de la proforma
+    ("PERCEPCIÓN DE OMC", "OMC"),
     ("TRIBUTOS OMC", "TRIBUTO"),
 ])
 def test_prioridad_cuando_el_nombre_menciona_varias_clases(nombre, esperada):

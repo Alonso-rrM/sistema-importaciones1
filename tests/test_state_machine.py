@@ -198,3 +198,32 @@ def test_solo_las_reversiones_llevan_motivo():
 
 def test_un_estado_desconocido_no_se_modifica():
     assert decidir_estado_dam("ESTADO RARO", PROFORMA_PAGADA, "VERDE", "DEFINITIVO").estado == "ESTADO RARO"
+
+
+# ----------------------------------------------------------------- etapas: proforma y OMC (con o sin percepción)
+
+def _gasto(clase, pagado):
+    from types import SimpleNamespace
+    from constantes import EstadoPago, EstadoRegistro
+    return SimpleNamespace(estado_registro=EstadoRegistro.ACTIVO, concepto_rel=SimpleNamespace(clase_aduanera=clase),
+                           estado_pago=EstadoPago.PAGADO if pagado else EstadoPago.PENDIENTE)
+
+
+def _clasificar(*gastos):
+    from types import SimpleNamespace
+    from services.state_machine import clasificar_gastos_dam
+    return clasificar_gastos_dam(SimpleNamespace(gastos=list(gastos)))
+
+
+def test_omc_sin_percepcion_se_paga_con_la_omc_sola():
+    from constantes import ClaseAduanera as CA
+    c = _clasificar(_gasto(CA.TRIBUTO, True), _gasto(CA.PERCEPCION, True), _gasto(CA.OMC, True))
+    assert c["proforma_pagada"] and c["omc_pagado"]
+
+
+def test_omc_con_percepcion_exige_las_dos_y_no_toca_la_proforma():
+    """La percepción de la OMC (clase OMC) pendiente deja la OMC pendiente, pero la proforma sigue pagada."""
+    from constantes import ClaseAduanera as CA
+    c = _clasificar(_gasto(CA.TRIBUTO, True), _gasto(CA.PERCEPCION, True), _gasto(CA.OMC, True), _gasto(CA.OMC, False))
+    assert c["proforma_pagada"] is True
+    assert c["tiene_omc"] is True and c["omc_pagado"] is False

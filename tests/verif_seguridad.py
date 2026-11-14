@@ -620,7 +620,7 @@ def clase_de(nombre):
 clases_h7 = [clase_de(n) for n in ("TRIBUTOS H7", "PERCEPCION OMC H7", "MULTAS H7", "LIQUIDACION H7", "ERRADO H7")]
 chk("H7", "Excel sin la columna: clase según el nombre; con la columna: se respeta y un valor inválido se reporta sin insertar",
     r_sin.status_code == 200 and r_sin.json()["insertados"] == 3 and r_con.json()["insertados"] == 1 and r_con.json()["errores_count"] == 1
-    and clases_h7 == ["TRIBUTO", "PERCEPCION", "NINGUNA", "OMC", None],
+    and clases_h7 == ["TRIBUTO", "OMC", "NINGUNA", "OMC", None],
     f"sin={r_sin.json().get('insertados')} con={r_con.json().get('insertados')}/{r_con.json().get('errores_count')} clases={clases_h7}")
 
 # H8: una fila con error en el Excel no debe borrar las filas buenas anteriores
