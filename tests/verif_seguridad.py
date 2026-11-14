@@ -855,6 +855,84 @@ concurrencia_ok = cond_a and cond_b and cond_c and cond_d
 evid_conc = f"200: {count_200}, 400: {count_400}, 409: {count_409}, 500: {count_500}, otros: {otros_codes} | Saldo final: {saldo_final} | Suma debitada: {suma_pagos}"
 chk("CONC-01", "Concurrencia real: 20 pagos simultáneos contra voucher de USD 1000", concurrencia_ok, evid_conc)
 
+# ==========================================
+# L) CUENTAS DE USUARIO (pantalla de usuarios)
+# ==========================================
+print("\n=========== L) CUENTAS DE USUARIO ===========")
+import jwt as _jwt
+from security import ALGORITHM as _ALG, SECRET_KEY as _SK
+limiter.enabled = False
+
+
+def tok_emitido_hace(nombre, segundos=30):
+    """Token como el de una sesión abierta hace `segundos` (para probar el cierre de sesiones)."""
+    u = db.query(models.Usuario).filter_by(username=nombre).first()
+    ahora = datetime.datetime.now(datetime.timezone.utc)
+    carga = {"sub": nombre, "id_rol": u.id_rol, "id_usuario": u.id_usuario,
+             "iat": ahora - datetime.timedelta(seconds=segundos), "exp": ahora + datetime.timedelta(minutes=30)}
+    return {"Authorization": "Bearer " + _jwt.encode(carga, _SK, algorithm=_ALG)}
+
+
+r_l1a = c.get("/usuarios/", headers=H["admin"])
+r_l1b = c.get("/usuarios/", headers=H["teso"])
+r_l1c = c.post("/usuarios/", json={"username": "otro.correo", "email": "ADMIN@x.test", "password": "Clave-Segura-1", "id_rol": 2}, headers=H["admin"])
+chk("L1", "Solo el Administrador lista usuarios (sin contraseña); un correo ya usado se rechaza (sin importar mayúsculas)",
+    r_l1a.status_code == 200 and all("password" not in str(u.keys()) for u in r_l1a.json()) and r_l1b.status_code == 403
+    and r_l1c.status_code == 400 and "correo" in det(r_l1c),
+    f"{r_l1a.status_code} / {r_l1b.status_code} / {r_l1c.status_code} {det(r_l1c)[:50]}")
+
+id_admin = users["admin"]
+r_l2a = c.put(f"/usuarios/{id_admin}", json={"is_active": False}, headers=H["admin"])
+r_l2b = c.put(f"/usuarios/{id_admin}", json={"id_rol": 2}, headers=H["admin"])
+chk("L2", "El Administrador no puede desactivarse ni quitarse su rol (no se queda el sistema sin administrador)",
+    r_l2a.status_code == 400 and "propia cuenta" in det(r_l2a) and r_l2b.status_code == 400,
+    f"{r_l2a.status_code} {det(r_l2a)[:40]} / {r_l2b.status_code} {det(r_l2b)[:50]}")
+
+# Un segundo administrador que intenta desactivar al único otro: queda uno activo, sí se puede; el último, no
+r_l3 = c.post("/usuarios/", json={"username": "admin2", "email": "admin2@x.test", "password": "Clave-Segura-1", "id_rol": 1}, headers=H["admin"])
+H["admin2"] = tok_emitido_hace("admin2")
+r_l3a = c.put(f"/usuarios/{id_admin}", json={"is_active": False}, headers=H["admin2"])      # quedan 2 -> se puede
+r_l3b = c.put(f"/usuarios/{r_l3.json()['id_usuario']}", json={"id_rol": 2}, headers=H["admin2"])  # a sí mismo -> no
+r_l3c = c.get("/usuarios/", headers=H["admin"])                                              # admin desactivado: 401 ya
+r_l3d = c.put(f"/usuarios/{id_admin}", json={"is_active": True}, headers=H["admin2"])
+chk("L3", "Desactivar a un usuario corta su sesión de inmediato; reactivarlo la devuelve",
+    r_l3.status_code == 200 and r_l3a.status_code == 200 and r_l3b.status_code == 400 and r_l3c.status_code == 401
+    and r_l3d.status_code == 200 and c.get("/usuarios/", headers=H["admin"]).status_code == 200,
+    f"{r_l3.status_code} / {r_l3a.status_code} / {r_l3b.status_code} / {r_l3c.status_code} / {r_l3d.status_code}")
+
+# El cambio de rol rige en la siguiente petición (el rol se lee de la base, no del token)
+r_l4 = c.post("/usuarios/", json={"username": "rol.cambia", "email": "rol.cambia@x.test", "password": "Clave-Segura-1", "id_rol": 4}, headers=H["admin"])
+H["rolc"] = tok_emitido_hace("rol.cambia")
+r_l4a = c.post("/maestros/", json={"numero_factura": "F-L4-A"}, headers=H["rolc"])
+c.put(f"/usuarios/{r_l4.json()['id_usuario']}", json={"id_rol": 2}, headers=H["admin"])
+r_l4b = c.post("/maestros/", json={"numero_factura": "F-L4-B"}, headers=H["rolc"])
+chk("L4", "Cambiar el rol rige de inmediato: como Auditoría no crea expedientes (403); como Logística sí (200)",
+    r_l4a.status_code == 403 and r_l4b.status_code == 200, f"{r_l4a.status_code} / {r_l4b.status_code}")
+
+# Restablecer la contraseña cierra las sesiones abiertas con la anterior
+id_rolc = r_l4.json()["id_usuario"]
+sesion_vieja = tok_emitido_hace("rol.cambia")
+r_l5a = c.put(f"/usuarios/{id_rolc}/clave", json={"password": "corta"}, headers=H["admin"])
+r_l5b = c.put(f"/usuarios/{id_rolc}/clave", json={"password": "Nueva-Clave-22"}, headers=H["admin"])
+r_l5c = c.get("/maestros/", headers=sesion_vieja)
+r_l5d = c.post("/login", data={"username": "rol.cambia", "password": "Nueva-Clave-22"}, headers={"X-Auth-Mode": "bearer"})
+chk("L5", "Restablecer contraseña: exige contraseña segura, cierra la sesión anterior (401) y la nueva permite entrar",
+    r_l5a.status_code == 422 and r_l5b.status_code == 200 and r_l5c.status_code == 401 and "contraseña cambió" in det(r_l5c)
+    and r_l5d.status_code == 200,
+    f"{r_l5a.status_code} / {r_l5b.status_code} / {r_l5c.status_code} {det(r_l5c)[:40]} / login {r_l5d.status_code}")
+
+# Cambio de la contraseña propia
+propia = {"Authorization": f"Bearer {r_l5d.json().get('access_token')}"}
+time.sleep(1.1)   # la nueva marca de cambio debe quedar después de la emisión de esta sesión
+r_l6a = c.put("/usuarios/me/clave", json={"clave_actual": "equivocada", "clave_nueva": "Otra-Clave-333"}, headers=propia)
+r_l6b = c.put("/usuarios/me/clave", json={"clave_actual": "Nueva-Clave-22", "clave_nueva": "Nueva-Clave-22"}, headers=propia)
+r_l6c = c.put("/usuarios/me/clave", json={"clave_actual": "Nueva-Clave-22", "clave_nueva": "Otra-Clave-333"}, headers=propia)
+r_l6d = c.get("/maestros/", headers=propia)
+chk("L6", "Contraseña propia: exige la actual y una distinta; al cambiarla la sesión se cierra para entrar con la nueva",
+    r_l6a.status_code == 400 and r_l6b.status_code == 400 and r_l6c.status_code == 200 and r_l6d.status_code == 401,
+    f"{r_l6a.status_code} / {r_l6b.status_code} / {r_l6c.status_code} / {r_l6d.status_code}")
+limiter.enabled = True
+
 fallas = [x for x in R if not x[2]]
 print(f"\nRESUMEN TOTAL: {len(R)-len(fallas)}/{len(R)} pruebas pasan." + (" Fallan: " + ", ".join(x[0] for x in fallas) if fallas else ""))
 

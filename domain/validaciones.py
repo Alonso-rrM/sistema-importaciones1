@@ -123,3 +123,35 @@ def normalizar_comprobante(texto: Optional[str]) -> Optional[str]:
     if int(correlativo) == 0:
         raise ValorInvalido(f"El número del comprobante «{original}» no puede ser cero.")
     return f"{serie}-{correlativo.zfill(8)}"
+
+
+# ---------------------------------------------------------------------------
+# Cuentas de usuario
+# ---------------------------------------------------------------------------
+
+def normalizar_usuario(texto: Optional[str]) -> str:
+    """Nombre de usuario para iniciar sesión: 3 a 50 letras, números, punto, guion o guion bajo."""
+    usuario = str(texto or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9._-]{3,50}", usuario):
+        raise ValorInvalido("El usuario debe tener 3 a 50 caracteres: letras, números, punto, guion o guion bajo.")
+    return usuario
+
+
+def normalizar_correo(texto: Optional[str]) -> str:
+    """Correo electrónico en minúsculas y sin espacios alrededor."""
+    correo = str(texto or "").strip().lower()
+    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[A-Za-z]{2,}", correo):
+        raise ValorInvalido("Correo electrónico inválido.")
+    return correo
+
+
+def validar_clave(clave: Optional[str]) -> str:
+    """Contraseña segura: 10 o más caracteres, con mayúscula, minúscula y número. Máx. 72 bytes (límite de bcrypt)."""
+    clave = str(clave or "")
+    if len(clave) < 10:
+        raise ValorInvalido("La contraseña debe tener al menos 10 caracteres.")
+    if len(clave.encode("utf-8")) > 72:
+        raise ValorInvalido("La contraseña no puede superar 72 bytes.")
+    if not (re.search(r"[a-z]", clave) and re.search(r"[A-Z]", clave) and re.search(r"\d", clave)):
+        raise ValorInvalido("La contraseña debe incluir mayúsculas, minúsculas y números.")
+    return clave

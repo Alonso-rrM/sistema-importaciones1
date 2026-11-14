@@ -4,12 +4,16 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  validarComprobante, validarDocumentoSegunProveedor, validarMonto, validarNumeroDam, validarRuc,
+  validarClave, validarComprobante, validarCorreo, validarDocumentoSegunProveedor, validarMonto, validarNumeroDam,
+  validarRuc, validarUsuario,
 } from '../src/utils/validaciones.js';
 import { CATEGORIA_PROVEEDOR } from '../src/constants/index.js';
 
 const CASOS = JSON.parse(readFileSync(new URL('../../tests/casos_validacion.json', import.meta.url), 'utf-8'));
-const REGLAS = { ruc: validarRuc, numero_dam: validarNumeroDam, comprobante: validarComprobante };
+const REGLAS = {
+  ruc: validarRuc, numero_dam: validarNumeroDam, comprobante: validarComprobante,
+  usuario: validarUsuario, correo: validarCorreo, clave: validarClave,
+};
 
 for (const [regla, validar] of Object.entries(REGLAS)) {
   test(`${regla}: casos válidos compartidos con el backend`, () => {

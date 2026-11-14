@@ -1,11 +1,11 @@
-import re as _re
 from typing import List, Optional, Dict, Any, Generic, TypeVar, Annotated
 from pydantic import BaseModel, ConfigDict, Field, AfterValidator, model_validator
 
 from datetime import date, datetime
 from decimal import Decimal
 from domain.validaciones import (
-    ValorInvalido, limpiar_texto, normalizar_numero_dam, normalizar_ruc, normalizar_ruc_opcional,
+    ValorInvalido, limpiar_texto, normalizar_correo, normalizar_numero_dam, normalizar_ruc, normalizar_ruc_opcional,
+    normalizar_usuario, validar_clave,
 )
 from constantes import (
     CategoriaProveedor,
@@ -53,33 +53,10 @@ def _fechas_en_orden(embarque: Optional[date], arribo: Optional[date]) -> None:
     if embarque and arribo and arribo < embarque:
         raise ValorInvalido("La fecha de arribo no puede ser anterior a la fecha de embarque.")
 
-# --- Tipos de seguridad para cuentas de usuario ---
-
-def _validar_password(v: str) -> str:
-    """Política mínima: 10+ caracteres, con mayúscula, minúscula y número. Máx. 72 bytes (límite de bcrypt)."""
-    if len(v) < 10:
-        raise ValueError("La contraseña debe tener al menos 10 caracteres.")
-    if len(v.encode("utf-8")) > 72:
-        raise ValueError("La contraseña no puede superar 72 bytes.")
-    if not (_re.search(r"[a-z]", v) and _re.search(r"[A-Z]", v) and _re.search(r"\d", v)):
-        raise ValueError("La contraseña debe incluir mayúsculas, minúsculas y números.")
-    return v
-
-def _validar_email(v: str) -> str:
-    v = v.strip().lower()
-    if not _re.fullmatch(r"[^@\s]+@[^@\s]+\.[A-Za-z]{2,}", v):
-        raise ValueError("Correo electrónico inválido.")
-    return v
-
-def _validar_username(v: str) -> str:
-    v = v.strip()
-    if not _re.fullmatch(r"[A-Za-z0-9._-]{3,50}", v):
-        raise ValueError("El usuario debe tener 3 a 50 caracteres: letras, números, punto, guion o guion bajo.")
-    return v
-
-PasswordSegura = Annotated[str, AfterValidator(_validar_password)]
-Email = Annotated[str, AfterValidator(_validar_email)]
-Username = Annotated[str, AfterValidator(_validar_username)]
+# --- Tipos para cuentas de usuario (reglas en domain/validaciones.py) ---
+PasswordSegura = Annotated[str, AfterValidator(validar_clave)]
+Email = Annotated[str, AfterValidator(normalizar_correo)]
+Username = Annotated[str, AfterValidator(normalizar_usuario)]
 
 # --- MODELO GENÉRICO DE PAGINACIÓN ---
 T = TypeVar('T')
@@ -564,6 +541,33 @@ class Usuario(UsuarioBase):
     id_usuario: int
     created_at: datetime
     # Se excluye deliberadamente password y hashed_password para máxima seguridad
+    model_config = ConfigDict(from_attributes=True)
+
+class UsuarioListado(Usuario):
+    """Fila de la pantalla de usuarios (sin contraseña)."""
+    rol_nombre: Optional[str] = None
+    clave_cambiada_en: Optional[datetime] = None
+
+class UsuarioCambio(BaseModel):
+    """Lo que el Administrador puede cambiar de una cuenta (el nombre de usuario no cambia)."""
+    model_config = ConfigDict(extra="forbid")
+    email: Optional[Email] = None
+    id_rol: Optional[Rol] = None
+    is_active: Optional[bool] = None
+
+class ClaveNueva(BaseModel):
+    """Contraseña que el Administrador asigna a otra cuenta."""
+    password: PasswordSegura
+
+class CambioClavePropia(BaseModel):
+    """Cambio de la contraseña propia: exige la actual."""
+    clave_actual: str = Field(min_length=1)
+    clave_nueva: PasswordSegura
+
+class RolOpcion(BaseModel):
+    id_rol: int
+    nombre: str
+    descripcion: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 # -- AuditLog --

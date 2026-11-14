@@ -18,7 +18,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCRIPT = os.path.join(REPO, "tests", "verif_seguridad.py")
 
 # Número de verificaciones al incorporar la batería a pytest. Si baja, alguien quitó verificaciones.
-MINIMO_VERIFICACIONES = 93
+MINIMO_VERIFICACIONES = 99
 
 pytestmark = pytest.mark.integracion
 

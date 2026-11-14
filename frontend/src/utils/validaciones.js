@@ -113,3 +113,30 @@ export function validarDocumentoSegunProveedor(categoria, texto) {
   }
   return validarComprobante(texto);
 }
+
+// ------------------------------------------------------------------ Cuentas de usuario
+
+/** Nombre de usuario: 3 a 50 letras, números, punto, guion o guion bajo. */
+export function validarUsuario(texto) {
+  const usuario = String(texto ?? '').trim();
+  return /^[A-Za-z0-9._-]{3,50}$/.test(usuario)
+    ? valido(usuario)
+    : invalido('El usuario debe tener 3 a 50 caracteres: letras, números, punto, guion o guion bajo.');
+}
+
+/** Correo electrónico en minúsculas. */
+export function validarCorreo(texto) {
+  const correo = String(texto ?? '').trim().toLowerCase();
+  return /^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$/.test(correo) ? valido(correo) : invalido('Correo electrónico inválido.');
+}
+
+/** Contraseña segura: 10 o más caracteres, con mayúscula, minúscula y número (máx. 72 bytes). */
+export function validarClave(texto) {
+  const clave = String(texto ?? '');
+  if (clave.length < 10) return invalido('La contraseña debe tener al menos 10 caracteres.');
+  if (new TextEncoder().encode(clave).length > 72) return invalido('La contraseña no puede superar 72 bytes.');
+  if (!(/[a-z]/.test(clave) && /[A-Z]/.test(clave) && /\d/.test(clave))) {
+    return invalido('La contraseña debe incluir mayúsculas, minúsculas y números.');
+  }
+  return valido(clave);
+}

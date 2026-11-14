@@ -260,7 +260,9 @@ class Usuario(Base):
     hashed_password = Column(String(255), nullable=False)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    
+    # Último cambio de contraseña (UTC): las sesiones emitidas antes dejan de valer (dependencies.get_current_user)
+    clave_cambiada_en = Column(DateTime, nullable=True)
+
     rol = relationship("CatRol", back_populates="usuarios")
     audit_logs = relationship("AuditLog", back_populates="usuario")
 

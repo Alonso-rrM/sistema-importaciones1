@@ -1,3 +1,4 @@
+import calendar
 from typing import List, Optional
 from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer
@@ -68,6 +69,14 @@ def get_current_user(request: Request, bearer: Optional[str] = Depends(oauth2_sc
         
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="El usuario inactivo o suspendido")
+
+    # Una sesión abierta antes del último cambio de contraseña ya no vale
+    if user.clave_cambiada_en and payload.get("iat", 0) < calendar.timegm(user.clave_cambiada_en.utctimetuple()):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Su contraseña cambió. Inicie sesión nuevamente.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     # Toda escritura posterior en esta sesión queda firmada con este usuario en la bitácora
     fijar_contexto(db, id_usuario=user.id_usuario)
