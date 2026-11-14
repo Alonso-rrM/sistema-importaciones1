@@ -38,6 +38,21 @@ Archivos clave:
 - `main.py`: solo arma la aplicación (configuración, middleware y routers).
 - `scripts/verificar_valores.py`: diagnóstico de SOLO LECTURA de valores fuera de catálogo en la base.
 
+Frontend (`frontend/src/`):
+
+- Cada pantalla grande solo COMPONE; sus partes viven en una carpeta con su nombre:
+  `pages/gastos/`, `pages/logistica/`, `pages/pagos/`, `pages/vouchers/`, `pages/conceptos/`.
+- `hooks/useConsulta.js`: TODA carga de datos. `useConsulta(consultar, { inicial, alFallar })` con `consultar`
+  memorizada (`useCallback`/`useMemo`); da `datos`, `cargando`, `recargar()` y `setDatos()`. Descarta respuestas tardías.
+- `context/interaccion.js` (`useInteraccion`): `avisar`, `confirmar` y `pedirDatos`, diálogos propios
+  (`components/ProveedorInteraccion.jsx`). `mensajeDeError(error)` traduce el error del backend.
+- `components/catalogo/PantallaCatalogo.jsx` + `pages/catalogos/definiciones.js`: los siete catálogos
+  (bancos, almacenes, agentes, importadores, proveedores, comprobantes, conceptos) son una DEFINICIÓN, no una pantalla copiada.
+- `components/ModalAnularPago.jsx`: única forma de anular/reversar un pago (Pagos, Gastos y Vouchers);
+  exporta `LARGO_MINIMO_MOTIVO`. `utils/reversion.js` avisa si la anulación le quitó el levante a una DAM.
+- `components/estilosSelect.js`: estilos de react-select (`ESTILO_SELECT_TEAL`, `ESTILO_SELECT_MORADO`).
+- `frontend/e2e/`: pruebas en navegador con Playwright (ver su `README.md`).
+
 ## 3. Rama de trabajo (importante)
 
 - El trabajo de mejora vive en la rama **`claude/exciting-einstein-sntfhn`**, no en `main`.
@@ -67,6 +82,14 @@ Archivos clave:
 10. Los servicios informan reglas incumplidas con `ErrorDeNegocio` (`services/errores.py`), no con
     `HTTPException`. `main.py` la convierte en la respuesta HTTP.
 11. Un catálogo nuevo con las rutas estándar se agrega declarando un `DefinicionCatalogo`; no copies rutas.
+    En el frontend, su pantalla es una definición más en `pages/catalogos/definiciones.js`.
+12. Frontend: los datos se cargan con `useConsulta`, no con `useEffect` + `setState`. Los avisos y confirmaciones
+    van con `useInteraccion()`; `alert`/`confirm`/`prompt` del navegador están prohibidos (regla `no-alert`).
+13. Frontend: las reglas del compilador de React son ERROR y `npm run lint:ci` no admite advertencias.
+    Nada de `eslint-disable` para callarlas: se arregla el componente (estado derivado, `key` para reiniciar,
+    `useEffectEvent` para manejadores dentro de efectos, modales que se montan solo cuando están abiertos).
+14. Frontend: los montos se envían al backend como TEXTO (el backend los lee como `Decimal`), nunca con `parseFloat`.
+15. Si cambias una pantalla, corre las pruebas e2e (sección 6) y agrega una para el flujo nuevo.
 
 ## 5. Estado del plan de mejora
 
@@ -76,19 +99,19 @@ Archivos clave:
 | 1 | Valores fijos en un solo lugar (`constantes.py` y `src/constants`) | Hecha |
 | 2 | Clase aduanera del concepto en un campo (`clase_aduanera`), ya no por nombre | Hecha |
 | 3 | Ordenar el backend: servicio de pagos, catálogos genéricos, `main.py` más delgado, bitácora y máquina de estados | Hecha |
-| 4 | Ordenar el frontend: componentes y hooks comunes, diálogos propios | Pendiente |
+| 4 | Ordenar el frontend: componentes y hooks comunes, diálogos propios, pruebas e2e | Hecha |
 | 5 | Validación de lo que digita la usuaria (RUC, DAM, comprobantes, montos) | Pendiente |
 | 6 | Limpieza: README, `.env.example`, archivos sobrantes | Pendiente |
 | — | Registro del C.D.A. de SUNAT (ver sección 8) | En análisis |
 
 Deuda conocida y aceptada por ahora:
 
-- 76 advertencias de ESLint (reglas del compilador de React en pantallas grandes). Tienen tope:
-  `npm run lint:ci` falla si aumentan. Se resuelven en la fase 4.
 - Restricciones `CHECK` en la base y validación estricta de `tipo_valor`, `canal_control`, `categoria`
   y `status_llegada`: pendientes hasta revisar la base real con `scripts/verificar_valores.py`.
-- La categoría de proveedor `ESTADO_O_TRIBUTO` existe en el backend pero **no se puede elegir en pantalla**
-  (Proveedores y el modal de creación rápida solo ofrecen Nacional e Internacional).
+- La categoría de proveedor `ESTADO_O_TRIBUTO` se elige en la pantalla de Proveedores, pero el modal de
+  creación rápida (`components/ModalCrearProveedorRapido.jsx`) solo ofrece Nacional e Internacional.
+- `Dams.jsx`, `Vouchers.jsx`, `Reportes.jsx` y `AdminPanel.jsx` siguen siendo archivos largos (sin advertencias);
+  se pueden partir igual que Gastos y Logística cuando haya que tocarlos.
 - Los roles iniciales tienen nombres distintos según se creen por `/setup` o por `scripts/seed_inicial.py`
   (los números de rol coinciden; solo cambia el texto).
 - Funciones de consulta y reportes todavía largas (120-180 líneas): `listar_gastos` (finanzas),
@@ -118,7 +141,13 @@ npm run lint:ci
 npm run build
 ```
 
-GitHub Actions (`.github/workflows/ci.yml`) corre todo lo anterior en cada subida.
+Pruebas en navegador (desde `frontend/`, con una base PostgreSQL desechable cuyo nombre contenga "test"):
+
+```bash
+E2E_DATABASE_URL=postgresql://usuario:clave@localhost:5432/erp_e2e_test npm run e2e
+```
+
+GitHub Actions (`.github/workflows/ci.yml`) corre todo lo anterior en cada subida (trabajos backend, frontend y e2e).
 
 ## 7. Decisiones de negocio vigentes
 
@@ -126,6 +155,9 @@ GitHub Actions (`.github/workflows/ci.yml`) corre todo lo anterior en cada subid
   la migración `d5a92e7c1b38` convierte los registros antiguos a GARANTIZADO.
 - Ajuste de céntimos ("ZD"): si tras un pago quedan USD/S/ 0.05 o menos por diferencias de cambio, el sistema
   crea un pago de ajuste y cierra el gasto. Si se anula el pago que lo originó, el ajuste también se anula.
+
+- Los almacenes guardan su `ubicacion` (migración `e7b41c9a2f60`); antes la pantalla la pedía y se perdía.
+- "+ Registrar Gasto" desde una DAM abre Gastos con esa DAM y su contenedor ya elegidos.
 
 ## 8. Contexto del C.D.A. (trabajo siguiente)
 

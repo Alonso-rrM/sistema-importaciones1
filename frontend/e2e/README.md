@@ -30,4 +30,6 @@ Variables opcionales: `E2E_PYTHON` (intérprete de Python, por defecto `python`)
 | `catalogos.spec.js` | Alta, modificación, baja y restauración en cada catálogo |
 | `finanzas.spec.js` | Registrar un gasto, pagarlo, anular el pago y corregir el tipo de cambio |
 | `operaciones.spec.js` | Crear un expediente con su DAM; crear y eliminar un voucher |
+| `gastos.spec.js` | Modificar un gasto, reversar uno de sus pagos, eliminarlo con motivo y registrarlo desde una DAM |
+| `logistica.spec.js` | Modificar un expediente, registrarle un gasto rápido y eliminarlo con motivo |
 | `ayudas.js` | Funciones comunes (iniciar sesión, responder diálogos, elegir opciones) |
