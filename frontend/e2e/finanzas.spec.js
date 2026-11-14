@@ -86,7 +86,7 @@ test('anular un pago de la proforma avisa que la DAM perdió el levante', async 
     const concepto = conceptos.find((c) => c.nombre === nombre);
     const gasto = await api(page, 'POST', '/gastos/', {
       id_dam: dam.id_dam, id_concepto: concepto.id_concepto, id_proveedor: sunat.id_proveedor, id_tipo_doc: doc.id_tipo_doc,
-      monto_original: monto, moneda: 'PEN', numero_documento: `118-26-10-000777-${nombre.slice(0, 3)}`,
+      monto_original: monto, moneda: 'PEN', numero_documento: `118-26-10-000777-${nombre === 'TRIBUTOS' ? 1 : 2}-1-01`,   // C.D.A. de cada gasto del Estado
     });
     await api(page, 'POST', '/pagos/', { id_gasto: gasto.id_gasto, voucher_id: voucher.id_voucher, moneda: 'PEN', importe: monto, tipo_cambio: '1' });
   }

@@ -155,3 +155,38 @@ def validar_clave(clave: Optional[str]) -> str:
     if not (re.search(r"[a-z]", clave) and re.search(r"[A-Z]", clave) and re.search(r"\d", clave)):
         raise ValorInvalido("La contraseña debe incluir mayúsculas, minúsculas y números.")
     return clave
+
+
+# ---------------------------------------------------------------------------
+# C.D.A. (Código de Documento Aduanero de SUNAT)
+# ---------------------------------------------------------------------------
+
+EJEMPLO_CDA = "118-26-10-535304-25-4-01"
+
+
+def normalizar_cda(texto: Optional[str]) -> Optional[str]:
+    """
+    C.D.A. en la forma en que lo imprime SUNAT: la DAM con año de 2 dígitos y número de 6, más su sufijo.
+    Ej.: 118-26-10-535304-25-4-01. Acepta el año con 4 dígitos y espacios, barras o puntos. Vacío -> None.
+    """
+    original = limpiar_texto(texto)
+    if not original:
+        return None
+    partes = [p for p in re.split(_SEPARADORES, original) if p]
+    formato = f"Formato esperado: el N° de la DAM seguido de su sufijo, por ejemplo {EJEMPLO_CDA}."
+    if len(partes) < 5 or not all(p.isdigit() for p in partes):
+        raise ValorInvalido(f"El C.D.A. «{original}» no es válido. {formato}")
+    try:
+        dam = normalizar_numero_dam("-".join(partes[:4]))
+    except ValorInvalido as exc:
+        raise ValorInvalido(f"El C.D.A. «{original}» no empieza con un N° de DAM válido. {formato}") from exc
+    sufijo = partes[4:]
+    if len(sufijo) > 4 or any(len(p) > 4 for p in sufijo):
+        raise ValorInvalido(f"El sufijo del C.D.A. «{original}» no es válido. {formato}")
+    aduana, anio, regimen, numero = dam.split("-")
+    return "-".join([aduana, anio[2:], regimen, numero, *sufijo])
+
+
+def dam_del_cda(cda: str) -> str:
+    """N° de DAM (forma del sistema, año de 4 dígitos) al que pertenece un C.D.A. ya normalizado."""
+    return normalizar_numero_dam("-".join(cda.split("-")[:4]))

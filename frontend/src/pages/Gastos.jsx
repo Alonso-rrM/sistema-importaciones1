@@ -13,9 +13,10 @@ import useDebounce from '../hooks/useDebounce';
 import { descargarExcel } from '../utils/exportUtils';
 import ModalCrearProveedorRapido from '../components/ModalCrearProveedorRapido';
 import ModalAnularPago from '../components/ModalAnularPago';
-import { CATEGORIA_PROVEEDOR, ESTADO_PAGO, MONEDA } from '../constants';
+import { CATEGORIA_PROVEEDOR, CLASE_ADUANERA, ESTADO_PAGO, MONEDA } from '../constants';
 import { mensajeDeError, useInteraccion } from '../context/interaccion';
-import { validarDocumentoSegunProveedor, validarMonto } from '../utils/validaciones';
+import { validarDocumentoGasto, validarMonto } from '../utils/validaciones';
+import { confirmarCdaDeLaDam } from '../utils/confirmarCda';
 import BandejaGastos from './gastos/BandejaGastos';
 import DetalleGasto from './gastos/DetalleGasto';
 import FormularioGasto from './gastos/FormularioGasto';
@@ -60,7 +61,7 @@ const consultarCatalogos = () => Promise.all([
 ]).then(([maestros, dams, conceptos, proveedores, tiposDoc]) => ({
   damsRaw: lista(dams),
   opcionesMaestros: lista(maestros).map((m) => ({ value: m.id_maestro, label: `Factura: ${m.numero_factura}` })),
-  opcionesConceptos: lista(conceptos).map((c) => ({ value: c.id_concepto, label: c.nombre })),
+  opcionesConceptos: lista(conceptos).map((c) => ({ value: c.id_concepto, label: c.nombre, claseAduanera: c.clase_aduanera })),
   opcionesProveedores: lista(proveedores).map(etiquetaProveedor),
   opcionesTiposDoc: lista(tiposDoc).map((t) => ({ value: t.id_tipo_doc, label: t.nombre_documento })),
 }));
@@ -83,7 +84,7 @@ const formDesdeGasto = (gasto, damsRaw) => {
 };
 
 const Gastos = () => {
-  const { avisar } = useInteraccion();
+  const { avisar, confirmar } = useInteraccion();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -235,18 +236,25 @@ const Gastos = () => {
       return;
     }
     const monto = validarMonto(form.monto_original, { etiqueta: 'El monto total' });
-    // El formato del documento depende del proveedor; al modificar, solo se revisa si cambió él o el proveedor
+    // El formato del documento depende del concepto (C.D.A. si es del Estado) y del proveedor; al modificar,
+    // solo se revisa si cambió el documento, el proveedor o el concepto
     const documentoCambio = viewMode === MODO.NUEVO
       || String(form.numero_documento ?? '').trim() !== (selectedGasto?.numero_documento ?? '')
-      || form.id_proveedor !== selectedGasto?.id_proveedor;
+      || form.id_proveedor !== selectedGasto?.id_proveedor
+      || form.id_concepto !== selectedGasto?.id_concepto;
     const proveedor = opcionesProveedores.find((p) => p.value === form.id_proveedor);
+    const concepto = opcionesConceptos.find((c) => c.value === form.id_concepto);
     const documento = documentoCambio
-      ? validarDocumentoSegunProveedor(proveedor?.categoria, form.numero_documento)
+      ? validarDocumentoGasto({ categoria: proveedor?.categoria, claseAduanera: concepto?.claseAduanera }, form.numero_documento)
       : { valor: form.numero_documento || null, error: null };
     const error = monto.error || documento.error;
     if (error) {
       avisar(error, 'advertencia');
       return;
+    }
+    if (documentoCambio && concepto?.claseAduanera && concepto.claseAduanera !== CLASE_ADUANERA.NINGUNA) {
+      const dam = damsRaw.find((d) => d.id_dam === Number(form.id_dam));
+      if (!(await confirmarCdaDeLaDam(confirmar, documento.valor, dam?.numero_de_dam))) return;
     }
 
     setIsGuardando(true);

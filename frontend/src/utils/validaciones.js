@@ -8,7 +8,7 @@
  * `error` un mensaje en español, o null si el dato es válido.
  */
 
-import { CATEGORIA_PROVEEDOR } from '../constants/index.js';
+import { CATEGORIA_PROVEEDOR, CLASE_ADUANERA } from '../constants/index.js';
 
 const valido = (valor) => ({ valor, error: null });
 const invalido = (error) => ({ valor: null, error });
@@ -101,13 +101,37 @@ export function validarMonto(texto, { etiqueta = 'El monto', permitirCero = fals
   return valido(monto);
 }
 
+// ------------------------------------------------------------------ C.D.A. (SUNAT)
+
+export const EJEMPLO_CDA = '118-26-10-535304-25-4-01';
+
+/** C.D.A. como lo imprime SUNAT: la DAM con año de 2 dígitos y número de 6, más su sufijo. Vacío es válido (null). */
+export function validarCda(texto) {
+  const original = limpiarTexto(texto);
+  if (!original) return valido(null);
+  const formato = `Formato esperado: el N° de la DAM seguido de su sufijo, por ejemplo ${EJEMPLO_CDA}.`;
+  const partes = original.split(/[\s\-/.]+/).filter(Boolean);
+  if (partes.length < 5 || !partes.every((p) => /^\d+$/.test(p))) return invalido(`El C.D.A. «${original}» no es válido. ${formato}`);
+  const dam = validarNumeroDam(partes.slice(0, 4).join('-'));
+  if (dam.error) return invalido(`El C.D.A. «${original}» no empieza con un N° de DAM válido. ${formato}`);
+  const sufijo = partes.slice(4);
+  if (sufijo.length > 4 || sufijo.some((p) => p.length > 4)) return invalido(`El sufijo del C.D.A. «${original}» no es válido. ${formato}`);
+  const [aduana, anio, regimen, numero] = dam.valor.split('-');
+  return valido([aduana, anio.slice(2), regimen, numero, ...sufijo].join('-'));
+}
+
+/** N° de DAM (año de 4 dígitos, como lo guarda el sistema) al que pertenece un C.D.A. ya normalizado. */
+export const damDelCda = (cda) => validarNumeroDam(cda.split('-').slice(0, 4).join('-')).valor;
+
 // ------------------------------------------------------------------ N° de documento de un gasto
 
 /**
- * N° de documento según quién lo emite (misma regla que routers/finanzas.py): proveedor nacional ->
- * comprobante SERIE-CORRELATIVO; del exterior o el Estado (C.D.A., liquidaciones) -> texto libre.
+ * N° de documento de un gasto (misma regla que routers/finanzas.py):
+ * - concepto del Estado (clase aduanera tributo, percepción u OMC) -> C.D.A.;
+ * - si no, proveedor nacional -> comprobante SERIE-CORRELATIVO; del exterior o el Estado -> texto libre.
  */
-export function validarDocumentoSegunProveedor(categoria, texto) {
+export function validarDocumentoGasto({ categoria, claseAduanera }, texto) {
+  if (claseAduanera && claseAduanera !== CLASE_ADUANERA.NINGUNA) return validarCda(texto);
   if (categoria === CATEGORIA_PROVEEDOR.INTERNACIONAL || categoria === CATEGORIA_PROVEEDOR.ESTADO_O_TRIBUTO) {
     return valido(limpiarTexto(texto) || null);
   }

@@ -1,6 +1,7 @@
 // Validación de lo que se digita: el sistema avisa en pantalla y guarda los datos en su forma única.
 import { test, expect } from '@playwright/test';
 import { api, elegirOpcion, esperarAviso, iniciarSesion, vigilarErrores } from './ayudas.js';
+import { CATEGORIA_PROVEEDOR } from '../src/constants/index.js';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -89,5 +90,52 @@ test('un voucher con un monto mal escrito se avisa antes de enviarlo', async ({ 
   await esperarAviso(page, 'como máximo 2 decimales');
   const vouchers = (await api(page, 'GET', '/vouchers/', null)).data;
   expect(vouchers.find((v) => v.numero_operacion === 'OP-E2E-VAL-1')).toBeUndefined();
+  expect(errores).toEqual([]);
+});
+
+test('un gasto del Estado lleva su C.D.A. y se avisa si no corresponde a la DAM', async ({ page }) => {
+  const errores = vigilarErrores(page);
+  await iniciarSesion(page);
+  await page.goto('/app/gastos');
+  await page.getByRole('button', { name: 'Nuevo Gasto' }).first().click();
+  await elegirOpcion(page, 'Seleccione la DAM vinculada...', '118-2026-10-000001');
+  await elegirOpcion(page, 'Seleccione concepto contable...', 'PERCEPCION');
+  await elegirOpcion(page, 'Seleccione proveedor con RUC...', 'SUNAT');
+  await elegirOpcion(page, 'Tipo de comprobante...', 'FACTURA');
+  await page.locator('form').getByPlaceholder('0.00').first().fill('90');
+  const documento = page.getByPlaceholder('Ej. F001-123456');
+
+  // Un comprobante no es un C.D.A.
+  await documento.fill('F001-88');
+  await page.getByRole('button', { name: 'Guardar Gasto' }).click();
+  await esperarAviso(page, 'El C.D.A.');
+
+  // C.D.A. de otra DAM: se advierte y se puede volver a revisar
+  await documento.fill('118-26-10-999999-25-4-01');
+  await page.getByRole('button', { name: 'Guardar Gasto' }).click();
+  const dialogo = page.locator('[data-dialogo]');
+  await expect(dialogo.getByText('pertenece a la DAM 118-2026-10-999999')).toBeVisible();
+  await dialogo.locator('[data-dialogo-cancelar]').click();
+
+  // C.D.A. de su DAM, escrito con año de 4 dígitos: se guarda como lo imprime SUNAT
+  await documento.fill('118-2026-10-000001-25-4-01');
+  await page.getByRole('button', { name: 'Guardar Gasto' }).click();
+  await expect(page.getByText('118-26-10-000001-25-4-01').first()).toBeVisible();
+  expect(errores).toEqual([]);
+});
+
+test('el proveedor rápido permite registrar una entidad del Estado', async ({ page }) => {
+  const errores = vigilarErrores(page);
+  await iniciarSesion(page);
+  await page.goto('/app/gastos');
+  await page.getByRole('button', { name: 'Nuevo Gasto' }).first().click();
+  await page.getByTitle('Registrar nuevo proveedor (+)').click();
+  await page.getByRole('button', { name: /Estado \/ Tributo/ }).click();
+  await page.getByPlaceholder('Ej. 20123456789').fill('20100130204');
+  await page.getByPlaceholder('Ej. DISTRIBUIDORA LOGÍSTICA S.A.C.').fill('ENTIDAD DEL ESTADO RAPIDA');
+  await page.locator('[role=dialog] button[type=submit]').click();
+  await expect(page.locator('[role=dialog][aria-modal=true]')).toBeHidden();
+  const creado = (await api(page, 'GET', '/proveedores/')).find((p) => p.nombre === 'ENTIDAD DEL ESTADO RAPIDA');
+  expect(creado.categoria).toBe(CATEGORIA_PROVEEDOR.ESTADO_O_TRIBUTO);
   expect(errores).toEqual([]);
 });

@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from domain.validaciones import (
-    ValorInvalido, digito_verificador_ruc, limpiar_texto, normalizar_comprobante, normalizar_correo,
+    ValorInvalido, dam_del_cda, digito_verificador_ruc, normalizar_cda, limpiar_texto, normalizar_comprobante, normalizar_correo,
     normalizar_numero_dam, normalizar_ruc, normalizar_ruc_opcional, normalizar_usuario, validar_clave,
 )
 
@@ -146,7 +146,7 @@ def test_comprobante_es_idempotente():
 
 _CASOS = json.loads((Path(__file__).parent / "casos_validacion.json").read_text(encoding="utf-8"))
 _REGLAS = {"ruc": normalizar_ruc, "numero_dam": normalizar_numero_dam, "comprobante": normalizar_comprobante,
-           "usuario": normalizar_usuario, "correo": normalizar_correo, "clave": validar_clave}
+           "usuario": normalizar_usuario, "correo": normalizar_correo, "clave": validar_clave, "cda": normalizar_cda}
 
 
 @pytest.mark.parametrize("regla, entrada, salida", [
@@ -162,3 +162,8 @@ def test_casos_compartidos_validos(regla, entrada, salida):
 def test_casos_compartidos_invalidos(regla, entrada):
     with pytest.raises(ValorInvalido):
         _REGLAS[regla](entrada)
+
+
+@pytest.mark.parametrize("cda, dam", _CASOS["_dam_del_cda"])
+def test_dam_del_cda(cda, dam):
+    assert dam_del_cda(cda) == dam

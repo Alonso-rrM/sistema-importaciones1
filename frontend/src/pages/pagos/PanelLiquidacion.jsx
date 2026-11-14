@@ -112,6 +112,7 @@ export default function PanelLiquidacion({ gasto: selectedGasto, bancos, tcSuger
       mensaje:
         `Contenedor / Factura:  ${selectedGasto.maestro_factura || '-'}\n` +
         `DAM:  ${selectedGasto.dam_numero || '-'}\n` +
+        `${selectedGasto.tipo_doc_nombre || 'Documento'}:  ${selectedGasto.numero_documento || '-'}\n` +
         `Importador:  ${selectedGasto.importador_nombre || '-'}\n` +
         `Concepto:  ${selectedGasto.concepto_nombre || '-'}\n` +
         `Importe:  ${form.moneda} ${parseFloat(form.importe).toFixed(2)}\n\n` +

@@ -6,14 +6,15 @@ import { useEffect, useEffectEvent, useState } from 'react';
 import { Banknote } from 'lucide-react';
 import api from '../../services/api';
 import ModalCrearProveedorRapido from '../../components/ModalCrearProveedorRapido';
-import { CATEGORIA_PROVEEDOR, MONEDA } from '../../constants';
+import { CATEGORIA_PROVEEDOR, CLASE_ADUANERA, MONEDA } from '../../constants';
 import { mensajeDeError, useInteraccion } from '../../context/interaccion';
-import { validarDocumentoSegunProveedor, validarMonto } from '../../utils/validaciones';
+import { validarDocumentoGasto, validarMonto } from '../../utils/validaciones';
+import { confirmarCdaDeLaDam } from '../../utils/confirmarCda';
 
 export default function ModalNuevoGasto({
   expediente, damsVinculadas, opcionesConceptos, opcionesProveedores, opcionesTiposDoc, onProveedorCreado, onCerrar, onRegistrado,
 }) {
-  const { avisar } = useInteraccion();
+  const { avisar, confirmar } = useInteraccion();
   const [gasto, setGasto] = useState(() => ({
     id_dam: damsVinculadas[0]?.id_dam ? String(damsVinculadas[0].id_dam) : '',
     id_concepto: '', id_proveedor: '', id_tipo_doc: '', numero_documento: '', monto_original: '', moneda: MONEDA.USD, observaciones: '',
@@ -46,11 +47,17 @@ export default function ModalNuevoGasto({
     }
     const monto = validarMonto(gasto.monto_original);
     const proveedor = opcionesProveedores.find((p) => String(p.id_proveedor) === String(gasto.id_proveedor));
-    const documento = validarDocumentoSegunProveedor(proveedor?.categoria, gasto.numero_documento);
+    const concepto = opcionesConceptos.find((c) => String(c.id_concepto) === String(gasto.id_concepto));
+    const documento = validarDocumentoGasto(
+      { categoria: proveedor?.categoria, claseAduanera: concepto?.clase_aduanera }, gasto.numero_documento);
     const error = monto.error || documento.error;
     if (error) {
       avisar(error, 'advertencia');
       return;
+    }
+    if (concepto?.clase_aduanera && concepto.clase_aduanera !== CLASE_ADUANERA.NINGUNA) {
+      const dam = damsVinculadas.find((d) => String(d.id_dam) === String(gasto.id_dam));
+      if (!(await confirmarCdaDeLaDam(confirmar, documento.valor, dam?.numero_de_dam))) return;
     }
     setGuardando(true);
     try {

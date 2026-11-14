@@ -4,15 +4,15 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  validarClave, validarComprobante, validarCorreo, validarDocumentoSegunProveedor, validarMonto, validarNumeroDam,
-  validarRuc, validarUsuario,
+  damDelCda, validarCda, validarClave, validarComprobante, validarCorreo, validarDocumentoGasto, validarMonto,
+  validarNumeroDam, validarRuc, validarUsuario,
 } from '../src/utils/validaciones.js';
-import { CATEGORIA_PROVEEDOR } from '../src/constants/index.js';
+import { CATEGORIA_PROVEEDOR, CLASE_ADUANERA } from '../src/constants/index.js';
 
 const CASOS = JSON.parse(readFileSync(new URL('../../tests/casos_validacion.json', import.meta.url), 'utf-8'));
 const REGLAS = {
   ruc: validarRuc, numero_dam: validarNumeroDam, comprobante: validarComprobante,
-  usuario: validarUsuario, correo: validarCorreo, clave: validarClave,
+  usuario: validarUsuario, correo: validarCorreo, clave: validarClave, cda: validarCda,
 };
 
 for (const [regla, validar] of Object.entries(REGLAS)) {
@@ -45,12 +45,19 @@ test('montos', () => {
   assert.match(validarMonto('10.123', { etiqueta: 'El FOB' }).error, /^El FOB admite como máximo 2 decimales/);
 });
 
-test('documento según proveedor: nacional exige comprobante; exterior y Estado, texto libre', () => {
+test('dam del C.D.A.', () => {
+  for (const [cda, dam] of CASOS._dam_del_cda) assert.equal(damDelCda(cda), dam);
+});
+
+test('documento del gasto: C.D.A. si el concepto es del Estado; si no, según el proveedor', () => {
   const { NACIONAL, INTERNACIONAL, ESTADO_O_TRIBUTO } = CATEGORIA_PROVEEDOR;
-  assert.deepEqual(validarDocumentoSegunProveedor(NACIONAL, 'f001-5'), { valor: 'F001-00000005', error: null });
-  assert.ok(validarDocumentoSegunProveedor(NACIONAL, 'INV 55').error);
-  assert.deepEqual(validarDocumentoSegunProveedor(INTERNACIONAL, ' INV-2026/55 '), { valor: 'INV-2026/55', error: null });
-  assert.deepEqual(validarDocumentoSegunProveedor(ESTADO_O_TRIBUTO, '118-26-10-535304-25-4-01'),
+  const doc = (categoria, texto, claseAduanera = CLASE_ADUANERA.NINGUNA) => validarDocumentoGasto({ categoria, claseAduanera }, texto);
+  assert.deepEqual(doc(NACIONAL, 'f001-5'), { valor: 'F001-00000005', error: null });
+  assert.ok(doc(NACIONAL, 'INV 55').error);
+  assert.deepEqual(doc(INTERNACIONAL, ' INV-2026/55 '), { valor: 'INV-2026/55', error: null });
+  assert.deepEqual(doc(ESTADO_O_TRIBUTO, 'L/C 118-2026-382310'), { valor: 'L/C 118-2026-382310', error: null });
+  assert.deepEqual(doc(ESTADO_O_TRIBUTO, '118-2026-10-535304-25-4-01', CLASE_ADUANERA.PERCEPCION),
     { valor: '118-26-10-535304-25-4-01', error: null });
-  assert.equal(validarDocumentoSegunProveedor(undefined, 'F001-1').valor, 'F001-00000001');   // sin categoría: nacional
+  assert.ok(doc(ESTADO_O_TRIBUTO, 'F001-5', CLASE_ADUANERA.TRIBUTO).error);   // un tributo exige C.D.A.
+  assert.equal(doc(undefined, 'F001-1').valor, 'F001-00000001');   // sin categoría: nacional
 });

@@ -102,7 +102,18 @@ def num_dam(etiqueta):
     return _NUMEROS_DAM.setdefault(etiqueta, f"118-2026-10-{len(_NUMEROS_DAM) + 1:06d}")
 def mk_dam(idm, num, canal="VERDE"):
     r = c.post("/dams/", json={"id_maestro": idm, "numero_de_dam": num_dam(num), "canal_control": canal}, headers=H["logi"]); return r.json()["id_dam"]
+_SUFIJOS_CDA = {}
+def cda_para(idd, etiqueta):
+    """C.D.A. válido y estable para una etiqueta de prueba: la DAM del gasto (año de 2 dígitos) + un sufijo propio."""
+    db.expire_all(); numero = db.get(models.DetalleDam, idd).numero_de_dam   # 118-2026-10-000001
+    aduana, anio, regimen, correlativo = numero.split("-")
+    sufijo = _SUFIJOS_CDA.setdefault(etiqueta, len(_SUFIJOS_CDA) + 1)
+    return f"{aduana}-{anio[2:]}-{regimen}-{correlativo}-{sufijo}-1-01"
 def mk_gasto(idd, concepto, monto, moneda="USD", doc_n=None):
+    # Los gastos del Estado (tributos, percepción, OMC) llevan C.D.A.: la etiqueta de prueba se convierte en uno
+    clase = db.get(models.CatConceptoPago, concepto).clase_aduanera
+    if doc_n and clase not in (None, "NINGUNA"):
+        doc_n = cda_para(idd, doc_n)
     r = c.post("/gastos/", json={"id_dam": idd, "id_concepto": concepto, "id_proveedor": prov.id_proveedor, "id_tipo_doc": doc.id_tipo_doc,
                                   "monto_original": str(monto), "moneda": moneda, "numero_documento": doc_n}, headers=H["logi"])
     return r.json()["id_gasto"]
@@ -932,6 +943,29 @@ chk("L6", "Contraseña propia: exige la actual y una distinta; al cambiarla la s
     r_l6a.status_code == 400 and r_l6b.status_code == 400 and r_l6c.status_code == 200 and r_l6d.status_code == 401,
     f"{r_l6a.status_code} / {r_l6b.status_code} / {r_l6c.status_code} / {r_l6d.status_code}")
 limiter.enabled = True
+
+# ==========================================
+# M) C.D.A. EN LOS GASTOS DEL ESTADO
+# ==========================================
+print("\n=========== M) C.D.A. EN LOS GASTOS DEL ESTADO ===========")
+m_m = mk_maestro("F-M1"); d_m = mk_dam(m_m, "DAM-M1")
+dam_m = db.get(models.DetalleDam, d_m).numero_de_dam              # 118-2026-10-0000NN
+aduana_m, anio_m, reg_m, num_m = dam_m.split("-")
+def gasto_estado(concepto, numero):
+    return c.post("/gastos/", json={"id_dam": d_m, "id_concepto": concepto, "id_proveedor": prov.id_proveedor,
+                                     "id_tipo_doc": doc.id_tipo_doc, "monto_original": "50", "numero_documento": numero}, headers=H["logi"])
+cda_m = f"{aduana_m}-{anio_m}-{reg_m}-{num_m}-25-4-01"             # escrito con año de 4 dígitos
+r_m1a = gasto_estado(c_perc.id_concepto, cda_m)
+r_m1b = gasto_estado(c_trib.id_concepto, "F001-5")
+r_m1c = gasto_estado(c_otro.id_concepto, "L/C 118-2026-382310")    # flete con proveedor del Estado: texto libre
+chk("M1", "Gasto del Estado: el C.D.A. se guarda como lo imprime SUNAT (año de 2 dígitos); un tributo con comprobante -> 422; un concepto sin clase aduanera no exige C.D.A.",
+    r_m1a.json().get("numero_documento") == f"{aduana_m}-{anio_m[2:]}-{reg_m}-{num_m}-25-4-01" and r_m1b.status_code == 422
+    and "C.D.A." in str(r_m1b.json().get("detail")) and r_m1c.status_code == 200,
+    f"{r_m1a.json().get('numero_documento')} / {r_m1b.status_code} / {r_m1c.status_code}")
+
+r_m2 = gasto_estado(c_perc.id_concepto, f"{aduana_m} {anio_m[2:]} {reg_m} {num_m} 25 4 01")
+chk("M2", "El mismo C.D.A. escrito de otra forma es el mismo documento: el candado anti-duplicados lo rechaza",
+    r_m2.status_code == 400 and "Duplicidad" in det(r_m2), f"{r_m2.status_code} {det(r_m2)[:60]}")
 
 fallas = [x for x in R if not x[2]]
 print(f"\nRESUMEN TOTAL: {len(R)-len(fallas)}/{len(R)} pruebas pasan." + (" Fallan: " + ", ".join(x[0] for x in fallas) if fallas else ""))

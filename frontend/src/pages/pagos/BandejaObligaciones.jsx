@@ -143,6 +143,11 @@ export default function BandejaObligaciones({
                     <span className="truncate text-slate-500 font-mono text-[10px]">
                       F: {g.maestro_factura || 'N/A'}
                     </span>
+                    {g.numero_documento && (
+                      <span className="truncate text-slate-400 font-mono text-[10px]" title={g.tipo_doc_nombre || 'Documento'}>
+                        Doc: {g.numero_documento}
+                      </span>
+                    )}
                   </div>
                   <div className="text-right text-[10px] font-mono text-slate-400">
                     Deuda: {simboloMoneda} {originalNum.toFixed(2)}

@@ -10,7 +10,7 @@ from sqlalchemy import func
 
 import models
 from services.errores import error_interno, rechazar_si_invalido
-from domain.validaciones import limpiar_texto, normalizar_comprobante
+from domain.validaciones import limpiar_texto, normalizar_cda, normalizar_comprobante
 import schemas
 from dependencies import get_db, get_current_user, RoleChecker
 from services.audit import registrar_auditoria, registrar_auditoria_sync
@@ -22,6 +22,7 @@ from domain.finanzas import calcular_amortizacion_cruzada
 from constantes import (
     AccionAuditoria,
     CategoriaProveedor,
+    ClaseAduanera,
     EstadoDocumentario,
     EstadoPago,
     EstadoRegistro,
@@ -53,12 +54,17 @@ def validar_voucher_unico(db: Session, banco_id: int, numero_operacion: str, exc
 # 1. GASTOS
 # ==========================================
 
-def _numero_documento_segun_proveedor(proveedor: models.CatProveedor, numero: Optional[str]) -> Optional[str]:
+def _numero_documento_del_gasto(proveedor: models.CatProveedor, concepto: Optional[models.CatConceptoPago],
+                                numero: Optional[str]) -> Optional[str]:
     """
-    Forma canónica del N° de documento de un gasto según quién lo emite:
-    proveedor nacional -> comprobante SERIE-CORRELATIVO (F001-00000123); del exterior o el Estado (C.D.A.,
-    liquidaciones de SUNAT) -> el texto tal como se digitó, sin espacios sobrantes.
+    Forma canónica del N° de documento de un gasto:
+    - concepto del Estado (clase aduanera tributo, percepción u OMC) -> C.D.A. de SUNAT
+      (118-26-10-535304-25-4-01): cada uno de esos gastos tiene su propio C.D.A.;
+    - si no, proveedor nacional -> comprobante SERIE-CORRELATIVO (F001-00000123);
+      del exterior o el Estado -> el texto tal como se digitó, sin espacios sobrantes.
     """
+    if concepto is not None and concepto.clase_aduanera not in (None, ClaseAduanera.NINGUNA):
+        return rechazar_si_invalido(normalizar_cda, numero)
     if proveedor.categoria in (CategoriaProveedor.INTERNACIONAL, CategoriaProveedor.ESTADO_O_TRIBUTO):
         return limpiar_texto(numero)
     return rechazar_si_invalido(normalizar_comprobante, numero)
@@ -102,7 +108,8 @@ async def crear_gasto(
         raise HTTPException(status_code=403, detail="Operación Denegada: El expediente se encuentra en ATENCIÓN TOTAL. No se pueden agregar nuevos gastos a una operación concluida.")
 
     # 2. Número de documento en su forma canónica (según el proveedor) y 3. candado anti-duplicados
-    gasto.numero_documento = _numero_documento_segun_proveedor(proveedor, gasto.numero_documento)
+    concepto = db.get(models.CatConceptoPago, gasto.id_concepto)
+    gasto.numero_documento = _numero_documento_del_gasto(proveedor, concepto, gasto.numero_documento)
     _rechazar_documento_repetido(db, gasto.id_proveedor, gasto.id_tipo_doc, gasto.numero_documento)
 
     # 4. Guardar en Base de Datos (Transacción Atómica ACID)
@@ -175,13 +182,14 @@ def actualizar_gasto(id_gasto: int, gasto_editado: schemas.RegistroGastoUpdate, 
     # Documento: se normaliza y se revisa contra duplicados solo si cambia él o su emisor
     # (un gasto antiguo con otro formato se puede seguir editando sin tocar su documento)
     if any(campo in update_data and update_data[campo] != getattr(db_gasto, campo)
-           for campo in ("numero_documento", "id_proveedor", "id_tipo_doc")):
+           for campo in ("numero_documento", "id_proveedor", "id_tipo_doc", "id_concepto")):
         id_proveedor = update_data.get("id_proveedor") or db_gasto.id_proveedor
         proveedor = db.query(models.CatProveedor).filter(models.CatProveedor.id_proveedor == id_proveedor).first()
         if not proveedor:
             raise HTTPException(status_code=404, detail="El proveedor especificado no existe.")
         numero = update_data["numero_documento"] if "numero_documento" in update_data else db_gasto.numero_documento
-        numero = _numero_documento_segun_proveedor(proveedor, numero)
+        concepto = db.get(models.CatConceptoPago, update_data.get("id_concepto") or db_gasto.id_concepto)
+        numero = _numero_documento_del_gasto(proveedor, concepto, numero)
         if "numero_documento" in update_data or numero != db_gasto.numero_documento:
             update_data["numero_documento"] = numero
         _rechazar_documento_repetido(db, id_proveedor, update_data.get("id_tipo_doc") or db_gasto.id_tipo_doc,

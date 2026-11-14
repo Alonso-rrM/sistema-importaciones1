@@ -67,7 +67,8 @@ Frontend (`frontend/src/`):
   exporta `LARGO_MINIMO_MOTIVO`. `utils/reversion.js` avisa si la anulación le quitó el levante a una DAM.
 - `components/estilosSelect.js`: estilos de react-select (`ESTILO_SELECT_TEAL`, `ESTILO_SELECT_MORADO`).
 - `utils/validaciones.js`: copia de `domain/validaciones.py` para avisar antes de enviar (`validarRuc`,
-  `validarNumeroDam`, `validarComprobante`, `validarDocumentoSegunProveedor`, `validarMonto`); devuelven `{ valor, error }`.
+  `validarNumeroDam`, `validarComprobante`, `validarCda`, `validarDocumentoGasto`, `validarMonto`, `validarUsuario`,
+  `validarCorreo`, `validarClave`); devuelven `{ valor, error }`. `utils/confirmarCda.js`: aviso si el C.D.A. no es de la DAM.
 - `frontend/e2e/`: pruebas en navegador con Playwright (ver su `README.md`).
 
 ## 3. Rama de trabajo (importante)
@@ -125,16 +126,14 @@ Frontend (`frontend/src/`):
 | 4 | Ordenar el frontend: componentes y hooks comunes, diálogos propios, pruebas e2e | Hecha |
 | 5 | Validación de lo que digita la usuaria (RUC, DAM, comprobantes, montos) | Hecha |
 | 6 | Limpieza: README, `.env.example`, archivos sobrantes, roles iniciales unificados | Hecha |
-| — | Registro del C.D.A. de SUNAT (ver sección 8) | En análisis |
+| — | Registro del C.D.A. de SUNAT (ver sección 8) | Hecho (formato, normalización y aviso por DAM) |
 
 Deuda conocida y aceptada por ahora:
 
 - Restricciones `CHECK` en la base y validación estricta de `tipo_valor`, `canal_control`, `categoria`
   y `status_llegada`: pendientes hasta revisar la base real con `scripts/verificar_valores.py`.
-- El campo RUC de las pantallas de catálogo solo admite dígitos: un proveedor del exterior con identificación
-  alfanumérica se registra sin RUC (el backend sí la acepta).
-- La categoría de proveedor `ESTADO_O_TRIBUTO` se elige en la pantalla de Proveedores, pero el modal de
-  creación rápida (`components/ModalCrearProveedorRapido.jsx`) solo ofrece Nacional e Internacional.
+- El campo RUC de la pantalla de Proveedores solo admite dígitos: un proveedor del exterior con identificación
+  alfanumérica se registra desde el modal de creación rápida (que sí acepta letras) o sin RUC.
 - `Dams.jsx`, `Vouchers.jsx`, `Reportes.jsx` y `AdminPanel.jsx` siguen siendo archivos largos (sin advertencias);
   se pueden partir igual que Gastos y Logística cuando haya que tocarlos.
 - Las bases ya instaladas conservan los nombres de rol con que nacieron (solo cambia el texto; el sistema compara
@@ -193,24 +192,31 @@ GitHub Actions (`.github/workflows/ci.yml`) corre todo lo anterior en cada subid
   - N° de DAM: se guarda como `118-2026-10-000123` (aduana-año-régimen-número). Se acepta digitarlo con año de
     2 dígitos (`118-26-10-123`, como en el C.D.A.), sin ceros y con espacios, barras o puntos. Dos formas de
     escribir la misma DAM son la misma DAM (el candado de repetidos las reconoce).
-  - N° de documento del gasto: proveedor nacional -> `SERIE-NÚMERO` con 8 dígitos (`F001-00000123`);
-    del exterior o el Estado (C.D.A., liquidaciones) -> se guarda tal como se digita.
+  - N° de documento del gasto: concepto del Estado (tributo, percepción, OMC) -> C.D.A. (`118-26-10-535304-25-4-01`,
+    ver sección 8); si no, proveedor nacional -> `SERIE-NÚMERO` con 8 dígitos (`F001-00000123`);
+    del exterior o el Estado -> se guarda tal como se digita.
   - Montos: número con punto decimal, máximo 2 decimales; FOB y flete pueden ser 0.
   - Expediente: la fecha de arribo no puede ser anterior a la de embarque.
 
-## 8. Contexto del C.D.A. (trabajo siguiente)
+## 8. C.D.A. (Código de Documento Aduanero de SUNAT)
 
-- C.D.A. = Código de Documento Aduanero: número con el que SUNAT identifica cada documento con deuda.
-- Cada concepto de gasto del Estado (tributos, percepción, OMC...) tiene **su propio C.D.A.** con su monto.
-  Una DAM tiene varios C.D.A.; un contenedor puede tener varias DAMs. Las facturas de proveedores no tienen C.D.A.
-- Ejemplo real: DAM `118-26-10-535304`; liquidación de cobranza `118-2026-382310` (percepción IGV, S/ 5,305.00)
-  con C.D.A. `118-26-10-535304-25-4-01`. El C.D.A. parece ser el número de la DAM más un sufijo.
-- Ojo: el sistema guarda la DAM con año de 4 dígitos (`118-2026-10-535304`) y el C.D.A. la escribe con 2
-  (`118-26-10-535304-...`). Si se valida que un C.D.A. corresponde a su DAM, comparar con
-  `normalizar_numero_dam` aplicado a los cuatro primeros tramos del C.D.A.
-- Encaje previsto: proveedor SUNAT con categoría `ESTADO_O_TRIBUTO`, tipo de documento "C.D.A." en el catálogo
-  de comprobantes y el C.D.A. en `numero_documento` del gasto.
-- Por confirmar con la usuaria: si los tributos propios de la DAM comparten un solo C.D.A. (afectaría el
-  candado anti-duplicados de `routers/finanzas.py`) y qué número usa Tesorería para pagar (C.D.A. o número de L/C).
-- Por decidir: el concepto "PERCEPCION OMC" hoy está clasificado como PERCEPCION (cuenta para la proforma),
-  igual que antes de la fase 2. Si en realidad pertenece a la OMC, se cambia desde la pantalla de Conceptos.
+Confirmado por la usuaria:
+- Etapas de la DAM: **proforma** = TRIBUTOS (ad valorem, IGV, IPM... todos en **un** C.D.A.) + PERCEPCIÓN de los
+  tributos (su propio C.D.A.); **OMC** = OMC + PERCEPCIÓN OMC (cada una con su C.D.A.; la percepción OMC no
+  siempre existe). Las facturas de proveedores no tienen C.D.A.
+- Tesorería paga con el contenedor como referencia y el C.D.A. para saber exactamente qué documento paga.
+
+Cómo está en el sistema:
+- Un gasto cuyo concepto tiene clase aduanera TRIBUTO, PERCEPCION u OMC lleva en `numero_documento` su C.D.A.
+  (`_numero_documento_del_gasto` en `routers/finanzas.py`). Se guarda como lo imprime SUNAT:
+  `118-26-10-535304-25-4-01` (DAM con año de 2 dígitos y número de 6, más el sufijo); se acepta digitar el año
+  con 4 dígitos o con espacios. Es opcional (puede registrarse el gasto antes de tener el C.D.A.).
+- El candado anti-duplicados (proveedor + tipo de documento + número) impide registrar dos veces el mismo C.D.A.
+- Las pantallas avisan (sin bloquear) si el C.D.A. no empieza con la DAM del gasto: la relación C.D.A. = DAM +
+  sufijo se dedujo de los ejemplos vistos. Si aparece un C.D.A. real que no cumpla, revisar `normalizar_cda`.
+- "PERCEPCION OMC" es de clase OMC (migración `a9e3b7c2d5f1`): la etapa OMC se da por pagada cuando están pagados
+  todos sus gastos (la OMC sola, o la OMC y su percepción) y nunca afecta a la proforma.
+- El proveedor SUNAT es de categoría `ESTADO_O_TRIBUTO` (se puede crear desde el modal rápido). El tipo de
+  documento "C.D.A." del catálogo de comprobantes es informativo: la regla la decide la clase del concepto.
+- Pagos muestra el documento (C.D.A.) en la bandeja, en el panel y en la confirmación previa al pago.
+- El sistema guarda la DAM con año de 4 dígitos (`118-2026-10-535304`); `dam_del_cda` convierte un C.D.A. a esa forma.
