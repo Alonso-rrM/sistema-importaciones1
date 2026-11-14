@@ -33,14 +33,9 @@ export default defineConfig([
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
     rules: {
-      // Deuda técnica conocida: estas reglas del compilador de React fallan en las páginas grandes
-      // (Gastos, Logística, Pagos, Vouchers...). Quedan como ADVERTENCIA hasta la fase 4 del plan de
-      // mejora (división en componentes y hooks); al cerrarla deben volver a 'error'.
-      'react-hooks/immutability': 'warn',
-      'react-hooks/preserve-manual-memoization': 'warn',
-      'react-hooks/set-state-in-effect': 'warn',
-      'react-hooks/purity': 'warn',
-      'react-refresh/only-export-components': 'warn',
+      // Reglas del compilador de React (inmutabilidad, setState en efectos, pureza...): quedan como ERROR,
+      // tal como vienen en la configuración recomendada. Se resolvieron todas en la fase 4 del plan.
+      'react-refresh/only-export-components': ['error', { allowConstantExport: true }],
       // Avisos y confirmaciones: usar useInteraccion() (avisar / confirmar / pedirDatos), no los del navegador
       'no-alert': 'error',
       // Protección contra errores de digitación en estados, monedas, categorías, etc.

@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "lint:ci": "eslint . --max-warnings 76",
+    "lint:ci": "eslint . --max-warnings 0",
     "preview": "vite preview",
     "e2e": "playwright test"
   },
