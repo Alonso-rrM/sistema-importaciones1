@@ -17,6 +17,10 @@ const FILTRO_INACTIVO = 'bg-slate-800 text-slate-400 hover:text-slate-200';
 const ETIQUETA = 'text-slate-500 text-[10px] uppercase font-bold block';
 const CLASE_ENTRADA = 'w-full text-xs bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white focus:outline-none focus:border-teal-500';
 
+
+/** "Nuevo" o "Nueva" según el género del catálogo (textos.femenino). */
+const nuevo = (textos) => (textos.femenino ? 'Nueva' : 'Nuevo');
+
 function InsigniaEstado({ estado }) {
   const inactivo = estado === ESTADO_REGISTRO.INACTIVO;
   return (
@@ -69,7 +73,7 @@ function Encabezado({ definicion, onNuevo }) {
       <button onClick={onNuevo}
         className="px-3.5 py-1.5 bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold rounded-lg transition-colors shadow-lg shadow-teal-600/20 flex items-center gap-1.5 cursor-pointer">
         <span>+</span>
-        <span>Nuevo {textos.singular}</span>
+        <span>{nuevo(textos)} {textos.singular}</span>
       </button>
     </header>
   );
@@ -254,7 +258,7 @@ function Ficha({ definicion, c }) {
         <p className="text-xs text-slate-500 max-w-sm mt-1.5">{textos.ayudaSinSeleccion}</p>
         <button onClick={c.nuevo}
           className="mt-4 px-4 py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-xs font-bold transition-all shadow-md shadow-teal-600/20">
-          + Registrar Nuevo {textos.singular}
+          + Registrar {nuevo(textos)} {textos.singular}
         </button>
       </div>
     );
@@ -267,7 +271,7 @@ function Ficha({ definicion, c }) {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2.5">
             <h2 className="text-base font-bold text-white tracking-tight">
-              {c.modo === MODO.NUEVO ? `✨ Nuevo ${textos.singular}` : nombreDe(definicion, r)}
+              {c.modo === MODO.NUEVO ? `✨ ${nuevo(textos)} ${textos.singular}` : nombreDe(definicion, r)}
             </h2>
             {c.modo !== MODO.NUEVO && <InsigniaEstado estado={r?.estado_registro} />}
           </div>

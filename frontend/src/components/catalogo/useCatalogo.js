@@ -26,6 +26,8 @@ export const nombreDe = (definicion, registro) => registro?.[definicion.campoNom
 export default function useCatalogo(definicion) {
   const { avisar, confirmar } = useInteraccion();
   const { ruta, campoId, textos } = definicion;
+  // Concordancia de género en los mensajes ("Agencia registrada", "Banco registrado")
+  const o = (raiz) => raiz + (textos.femenino ? 'a' : 'o');
 
   const [registros, setRegistros] = useState([]);
   const [seleccionId, setSeleccionId] = useState(null);
@@ -137,12 +139,12 @@ export default function useCatalogo(definicion) {
     try {
       if (modo === MODO.NUEVO) {
         const { data } = await api.post(`/${ruta}/`, datos);
-        avisar(`✅ ${textos.singular} registrado exitosamente.`, 'exito');
+        avisar(`✅ ${textos.singular} ${o('registrad')} exitosamente.`, 'exito');
         await cargar();
         setSeleccionId(data?.[campoId] ?? null);
       } else {
         await api.put(`/${ruta}/${seleccionId}`, datos);
-        avisar(`✅ ${textos.singular} actualizado exitosamente.`, 'exito');
+        avisar(`✅ ${textos.singular} ${o('actualizad')} exitosamente.`, 'exito');
         await cargar();
       }
       setModo(MODO.DETALLE);
@@ -164,7 +166,7 @@ export default function useCatalogo(definicion) {
     if (!ok) return;
     try {
       await api.delete(`/${ruta}/${seleccionId}`);
-      avisar(`✅ ${textos.singular} "${nombreDe(definicion, seleccionado)}" desactivado correctamente.`, 'exito');
+      avisar(`✅ ${textos.singular} "${nombreDe(definicion, seleccionado)}" ${o('desactivad')} correctamente.`, 'exito');
       await cargar();
     } catch (error) {
       avisar(`❌ ${mensajeDeError(error, 'No se pudo desactivar.')}`, 'error');
@@ -175,7 +177,7 @@ export default function useCatalogo(definicion) {
     if (!seleccionado) return;
     try {
       await api.put(`/${ruta}/${seleccionId}/restaurar`);
-      avisar(`✅ ${textos.singular} "${nombreDe(definicion, seleccionado)}" restaurado a ACTIVO.`, 'exito');
+      avisar(`✅ ${textos.singular} "${nombreDe(definicion, seleccionado)}" ${o('restaurad')} a ACTIVO.`, 'exito');
       await cargar();
     } catch (error) {
       avisar(`❌ ${mensajeDeError(error, 'No se pudo restaurar.')}`, 'error');
@@ -194,7 +196,7 @@ export default function useCatalogo(definicion) {
     if (!ok) return;
     try {
       await api.delete(`/${ruta}/${seleccionId}/fisico`);
-      avisar(`✅ ${textos.singular} "${nombreDe(definicion, seleccionado)}" eliminado definitivamente.`, 'exito');
+      avisar(`✅ ${textos.singular} "${nombreDe(definicion, seleccionado)}" ${o('eliminad')} definitivamente.`, 'exito');
       setSeleccionId(null);
       await cargar();
     } catch (error) {

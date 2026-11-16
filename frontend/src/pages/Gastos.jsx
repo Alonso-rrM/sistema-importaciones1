@@ -17,6 +17,7 @@ import { CATEGORIA_PROVEEDOR, CLASE_ADUANERA, ESTADO_PAGO, MONEDA } from '../con
 import { mensajeDeError, useInteraccion } from '../context/interaccion';
 import { validarDocumentoGasto, validarMonto } from '../utils/validaciones';
 import { confirmarCdaDeLaDam } from '../utils/confirmarCda';
+import { opcionesConAgenciaPrimero } from '../utils/proveedores';
 import BandejaGastos from './gastos/BandejaGastos';
 import DetalleGasto from './gastos/DetalleGasto';
 import FormularioGasto from './gastos/FormularioGasto';
@@ -45,7 +46,7 @@ const lista = (res) => {
 };
 
 const etiquetaProveedor = (p) => ({
-  value: p.id_proveedor, label: p.ruc ? `${p.ruc} - ${p.nombre}` : p.nombre, categoria: p.categoria,
+  value: p.id_proveedor, label: p.ruc ? `${p.ruc} - ${p.nombre}` : p.nombre, categoria: p.categoria, idAgente: p.id_agente,
 });
 
 const CATALOGOS_VACIOS = Object.freeze({
@@ -60,7 +61,7 @@ const consultarCatalogos = () => Promise.all([
   api.get('/tipos-documento/'),
 ]).then(([maestros, dams, conceptos, proveedores, tiposDoc]) => ({
   damsRaw: lista(dams),
-  opcionesMaestros: lista(maestros).map((m) => ({ value: m.id_maestro, label: `Factura: ${m.numero_factura}` })),
+  opcionesMaestros: lista(maestros).map((m) => ({ value: m.id_maestro, label: `Factura: ${m.numero_factura}`, idAgente: m.id_agente })),
   opcionesConceptos: lista(conceptos).map((c) => ({ value: c.id_concepto, label: c.nombre, claseAduanera: c.clase_aduanera })),
   opcionesProveedores: lista(proveedores).map(etiquetaProveedor),
   opcionesTiposDoc: lista(tiposDoc).map((t) => ({ value: t.id_tipo_doc, label: t.nombre_documento })),
@@ -166,6 +167,12 @@ const Gastos = () => {
   // Seleccionado: el elegido; si no está en la página y no se edita nada, el primero de la lista
   const selectedGasto = gastos.find((g) => g.id_gasto === selectedId)
     ?? (viewMode === MODO.LISTA ? gastos[0] ?? null : null);
+
+  // Los RUC de la agencia de aduanas del expediente del gasto se muestran primero
+  const idMaestroDelGasto = form.id_maestro_temp ?? damsRaw.find((d) => d.id_dam === Number(form.id_dam))?.id_maestro;
+  const idAgenteDelGasto = opcionesMaestros.find((m) => m.value === idMaestroDelGasto)?.idAgente;
+  const opcionesProveedoresOrdenadas = useMemo(
+    () => opcionesConAgenciaPrimero(opcionesProveedores, idAgenteDelGasto), [opcionesProveedores, idAgenteDelGasto]);
 
   const opcionesDamsFiltradas = useMemo(() => {
     const filtradas = form.id_maestro_temp ? damsRaw.filter((dam) => dam.id_maestro === form.id_maestro_temp) : damsRaw;
@@ -418,6 +425,7 @@ const Gastos = () => {
         onGuardar={handleGuardar} onCerrar={cerrarPanel} onCrearProveedor={() => setModalCrearProveedorOpen(true)}
         damsRaw={damsRaw} opcionesMaestros={opcionesMaestros} opcionesDamsFiltradas={opcionesDamsFiltradas}
         opcionesConceptos={opcionesConceptos} opcionesProveedores={opcionesProveedores} opcionesTiposDoc={opcionesTiposDoc}
+        opcionesProveedoresOrdenadas={opcionesProveedoresOrdenadas}
       />
 
       {gastoAEliminar && (

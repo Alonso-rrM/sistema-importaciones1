@@ -13,7 +13,7 @@ import re
 from typing import Callable, Optional
 
 import models
-from constantes import ClaseAduanera, TipoGasto
+from constantes import CategoriaProveedor, ClaseAduanera, TipoGasto
 from domain.conceptos import clase_aduanera_sugerida
 from domain.validaciones import normalizar_ruc_opcional
 
@@ -61,7 +61,14 @@ def _proveedor(fila: dict):
 
 
 def _agente(fila: dict):
-    return models.CatAgente(nombre=str(fila["nombre"]), ruc=_ruc_desde_excel(fila.get("ruc")))
+    """
+    La agencia es un grupo; si la fila trae RUC, se crea también el proveedor con ese RUC dentro del grupo.
+    (Si ese RUC ya existe en Proveedores, la fila se rechaza: agréguelo al grupo desde la pantalla de Agencias.)
+    """
+    nombre = str(fila["nombre"])
+    ruc = _ruc_desde_excel(fila.get("ruc"))
+    proveedores = [models.CatProveedor(nombre=nombre, ruc=ruc, categoria=CategoriaProveedor.NACIONAL)] if ruc else []
+    return models.CatAgente(nombre=nombre, proveedores=proveedores)
 
 
 def _importador(fila: dict):

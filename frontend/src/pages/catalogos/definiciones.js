@@ -6,6 +6,7 @@
  *   requerido / mensajeRequerido, placeholder, ayuda, valorInicial, vacioComoNulo, ancho: 'medio'
  *   validar(valor, formulario): mensaje de error o null. Al modificar, solo se aplica si el valor cambió
  *   (puede haber registros antiguos que no cumplan la regla).
+ * textos.femenino: true si el nombre del catálogo es femenino ("Nueva Agencia", "registrada").
  * buscarEn: campos donde busca el cuadro de búsqueda.
  * tarjeta: qué más muestra cada fila de la bandeja.  ficha: qué muestra la ficha de detalle.
  */
@@ -13,6 +14,7 @@ import { Briefcase, Building2, Factory, FileDigit, Landmark, Tags, Users } from 
 import { CATEGORIA_PROVEEDOR, CLASE_ADUANERA, TIPO_GASTO } from '../../constants';
 import { validarRuc } from '../../utils/validaciones';
 import GastosDelConcepto from '../conceptos/GastosDelConcepto';
+import RucsDeLaAgencia from '../agentes/RucsDeLaAgencia';
 
 const RUC_O_TEXTO = (r) => (r?.ruc ? `RUC: ${r.ruc}` : 'S/RUC');
 
@@ -84,29 +86,29 @@ export const ALMACENES = {
 };
 
 export const AGENTES = {
-  ruta: 'agentes', campoId: 'id_agente', Icono: Briefcase,
+  // La agencia es un GRUPO (marca); sus RUC son proveedores y se agregan en la ficha (RucsDeLaAgencia)
+  ruta: 'agentes', campoId: 'id_agente', Icono: Briefcase, PanelDetalle: RucsDeLaAgencia,
   textos: {
-    singular: 'Agente',
-    titulo: 'Catálogo de Agentes de Aduana',
-    subtitulo: 'Agencias autorizadas ante SUNAT para el desaduanamiento de mercancías',
-    placeholderBusqueda: 'Buscar por RUC o Nombre...',
-    sinResultados: 'No se encontraron agentes de aduana con los criterios indicados.',
-    ayudaSinSeleccion: 'Seleccione un agente de la bandeja izquierda para ver o actualizar sus datos operativos.',
+    singular: 'Agencia',
+    femenino: true,
+    titulo: 'Agencias de Aduana',
+    subtitulo: 'Cada agencia agrupa los RUC (empresas) con los que opera ante SUNAT',
+    placeholderBusqueda: 'Buscar agencia por nombre...',
+    sinResultados: 'No se encontraron agencias de aduana con los criterios indicados.',
+    ayudaSinSeleccion: 'Seleccione una agencia para ver sus RUC o agregar otros.',
     referencia: (r) => `a la agencia "${r.nombre}"`,
-    advertenciaBorrado: 'tiene despachos asignados',
+    advertenciaBorrado: 'tiene despachos asignados o RUC agrupados',
   },
   campos: [
-    campoRuc('Ej. 20111222333', true),
-    campoNombre('Razón Social / Nombre de la Agencia', 'Nombre oficial o abreviado de la agencia de aduanas...', 'El nombre de la Agencia de Aduanas es obligatorio.'),
+    campoNombre('Nombre de la Agencia (grupo)', 'Nombre comercial de la agencia de aduanas...', 'El nombre de la Agencia de Aduanas es obligatorio.'),
   ],
-  buscarEn: ['nombre', 'ruc'],
-  tarjeta: { detalleDerecha: RUC_O_TEXTO },
+  buscarEn: ['nombre'],
+  tarjeta: { detalleDerecha: (r) => `${r.cantidad_rucs ?? 0} RUC` },
   ficha: {
     titulo: 'Datos de la Agencia',
-    destacado: { etiqueta: 'RUC', valor: (r) => r?.ruc || 'No declarado' },
+    destacado: { etiqueta: 'Tipo', valor: () => 'Grupo de RUC' },
     datos: [
-      { etiqueta: 'Razón Social', valor: (r) => r?.nombre },
-      { etiqueta: 'RUC', valor: (r) => r?.ruc || 'Sin RUC' },
+      { etiqueta: 'Nombre de la agencia', valor: (r) => r?.nombre },
     ],
   },
 };

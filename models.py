@@ -56,8 +56,11 @@ class CatProveedor(Base):
     # [NUEVO] Clasificación del proveedor
     categoria = Column(String(30), default=CategoriaProveedor.NACIONAL)
     estado_registro = Column(String(20), default=EstadoRegistro.ACTIVO)
-    
+    # Agencia de aduanas (grupo) a la que pertenece este RUC; un RUC pertenece a un solo grupo
+    id_agente = Column(Integer, ForeignKey("cat_agentes.id_agente"), nullable=True, index=True)
+
     gastos = relationship("RegistroGasto", back_populates="proveedor_rel")
+    agente = relationship("CatAgente", back_populates="proveedores")
 
 class CatAlmacen(Base):
     __tablename__ = "cat_almacenes"
@@ -75,11 +78,20 @@ class CatBanco(Base):
 
 
 class CatAgente(Base):
+    """
+    Agencia de aduanas como GRUPO (marca). Sus RUC son proveedores (cat_proveedores.id_agente): una agencia
+    puede operar con varias empresas, cada una con su RUC, y cada RUC pertenece a un solo grupo.
+    """
     __tablename__ = "cat_agentes"
     id_agente = Column(Integer, primary_key=True, index=True)
     nombre = Column(String(100), unique=True, nullable=False)
-    ruc = Column(String(11), unique=True)
     estado_registro = Column(String(20), default=EstadoRegistro.ACTIVO)
+
+    proveedores = relationship("CatProveedor", back_populates="agente", order_by="CatProveedor.nombre")
+
+    @property
+    def cantidad_rucs(self) -> int:
+        return len(self.proveedores)
 
 class CatImportador(Base):
     __tablename__ = "cat_importadores"

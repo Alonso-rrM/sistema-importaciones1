@@ -331,7 +331,10 @@ const Logistica = () => {
     importadorFiltro, setImportadorFiltro, tipoValorFiltro, setTipoValorFiltro, mostrarFiltros, setMostrarFiltros,
     limpiarFiltros, hayFiltrosActivos,
   };
-  const datosExpediente = { id_maestro: selectedId, numero_factura: formData.numero_factura, tipo_valor: formData.tipo_valor };
+  const datosExpediente = {
+    id_maestro: selectedId, numero_factura: formData.numero_factura, tipo_valor: formData.tipo_valor,
+    id_agente: formData.id_agente ? Number(formData.id_agente) : null,
+  };
 
   return (
     <main className="flex-1 flex overflow-hidden h-full">

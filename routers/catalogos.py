@@ -103,9 +103,9 @@ CATALOGOS_ESTANDAR = [
         ruta="agentes", modelo=models.CatAgente, campo_id="id_agente",
         esquema=schemas.CatAgente, esquema_alta=schemas.CatAgenteCreate, esquema_cambio=schemas.CatAgenteUpdate,
         roles_escritura=ROLES_OPERATIVOS, singular="agente", plural="agentes",
-        nombre_con_articulo="El agente", no_encontrado="Agente no encontrado",
-        duplicado_alta=MENSAJE_NOMBRE_O_RUC_DUPLICADO, duplicado_cambio=MENSAJE_NOMBRE_O_RUC_DUPLICADO,
-        preparar_cambio=_ruc_peruano_cambio,
+        nombre_con_articulo="La agencia", no_encontrado="Agencia no encontrada",
+        duplicado_alta="Error: El nombre de la agencia ya está registrado.",
+        duplicado_cambio="Error: El nombre de la agencia ya está registrado.",
     ),
     DefinicionCatalogo(
         ruta="proveedores", modelo=models.CatProveedor, campo_id="id_proveedor",
@@ -144,6 +144,58 @@ CATALOGOS_ESTANDAR = [
 
 for _definicion in CATALOGOS_ESTANDAR:
     registrar_catalogo(router, _definicion)
+
+
+# ==========================================
+# RUC DE UNA AGENCIA DE ADUANAS (la agencia es un grupo; sus RUC son proveedores)
+# ==========================================
+def _agencia_y_proveedor(db: Session, id_agente: int, id_proveedor: int):
+    agencia = db.get(models.CatAgente, id_agente)
+    if not agencia:
+        raise HTTPException(status_code=404, detail="Agencia no encontrada")
+    proveedor = db.get(models.CatProveedor, id_proveedor)
+    if not proveedor:
+        raise HTTPException(status_code=404, detail="Proveedor no encontrado")
+    return agencia, proveedor
+
+
+@router.get("/agentes/{id_agente}/rucs", response_model=List[schemas.CatProveedor])
+def listar_rucs_de_agencia(id_agente: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    agencia = db.get(models.CatAgente, id_agente)
+    if not agencia:
+        raise HTTPException(status_code=404, detail="Agencia no encontrada")
+    return agencia.proveedores
+
+
+@router.put("/agentes/{id_agente}/rucs/{id_proveedor}", response_model=schemas.CatProveedor)
+def agregar_ruc_a_agencia(id_agente: int, id_proveedor: int, db: Session = Depends(get_db),
+                          current_user: models.Usuario = Depends(RoleChecker(ROLES_OPERATIVOS))):
+    """Agrega un proveedor (su RUC) al grupo de la agencia. Un RUC pertenece a una sola agencia."""
+    agencia, proveedor = _agencia_y_proveedor(db, id_agente, id_proveedor)
+    if proveedor.id_agente not in (None, id_agente):
+        otra = db.get(models.CatAgente, proveedor.id_agente)
+        raise HTTPException(status_code=400, detail=(
+            f"El RUC {proveedor.ruc or ''} («{proveedor.nombre}») ya pertenece a la agencia «{otra.nombre if otra else '?'}». "
+            "Quítelo de esa agencia primero."))
+    if not proveedor.ruc:
+        raise HTTPException(status_code=400, detail=f"El proveedor «{proveedor.nombre}» no tiene RUC registrado.")
+    proveedor.id_agente = agencia.id_agente
+    db.commit()
+    db.refresh(proveedor)
+    return proveedor
+
+
+@router.delete("/agentes/{id_agente}/rucs/{id_proveedor}", response_model=schemas.CatProveedor)
+def quitar_ruc_de_agencia(id_agente: int, id_proveedor: int, db: Session = Depends(get_db),
+                          current_user: models.Usuario = Depends(RoleChecker(ROLES_OPERATIVOS))):
+    """Quita el RUC del grupo. El proveedor no se borra: sigue en Proveedores con sus gastos."""
+    _, proveedor = _agencia_y_proveedor(db, id_agente, id_proveedor)
+    if proveedor.id_agente != id_agente:
+        raise HTTPException(status_code=400, detail="Ese RUC no pertenece a esta agencia.")
+    proveedor.id_agente = None
+    db.commit()
+    db.refresh(proveedor)
+    return proveedor
 
 # ==========================================
 # 8. TIPOS DE DOCUMENTO DE PAGO

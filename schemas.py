@@ -82,20 +82,19 @@ class CatBanco(BaseModel):
 class CatBancoUpdate(BaseModel):
     nombre: Optional[Annotated[TextoObligatorio, Field(max_length=100)]] = None
 
+# Agencia de aduanas = GRUPO. Sus RUC son proveedores (ver routers/catalogos.py: /agentes/{id}/rucs)
 class CatAgenteCreate(BaseModel):
     nombre: Annotated[TextoObligatorio, Field(max_length=100)]
-    ruc: Ruc
 
 class CatAgente(BaseModel):
     id_agente: int
     nombre: str
-    ruc: Optional[str] = None
     estado_registro: str = EstadoRegistro.ACTIVO
+    cantidad_rucs: int = 0
     model_config = ConfigDict(from_attributes=True)
 
 class CatAgenteUpdate(BaseModel):
     nombre: Optional[Annotated[TextoObligatorio, Field(max_length=100)]] = None
-    ruc: Optional[str] = None   # se valida en routers/catalogos.py solo si cambia (puede haber RUC antiguos)
 
 class CatProveedorCreate(BaseModel):
     nombre: Annotated[TextoObligatorio, Field(max_length=200)]
@@ -118,6 +117,7 @@ class CatProveedor(BaseModel):
     ruc: Optional[str] = None
     categoria: str = CategoriaProveedor.NACIONAL
     estado_registro: str = EstadoRegistro.ACTIVO
+    id_agente: Optional[int] = None   # agencia de aduanas (grupo) a la que pertenece este RUC
     model_config = ConfigDict(from_attributes=True)
 
 class CatProveedorUpdate(BaseModel):
@@ -315,6 +315,7 @@ class MaestroLookup(BaseModel):
     numero_factura: str
     n_cont_fisico: Optional[str] = None
     tipo_valor: str
+    id_agente: Optional[int] = None   # para mostrar primero los RUC de su agencia al registrar un gasto
     model_config = ConfigDict(from_attributes=True)
 
 

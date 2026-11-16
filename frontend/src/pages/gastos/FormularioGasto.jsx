@@ -11,6 +11,7 @@ import { ESTADO_PAGO, MONEDA } from '../../constants';
 export default function FormularioGasto({
   abierto, viewMode, selectedGasto, form, setForm, isGuardando, onGuardar, onCerrar, onCrearProveedor,
   damsRaw, opcionesMaestros, opcionesDamsFiltradas, opcionesConceptos, opcionesProveedores, opcionesTiposDoc,
+  opcionesProveedoresOrdenadas,
 }) {
   const cerrarConEscape = useEffectEvent((e) => { if (e.key === 'Escape') onCerrar(); });
   useEffect(() => {
@@ -158,7 +159,7 @@ export default function FormularioGasto({
                 </button>
               </div>
               <Select 
-                options={opcionesProveedores} 
+                options={opcionesProveedoresOrdenadas} 
                 value={opcionesProveedores.find(op => op.value === form.id_proveedor) || null} 
                 onChange={(op) => setForm({ ...form, id_proveedor: op ? op.value : null })} 
                 placeholder="Seleccione proveedor con RUC..." 

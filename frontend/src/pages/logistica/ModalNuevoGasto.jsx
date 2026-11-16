@@ -10,6 +10,7 @@ import { CATEGORIA_PROVEEDOR, CLASE_ADUANERA, MONEDA } from '../../constants';
 import { mensajeDeError, useInteraccion } from '../../context/interaccion';
 import { validarDocumentoGasto, validarMonto } from '../../utils/validaciones';
 import { confirmarCdaDeLaDam } from '../../utils/confirmarCda';
+import { separarPorAgencia } from '../../utils/proveedores';
 
 export default function ModalNuevoGasto({
   expediente, damsVinculadas, opcionesConceptos, opcionesProveedores, opcionesTiposDoc, onProveedorCreado, onCerrar, onRegistrado,
@@ -20,6 +21,9 @@ export default function ModalNuevoGasto({
     id_concepto: '', id_proveedor: '', id_tipo_doc: '', numero_documento: '', monto_original: '', moneda: MONEDA.USD, observaciones: '',
   }));
   const [guardando, setGuardando] = useState(false);
+  // Los RUC de la agencia de aduanas del expediente van primero
+  const { deLaAgencia: rucsDeLaAgencia, resto: otrosProveedores } = separarPorAgencia(
+    opcionesProveedores, expediente.id_agente, (p) => p.id_agente);
   const [creandoProveedor, setCreandoProveedor] = useState(false);
 
   const cerrarConEscape = useEffectEvent((e) => { if (e.key === 'Escape' && !creandoProveedor) onCerrar(); });
@@ -137,9 +141,14 @@ export default function ModalNuevoGasto({
                   className="w-full bg-slate-950 border border-slate-700 text-slate-200 text-xs rounded p-2 focus:border-teal-500"
                 >
                   <option value="">-- Seleccionar --</option>
-                  {opcionesProveedores.map(p => (
-                    <option key={p.id_proveedor} value={p.id_proveedor}>{p.nombre}</option>
-                  ))}
+                  {rucsDeLaAgencia.length > 0 && (
+                    <optgroup label="RUC de la agencia de aduanas del expediente">
+                      {rucsDeLaAgencia.map((p) => <option key={p.id_proveedor} value={p.id_proveedor}>{p.ruc} - {p.nombre}</option>)}
+                    </optgroup>
+                  )}
+                  <optgroup label={rucsDeLaAgencia.length > 0 ? 'Todos los proveedores' : 'Proveedores'}>
+                    {otrosProveedores.map((p) => <option key={p.id_proveedor} value={p.id_proveedor}>{p.nombre}</option>)}
+                  </optgroup>
                 </select>
               </div>
             </div>

@@ -732,11 +732,11 @@ chk("K1", "RUC: dígito verificador incorrecto -> 422 en español; con espacios/
     r_k1.status_code == 422 and "dígito verificador" in mensajes(r_k1) and r_k1b.json().get("ruc") == "20100047218",
     f"{r_k1.status_code} {mensajes(r_k1)[:80]} / {r_k1b.json().get('ruc')}")
 
-# K2: un agente antiguo con RUC fuera de formato se puede renombrar; cambiarle el RUC por uno inválido no
-agente_viejo = models.CatAgente(nombre="AGENTE ANTIGUO K2", ruc="123"); db.add(agente_viejo); db.commit()
-r_k2a = c.put(f"/agentes/{agente_viejo.id_agente}", json={"nombre": "AGENTE ANTIGUO K2 SAC", "ruc": "123"}, headers=H["logi"])
-r_k2b = c.put(f"/agentes/{agente_viejo.id_agente}", json={"ruc": "20999999999"}, headers=H["logi"])
-r_k2c = c.put(f"/agentes/{agente_viejo.id_agente}", json={"ruc": ruc_valido("2060000001")}, headers=H["logi"])
+# K2: un importador antiguo con RUC fuera de formato se puede renombrar; cambiarle el RUC por uno inválido no
+imp_viejo = models.CatImportador(nombre="IMPORTADOR ANTIGUO K2", ruc="123"); db.add(imp_viejo); db.commit()
+r_k2a = c.put(f"/importadores/{imp_viejo.id_importador}", json={"nombre": "IMPORTADOR ANTIGUO K2 SAC", "ruc": "123"}, headers=H["logi"])
+r_k2b = c.put(f"/importadores/{imp_viejo.id_importador}", json={"ruc": "20999999999"}, headers=H["logi"])
+r_k2c = c.put(f"/importadores/{imp_viejo.id_importador}", json={"ruc": ruc_valido("2060000001")}, headers=H["logi"])
 chk("K2", "RUC antiguo: editar otro dato no lo exige válido; cambiarlo sí (inválido 422, válido 200)",
     r_k2a.status_code == 200 and r_k2b.status_code == 422 and r_k2c.status_code == 200,
     f"{r_k2a.status_code} / {r_k2b.status_code} {mensajes(r_k2b)[:60]} / {r_k2c.status_code}")
@@ -977,6 +977,38 @@ r_n1 = c.post("/proveedores/", json={"nombre": "OTRO NOMBRE N1", "ruc": "2061605
 chk("N1", "Un RUC ya registrado (aunque esté desactivado) se informa con el nombre del registro y cómo restaurarlo",
     r_n0.status_code == 200 and r_n1.status_code == 400 and "PROVEEDOR N1" in det(r_n1) and "DESACTIVADO" in str(r_n1.json().get("detail")),
     f"{r_n0.status_code} / {r_n1.status_code} {det(r_n1)}")
+
+# ==========================================
+# O) AGENCIAS DE ADUANA COMO GRUPOS DE RUC
+# ==========================================
+print("\n=========== O) AGENCIAS COMO GRUPOS DE RUC ===========")
+r_o0 = c.post("/agentes/", json={"nombre": "AGENCIA O GRUPO"}, headers=H["logi"])
+r_o0b = c.post("/agentes/", json={"nombre": "AGENCIA O OTRA"}, headers=H["logi"])
+id_ag_o, id_ag_o2 = r_o0.json().get("id_agente"), r_o0b.json().get("id_agente")
+p_o1 = c.post("/proveedores/", json={"nombre": "AGENCIA O SAC", "ruc": ruc_valido("2061000001")}, headers=H["logi"]).json()
+p_o2 = c.post("/proveedores/", json={"nombre": "AGENCIA O LOGISTICA SAC", "ruc": ruc_valido("2061000002")}, headers=H["logi"]).json()
+p_o3 = c.post("/proveedores/", json={"nombre": "PROVEEDOR O SIN RUC"}, headers=H["logi"]).json()
+r_o1a = c.put(f"/agentes/{id_ag_o}/rucs/{p_o1['id_proveedor']}", headers=H["logi"])
+r_o1b = c.put(f"/agentes/{id_ag_o}/rucs/{p_o2['id_proveedor']}", headers=H["logi"])
+r_o1c = c.get(f"/agentes/{id_ag_o}/rucs", headers=H["audi"])
+r_o1d = c.put(f"/agentes/{id_ag_o2}/rucs/{p_o1['id_proveedor']}", headers=H["logi"])      # ya es de otra agencia
+r_o1e = c.put(f"/agentes/{id_ag_o}/rucs/{p_o3['id_proveedor']}", headers=H["logi"])       # sin RUC
+r_o1f = c.put(f"/agentes/{id_ag_o}/rucs/{p_o2['id_proveedor']}", headers=H["audi"])       # Auditoría no escribe
+chk("O1", "Una agencia agrupa varios RUC (proveedores); un RUC no puede estar en dos agencias ni se agrega un proveedor sin RUC; Auditoría solo lee",
+    r_o0.status_code == 200 and r_o1a.status_code == 200 and r_o1b.status_code == 200
+    and sorted(x["nombre"] for x in r_o1c.json()) == ["AGENCIA O LOGISTICA SAC", "AGENCIA O SAC"]
+    and r_o1d.status_code == 400 and "AGENCIA O GRUPO" in det(r_o1d) and r_o1e.status_code == 400 and r_o1f.status_code == 403,
+    f"{r_o1a.status_code}/{r_o1b.status_code} {len(r_o1c.json())} / {r_o1d.status_code} {det(r_o1d)[:50]} / {r_o1e.status_code} / {r_o1f.status_code}")
+
+r_o2a = c.delete(f"/agentes/{id_ag_o}/rucs/{p_o2['id_proveedor']}", headers=H["logi"])
+r_o2b = c.delete(f"/agentes/{id_ag_o2}/rucs/{p_o1['id_proveedor']}", headers=H["logi"])   # no es de esa agencia
+prov_o2 = next((x for x in c.get("/proveedores/", headers=H["logi"]).json() if x["id_proveedor"] == p_o2["id_proveedor"]), None)
+m_o = c.post("/maestros/", json={"numero_factura": "F-O2", "id_agente": id_ag_o}, headers=H["logi"]).json()
+lookup_o = next((x for x in c.get("/maestros/lookup", headers=H["logi"]).json() if x["id_maestro"] == m_o.get("id_maestro")), {})
+chk("O2", "Quitar un RUC del grupo no borra el proveedor; el expediente informa su agencia (para ordenar los RUC al registrar gastos)",
+    r_o2a.status_code == 200 and prov_o2 is not None and prov_o2["id_agente"] is None and r_o2b.status_code == 400
+    and lookup_o.get("id_agente") == id_ag_o,
+    f"{r_o2a.status_code} / proveedor={prov_o2 and prov_o2['id_agente']} / {r_o2b.status_code} / lookup={lookup_o.get('id_agente')}")
 
 fallas = [x for x in R if not x[2]]
 print(f"\nRESUMEN TOTAL: {len(R)-len(fallas)}/{len(R)} pruebas pasan." + (" Fallan: " + ", ".join(x[0] for x in fallas) if fallas else ""))

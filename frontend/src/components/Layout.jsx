@@ -94,7 +94,7 @@ function Layout() {
             <div className="w-6 h-px shrink-0 bg-slate-700 my-1 mx-auto"></div>
             <NavLink to="/app/importadores" className={navClass} title="Importadores"><Building2 size={18} className="shrink-0" /></NavLink>
             <NavLink to="/app/proveedores" className={navClass} title="Proveedores"><Users size={18} className="shrink-0" /></NavLink>
-            <NavLink to="/app/agentes" className={navClass} title="Agentes Aduanas"><Briefcase size={18} className="shrink-0" /></NavLink>
+            <NavLink to="/app/agentes" className={navClass} title="Agencias de Aduana"><Briefcase size={18} className="shrink-0" /></NavLink>
             <NavLink to="/app/almacenes" className={navClass} title="Almacenes"><Factory size={18} className="shrink-0" /></NavLink>
             <NavLink to="/app/conceptos" className={navClass} title="Conceptos"><Tags size={18} className="shrink-0" /></NavLink>
             <NavLink to="/app/comprobantes" className={navClass} title="Tipos Comprobante"><FileDigit size={18} className="shrink-0" /></NavLink>

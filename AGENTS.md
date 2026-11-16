@@ -49,6 +49,10 @@ Archivos clave:
 - Usuarios: `routers/usuarios.py` (listar, crear, modificar rol/correo/activo, restablecer contraseña y
   `PUT /usuarios/me/clave` para la propia) con las reglas de `domain/usuarios.py` (el Administrador no se quita
   el acceso; siempre queda uno activo). Pantalla: `frontend/src/pages/Usuarios.jsx`.
+- Agencias de aduana: `CatAgente` es un GRUPO (sin RUC propio); sus RUC son proveedores
+  (`CatProveedor.id_agente`). Rutas `/agentes/{id}/rucs` (ver, agregar, quitar) en `routers/catalogos.py`;
+  panel `frontend/src/pages/agentes/RucsDeLaAgencia.jsx`. `utils/proveedores.js` ordena primero los RUC de la
+  agencia del expediente al registrar un gasto.
 - Sesiones: el token lleva `iat`; `dependencies.get_current_user` rechaza los emitidos antes de
   `Usuario.clave_cambiada_en` (cambiar una contraseña cierra las sesiones anteriores). El usuario, su rol y si
   está activo se leen de la base en cada petición: desactivar o cambiar el rol rige de inmediato.
@@ -184,6 +188,10 @@ GitHub Actions (`.github/workflows/ci.yml`) corre todo lo anterior en cada subid
 
 - Los almacenes guardan su `ubicacion` (migración `e7b41c9a2f60`); antes la pantalla la pedía y se perdía.
 - "+ Registrar Gasto" desde una DAM abre Gastos con esa DAM y su contenedor ya elegidos.
+- Agencias de aduana (migración `b6d4e8f2a1c7`): una agencia es un grupo/marca que puede operar con varias
+  empresas, cada una con su RUC. El RUC se registra UNA vez, en Proveedores, y la agencia solo lo agrupa;
+  un RUC pertenece a un solo grupo. El expediente elige la agencia (grupo); el RUC exacto que cobró queda en
+  cada factura (gasto). Al registrar un gasto, los RUC de la agencia del expediente aparecen primero.
 - Cuentas de usuario: el nombre de usuario no se cambia (es su identidad en la bitácora); las cuentas se
   desactivan, no se borran. Las reglas de usuario, correo y contraseña están en `domain/validaciones.py`.
 - Formatos (fase 5):

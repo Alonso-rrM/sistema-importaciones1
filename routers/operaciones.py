@@ -322,7 +322,7 @@ async def autorizar_levante(
 @router.get("/maestros/lookup", response_model=List[schemas.MaestroLookup])
 def lookup_maestros(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     # Retorna solo las columnas necesarias (hasta 2000 activos) sin join pesado
-    query = db.query(models.MaestroImportacion.id_maestro, models.MaestroImportacion.numero_factura, models.MaestroImportacion.n_cont_fisico, models.MaestroImportacion.tipo_valor)\
+    query = db.query(models.MaestroImportacion.id_maestro, models.MaestroImportacion.numero_factura, models.MaestroImportacion.n_cont_fisico, models.MaestroImportacion.tipo_valor, models.MaestroImportacion.id_agente)\
               .filter(models.MaestroImportacion.estado_registro == EstadoRegistro.ACTIVO)\
               .order_by(models.MaestroImportacion.id_maestro.desc())\
               .limit(2000).all()

@@ -81,11 +81,20 @@ def cargar_datos_de_ejemplo():
             sys.exit(f"ERROR al preparar {ruta}: {respuesta.status_code} {respuesta.text}")
         return respuesta.json()
 
+    def put(ruta, cuerpo=None):
+        respuesta = cliente.put(ruta, json=cuerpo, headers=cabeceras)
+        if respuesta.status_code >= 300:
+            sys.exit(f"ERROR al preparar {ruta}: {respuesta.status_code} {respuesta.text}")
+        return respuesta.json()
+
     hoy = str(datetime.date.today())
     imp = post("/importadores/", {"nombre": "IMPORTADORA E2E SAC", "ruc": "20100000009"})
     prov = post("/proveedores/", {"nombre": "NAVIERA E2E", "ruc": "20100000017", "categoria": CategoriaProveedor.NACIONAL})
     sunat = post("/proveedores/", {"nombre": "SUNAT", "ruc": "20131312955", "categoria": CategoriaProveedor.ESTADO_O_TRIBUTO})
-    post("/agentes/", {"nombre": "AGENCIA E2E", "ruc": "20100000025"})
+    agencia = post("/agentes/", {"nombre": "AGENCIA E2E"})
+    # La agencia es un grupo: su RUC es un proveedor enlazado a ella
+    prov_agencia = post("/proveedores/", {"nombre": "AGENCIA E2E SAC", "ruc": "20100000025", "categoria": CategoriaProveedor.NACIONAL})
+    put(f"/agentes/{agencia['id_agente']}/rucs/{prov_agencia['id_proveedor']}")
     post("/almacenes/", {"nombre": "ALMACEN E2E"})
     banco = post("/bancos/", {"nombre": "BANCO E2E"})
     doc = post("/tipos-documento/", {"nombre_documento": "FACTURA", "multiplicador_financiero": 1})
@@ -98,7 +107,7 @@ def cargar_datos_de_ejemplo():
                                headers=cabeceras)
     respuesta_tc.raise_for_status()
 
-    maestro = post("/maestros/", {"numero_factura": "GF-E2E-1", "id_importador": imp["id_importador"],
+    maestro = post("/maestros/", {"numero_factura": "GF-E2E-1", "id_importador": imp["id_importador"], "id_agente": agencia["id_agente"],
                                   "tipo_valor": TipoValor.DEFINITIVO})
     dam = post("/dams/", {"id_maestro": maestro["id_maestro"], "numero_de_dam": "118-2026-10-000001", "canal_control": CanalControl.VERDE})
     for concepto, proveedor, monto, moneda, numero in [

@@ -63,7 +63,6 @@ REGLAS = {
 _NO_EXTRANJERO = "(p.categoria IS NULL OR p.categoria NOT IN (:exterior, :estado))"
 FORMATOS = [
     ("cat_importadores", "id_importador", "ruc", normalizar_ruc_opcional, "", {}, "RUC de importadores"),
-    ("cat_agentes", "id_agente", "ruc", normalizar_ruc_opcional, "", {}, "RUC de agentes"),
     ("cat_proveedores", "id_proveedor", "ruc", normalizar_ruc_opcional,
      "WHERE categoria IS NULL OR categoria <> :exterior", {"exterior": C.CategoriaProveedor.INTERNACIONAL},
      "RUC de proveedores peruanos"),
