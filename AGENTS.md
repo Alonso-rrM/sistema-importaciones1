@@ -118,6 +118,11 @@ Frontend (`frontend/src/`):
     antiguo debe poder verse y editarse sin tocar ese dato (ver `_ruc_peruano_cambio` en `routers/catalogos.py`).
 18. Los errores de formato se informan con `ValorInvalido` (en `schemas.py` como tipo `Annotated`, o con
     `rechazar_si_invalido` de `services/errores.py` en las rutas). El mensaje se escribe en español, listo para la usuaria.
+19. Toda relación padre→hijos de `models.py` lleva `passive_deletes="all"` (lo exige `tests/test_modelo_borrados.py`):
+    así, borrar un registro en uso lo rechaza la base ("está en uso") en lugar de dejar sus hijos con la referencia
+    en NULL (pasó con un proveedor borrado definitivamente: sus gastos quedaron sin proveedor).
+20. Si falla la carga de una lista, la pantalla lo avisa con `avisoDeCarga` (`context/interaccion.js`); nunca
+    mostrar una lista vacía en silencio.
 
 ## 5. Estado del plan de mejora
 

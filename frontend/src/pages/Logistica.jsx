@@ -14,7 +14,7 @@ import ModalLiquidacionContenedor from '../components/ModalLiquidacionContenedor
 import ModalCrearProveedorRapido from '../components/ModalCrearProveedorRapido';
 import { FileText, Trash2, Unlock, Receipt, FolderOpen } from 'lucide-react';
 import { CATEGORIA_PROVEEDOR, ESTADO_DOCUMENTARIO, ESTADO_LEVANTE, ROL, STATUS_LLEGADA, TIPO_VALOR } from '../constants';
-import { mensajeDeError, useInteraccion } from '../context/interaccion';
+import { avisoDeCarga, mensajeDeError, useInteraccion } from '../context/interaccion';
 import { validarMonto } from '../utils/validaciones';
 import BandejaExpedientes from './logistica/BandejaExpedientes';
 import TermometroFinanciero from './logistica/TermometroFinanciero';
@@ -130,7 +130,7 @@ const Logistica = () => {
 
   // ----- Catálogos -----
   const { datos: catalogos, setDatos: setCatalogos } = useConsulta(consultarCatalogos, {
-    inicial: CATALOGOS_VACIOS, alFallar: (error) => console.error('Error al cargar catálogos:', error),
+    inicial: CATALOGOS_VACIOS, alFallar: (error) => avisoDeCarga(avisar, 'los catálogos')(error),
   });
   const { opcionesProveedores, opcionesImportadores, opcionesAgentes, opcionesAlmacenes, opcionesConceptos, opcionesTiposDoc } = catalogos;
   const proveedoresMap = useMemo(
@@ -174,10 +174,10 @@ const Logistica = () => {
     [parametrosFiltro, page, limit],
   );
   const { datos: paginaMaestros, recargar } = useConsulta(consultarMaestros, {
-    alFallar: (error) => console.error('Error maestros:', error),
+    alFallar: (error) => avisoDeCarga(avisar, 'la lista de expedientes')(error),
   });
   const maestros = useMemo(() => paginaMaestros?.data || [], [paginaMaestros]);
-  const recargarMaestros = () => recargar().catch((error) => console.error('Error maestros:', error));
+  const recargarMaestros = () => recargar().catch((error) => avisoDeCarga(avisar, 'la lista de expedientes')(error));
 
   // Tras recargar la lista, el formulario toma la versión más reciente del expediente abierto
   // (las acciones automáticas —DAMs, aforo, pagos— cambian su estado y su versión).
@@ -196,10 +196,10 @@ const Logistica = () => {
   const [expediente, setExpediente] = useState(null);
   const consultarRelaciones = useMemo(() => (expediente ? consultaDeRelaciones(expediente) : null), [expediente]);
   const { datos: datosRelaciones, cargando: isLoadingSub, recargar: recargarRelaciones } = useConsulta(consultarRelaciones, {
-    alFallar: (error) => console.error('Error al cargar sub-registros', error),
+    alFallar: (error) => avisoDeCarga(avisar, 'las DAMs y gastos del expediente')(error),
   });
   const relaciones = (expediente && !isLoadingSub && datosRelaciones) || RELACIONES_VACIAS;
-  const actualizarRelaciones = () => recargarRelaciones().catch((error) => console.error('Error al cargar sub-registros', error));
+  const actualizarRelaciones = () => recargarRelaciones().catch((error) => avisoDeCarga(avisar, 'las DAMs y gastos del expediente')(error));
 
   const isReadOnly = userRole !== ROL.SUPERADMIN && formData.estado_documentario === ESTADO_DOCUMENTARIO.ATENCION_TOTAL && viewMode === 'MODIFICAR';
 

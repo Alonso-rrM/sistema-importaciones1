@@ -1,10 +1,12 @@
 /** Pagos realizados (pestaña Historial): búsqueda y paginación. Solo consulta mientras la pestaña está abierta. */
 import { useCallback, useState } from 'react';
 import api from '../../services/api';
+import { avisoDeCarga, useInteraccion } from '../../context/interaccion';
 import useConsulta from '../../hooks/useConsulta';
 import useDebounce from '../../hooks/useDebounce';
 
 export default function useHistorialPagos(activo) {
+  const { avisar } = useInteraccion();
   const [busqueda, setBusqueda] = useState('');
   const busquedaDiferida = useDebounce(busqueda, 400);
   const [pagina, setPagina] = useState(1);
@@ -15,7 +17,7 @@ export default function useHistorialPagos(activo) {
   }).then((r) => r.data), [pagina, limite, busquedaDiferida]);
 
   const { datos, cargando, recargar } = useConsulta(activo ? consultar : null, {
-    alFallar: (error) => console.error('Error al cargar historial de pagos:', error),
+    alFallar: (error) => avisoDeCarga(avisar, 'el historial de pagos')(error),
   });
 
   return {
@@ -23,7 +25,7 @@ export default function useHistorialPagos(activo) {
     totalRegistros: datos?.total_registros || 0,
     totalPaginas: datos?.total_paginas || 1,
     cargando,
-    recargar: () => recargar().catch((error) => console.error('Error al cargar historial de pagos:', error)),
+    recargar: () => recargar().catch((error) => avisoDeCarga(avisar, 'el historial de pagos')(error)),
     busqueda, setBusqueda, pagina, setPagina, limite, setLimite,
   };
 }

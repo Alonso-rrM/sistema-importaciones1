@@ -9,7 +9,7 @@ import api from '../services/api';
 import useConsulta from '../hooks/useConsulta';
 import useDebounce from '../hooks/useDebounce';
 import { MONEDA } from '../constants';
-import { mensajeDeError, useInteraccion } from '../context/interaccion';
+import { avisoDeCarga, mensajeDeError, useInteraccion } from '../context/interaccion';
 import { validarMonto } from '../utils/validaciones';
 import BandejaVouchers from './vouchers/BandejaVouchers';
 import FormularioVoucher from './vouchers/FormularioVoucher';
@@ -64,7 +64,7 @@ const Vouchers = () => {
   }, []);
   const { datos: catalogos } = useConsulta(consultarCatalogos, {
     inicial: { bancos: [], importadores: [] },
-    alFallar: (error) => console.error('Error al cargar catálogos:', error),
+    alFallar: (error) => avisoDeCarga(avisar, 'los catálogos')(error),
   });
   const opcionesBancos = catalogos.bancos;
   const opcionesImportadores = catalogos.importadores;

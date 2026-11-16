@@ -14,7 +14,7 @@ import { descargarExcel } from '../utils/exportUtils';
 import ModalCrearProveedorRapido from '../components/ModalCrearProveedorRapido';
 import ModalAnularPago from '../components/ModalAnularPago';
 import { CATEGORIA_PROVEEDOR, CLASE_ADUANERA, ESTADO_PAGO, MONEDA } from '../constants';
-import { mensajeDeError, useInteraccion } from '../context/interaccion';
+import { avisoDeCarga, mensajeDeError, useInteraccion } from '../context/interaccion';
 import { validarDocumentoGasto, validarMonto } from '../utils/validaciones';
 import { confirmarCdaDeLaDam } from '../utils/confirmarCda';
 import { opcionesConAgenciaPrimero } from '../utils/proveedores';
@@ -112,7 +112,7 @@ const Gastos = () => {
 
   // ----- Catálogos para filtros y formulario -----
   const { datos: catalogos, setDatos: setCatalogos } = useConsulta(consultarCatalogos, {
-    inicial: CATALOGOS_VACIOS, alFallar: (error) => console.error('Error cargando catálogos:', error),
+    inicial: CATALOGOS_VACIOS, alFallar: (error) => avisoDeCarga(avisar, 'los catálogos')(error),
   });
   const { damsRaw, opcionesMaestros, opcionesConceptos, opcionesProveedores, opcionesTiposDoc } = catalogos;
 
@@ -158,11 +158,11 @@ const Gastos = () => {
     [parametrosFiltro, page, limit],
   );
   const { datos: paginaGastos, cargando: isLoading, recargar } = useConsulta(consultarGastos, {
-    alFallar: (error) => console.error('Error al obtener gastos:', error),
+    alFallar: (error) => avisoDeCarga(avisar, 'la lista de gastos')(error),
   });
   const gastos = useMemo(() => paginaGastos?.data || [], [paginaGastos]);
   const totalRegistros = paginaGastos?.total_registros || 0;
-  const recargarGastos = () => recargar().catch((error) => console.error('Error al obtener gastos:', error));
+  const recargarGastos = () => recargar().catch((error) => avisoDeCarga(avisar, 'la lista de gastos')(error));
 
   // Seleccionado: el elegido; si no está en la página y no se edita nada, el primero de la lista
   const selectedGasto = gastos.find((g) => g.id_gasto === selectedId)

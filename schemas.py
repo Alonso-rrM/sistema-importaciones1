@@ -385,7 +385,13 @@ class PagoDetalleSimple(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 class RegistroGasto(RegistroGastoCreate):
-    # La respuesta debe poder serializar registros históricos aunque no cumplan las validaciones nuevas
+    # La respuesta debe poder serializar registros históricos aunque no cumplan las validaciones nuevas,
+    # incluso si perdieron una referencia (p. ej. un proveedor borrado antes de que existiera la protección):
+    # un solo gasto así no debe dejar sin lista a toda la pantalla.
+    id_dam: Optional[int] = None
+    id_concepto: Optional[int] = None
+    id_proveedor: Optional[int] = None
+    id_tipo_doc: Optional[int] = None
     monto_original: Decimal
     moneda: str = Moneda.USD
     id_gasto: int

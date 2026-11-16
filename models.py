@@ -1,7 +1,7 @@
 import datetime
 # Agregamos 'Boolean' a las importaciones para el ZAJUSTE
 from sqlalchemy import Column, Integer, String, Numeric, Date, ForeignKey, DateTime, Text, Boolean, JSON, Index
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import backref, relationship
 from database import Base
 from constantes import (
     CategoriaProveedor,
@@ -27,7 +27,7 @@ class CatalogoDocumentoPago(Base):
     multiplicador_financiero = Column(Integer, nullable=False)
     estado_registro = Column(String(20), default=EstadoRegistro.ACTIVO)
     
-    gastos = relationship("RegistroGasto", back_populates="tipo_doc_rel")
+    gastos = relationship("RegistroGasto", back_populates="tipo_doc_rel", passive_deletes="all")
 
 # [NUEVO] Historial automatizado de SUNAT
 class HistorialTipoCambio(Base):
@@ -45,8 +45,8 @@ class CatConceptoPago(Base):
     # Papel del concepto en el despacho (TRIBUTO / PERCEPCION / OMC / NINGUNA). Lo lee la máquina de estados.
     clase_aduanera = Column(String(20), server_default=ClaseAduanera.NINGUNA, default=ClaseAduanera.NINGUNA, nullable=False)
     estado_registro = Column(String(20), default=EstadoRegistro.ACTIVO)
-    pagos = relationship("RegistroPago", back_populates="concepto_rel")
-    gastos = relationship("RegistroGasto", back_populates="concepto_rel")
+    pagos = relationship("RegistroPago", back_populates="concepto_rel", passive_deletes="all")
+    gastos = relationship("RegistroGasto", back_populates="concepto_rel", passive_deletes="all")
     
 class CatProveedor(Base):
     __tablename__ = "cat_proveedores"
@@ -59,7 +59,7 @@ class CatProveedor(Base):
     # Agencia de aduanas (grupo) a la que pertenece este RUC; un RUC pertenece a un solo grupo
     id_agente = Column(Integer, ForeignKey("cat_agentes.id_agente"), nullable=True, index=True)
 
-    gastos = relationship("RegistroGasto", back_populates="proveedor_rel")
+    gastos = relationship("RegistroGasto", back_populates="proveedor_rel", passive_deletes="all")
     agente = relationship("CatAgente", back_populates="proveedores")
 
 class CatAlmacen(Base):
@@ -87,7 +87,7 @@ class CatAgente(Base):
     nombre = Column(String(100), unique=True, nullable=False)
     estado_registro = Column(String(20), default=EstadoRegistro.ACTIVO)
 
-    proveedores = relationship("CatProveedor", back_populates="agente", order_by="CatProveedor.nombre")
+    proveedores = relationship("CatProveedor", back_populates="agente", order_by="CatProveedor.nombre", passive_deletes="all")
 
     @property
     def cantidad_rucs(self) -> int:
@@ -124,7 +124,7 @@ class VoucherBancario(Base):
 
     banco_rel = relationship("CatBanco")
     importador_rel = relationship("CatImportador")
-    pagos_rel = relationship("RegistroPago", back_populates="voucher_rel")
+    pagos_rel = relationship("RegistroPago", back_populates="voucher_rel", passive_deletes="all")
 
 # --- 2. TABLAS PRINCIPALES ---
 
@@ -155,7 +155,7 @@ class MaestroImportacion(Base):
     venta_sucesiva = Column(String(50))
     tipo_valor = Column(String(50), default=TipoValor.DEFINITIVO)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    dams = relationship("DetalleDam", back_populates="maestro")
+    dams = relationship("DetalleDam", back_populates="maestro", passive_deletes="all")
     agente_rel = relationship("CatAgente")
     importador_rel = relationship("CatImportador")
     proveedor_rel = relationship("CatProveedor")
@@ -186,8 +186,8 @@ class DetalleDam(Base):
     
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     maestro = relationship("MaestroImportacion", back_populates="dams")
-    pagos = relationship("RegistroPago", back_populates="dam")
-    gastos = relationship("RegistroGasto", back_populates="dam")
+    pagos = relationship("RegistroPago", back_populates="dam", passive_deletes="all")
+    gastos = relationship("RegistroGasto", back_populates="dam", passive_deletes="all")
 
 class RegistroGasto(Base):
     __tablename__ = "registro_gastos"
@@ -213,7 +213,7 @@ class RegistroGasto(Base):
 
     dam = relationship("DetalleDam", back_populates="gastos")
     concepto_rel = relationship("CatConceptoPago", back_populates="gastos")
-    pagos = relationship("RegistroPago", back_populates="gasto_rel")
+    pagos = relationship("RegistroPago", back_populates="gasto_rel", passive_deletes="all")
     proveedor_rel = relationship("CatProveedor", back_populates="gastos")
     tipo_doc_rel = relationship("CatalogoDocumentoPago", back_populates="gastos")
 
@@ -247,7 +247,7 @@ class RegistroPago(Base):
     monto_moneda_origen = Column(Numeric(15, 2), nullable=False)
     
     dam = relationship("DetalleDam", back_populates="pagos")
-    importador = relationship("CatImportador", backref="pagos")
+    importador = relationship("CatImportador", backref=backref("pagos", passive_deletes="all"))
     concepto_rel = relationship("CatConceptoPago", back_populates="pagos")
     gasto_rel = relationship("RegistroGasto", back_populates="pagos")
     voucher_rel = relationship("VoucherBancario", back_populates="pagos_rel")
@@ -261,7 +261,7 @@ class CatRol(Base):
     descripcion = Column(Text)
     estado_registro = Column(String(20), default=EstadoRegistro.ACTIVO)
     
-    usuarios = relationship("Usuario", back_populates="rol")
+    usuarios = relationship("Usuario", back_populates="rol", passive_deletes="all")
 
 class Usuario(Base):
     __tablename__ = "usuarios"
@@ -276,7 +276,7 @@ class Usuario(Base):
     clave_cambiada_en = Column(DateTime, nullable=True)
 
     rol = relationship("CatRol", back_populates="usuarios")
-    audit_logs = relationship("AuditLog", back_populates="usuario")
+    audit_logs = relationship("AuditLog", back_populates="usuario", passive_deletes="all")
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"

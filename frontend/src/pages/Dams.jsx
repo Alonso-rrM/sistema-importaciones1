@@ -7,7 +7,7 @@ import Paginador from '../components/Paginador';
 import { descargarExcel } from '../utils/exportUtils';
 import { Download, Clock, Search, Settings, FileText, Banknote, Trash2, Zap, CheckCircle2, AlertTriangle, Unlock, CreditCard } from 'lucide-react';
 import { CANAL_CONTROL, ESTADO_DAM, ESTADO_PAGO, TIPO_VALOR } from '../constants';
-import { mensajeDeError, useInteraccion } from '../context/interaccion';
+import { avisoDeCarga, mensajeDeError, useInteraccion } from '../context/interaccion';
 import { validarMonto, validarNumeroDam } from '../utils/validaciones';
 
 const FORMULARIO_VACIO = {
@@ -83,7 +83,7 @@ const Dams = () => {
 
   const consultarMaestros = useCallback(() => api.get('/maestros/lookup').then((r) => r.data || []), []);
   const { datos: maestros } = useConsulta(consultarMaestros, {
-    inicial: [], alFallar: (error) => console.error('Error al cargar maestros lookup:', error),
+    inicial: [], alFallar: (error) => avisoDeCarga(avisar, 'la lista de contenedores')(error),
   });
 
   const maestrosMap = useMemo(() => {
@@ -106,12 +106,12 @@ const Dams = () => {
     }).then((r) => r.data);
   }, [debouncedSearch, page, limit, canalFiltro, aforoFiltro, tipoValorFiltro]);
   const { datos: paginaDams, recargar: recargarDams } = useConsulta(consultarDams, {
-    alFallar: (error) => console.error('Error al cargar DAMs:', error),
+    alFallar: (error) => avisoDeCarga(avisar, 'la lista de DAMs')(error),
   });
   const dams = paginaDams?.data || [];
   const totalPages = paginaDams?.total_paginas || 1;
   const totalRegistros = paginaDams?.total_registros || 0;
-  const cargarDams = () => recargarDams().catch((error) => console.error('Error al cargar DAMs:', error));
+  const cargarDams = () => recargarDams().catch((error) => avisoDeCarga(avisar, 'la lista de DAMs')(error));
 
   const consultarGastos = useCallback(
     () => api.get('/gastos/', { params: { search: damGastos, limit: 100 } }).then((r) => r.data?.data || []),
@@ -119,7 +119,7 @@ const Dams = () => {
   );
   const { datos: gastosVinculados, cargando: isLoadingGastos, recargar: recargarGastos } = useConsulta(
     damGastos ? consultarGastos : null,
-    { inicial: [], alFallar: (error) => console.error('Error al cargar gastos de DAM:', error) },
+    { inicial: [], alFallar: (error) => avisoDeCarga(avisar, 'los gastos de la DAM')(error) },
   );
   const mostrarGastosDe = (numeroDam) => {
     if (numeroDam === damGastos) recargarGastos().catch(() => {});

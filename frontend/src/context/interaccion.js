@@ -27,3 +27,14 @@ export function mensajeDeError(error, porDefecto = 'Error desconocido') {
   if (Array.isArray(detalle)) return detalle.map((d) => d.msg).join(' ') || porDefecto;
   return detalle || error?.message || porDefecto;
 }
+
+/**
+ * Manejador para cuando falla la carga de una lista: avisa en pantalla (antes solo quedaba en la consola y la
+ * pantalla mostraba la lista vacía, como si no hubiera datos) y deja el detalle técnico en la consola.
+ */
+export function avisoDeCarga(avisar, que) {
+  return (error) => {
+    console.error(`Error al cargar ${que}:`, error);
+    avisar(`No se pudo cargar ${que}: ${mensajeDeError(error)}`, 'error');
+  };
+}

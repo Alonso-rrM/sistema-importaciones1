@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Banknote, FileText } from 'lucide-react';
 import api from '../services/api';
+import { avisoDeCarga, useInteraccion } from '../context/interaccion';
 import useConsulta from '../hooks/useConsulta';
 import useDebounce from '../hooks/useDebounce';
 import { obtenerRol } from '../utils/session';
@@ -21,6 +22,7 @@ import useTipoCambioDelDia from './pagos/useTipoCambioDelDia';
 const PESTANA = Object.freeze({ REGISTRAR: 'REGISTRAR', HISTORIAL: 'HISTORIAL' });
 
 const Pagos = () => {
+  const { avisar } = useInteraccion();
   const location = useLocation();
   // Rol solo para la interfaz (los permisos reales los valida el backend).
   // Solo Admin y Tesorería liquidan pagos; Logística y Auditoría quedan en modo consulta.
@@ -33,7 +35,7 @@ const Pagos = () => {
 
   const consultarBancos = useCallback(() => api.get('/bancos/').then((r) => r.data?.data || r.data || []), []);
   const { datos: bancos } = useConsulta(consultarBancos, {
-    inicial: [], alFallar: (error) => console.error('Error al cargar bancos:', error),
+    inicial: [], alFallar: (error) => avisoDeCarga(avisar, 'los bancos')(error),
   });
 
   // ----- Bandeja de obligaciones -----
@@ -46,7 +48,7 @@ const Pagos = () => {
     params: { page: pagina, limit: limite, estado_pago: filtro || undefined, search: busquedaDiferida.trim() || undefined },
   }).then((r) => r.data), [pagina, limite, filtro, busquedaDiferida]);
   const { datos: paginaGastos, cargando, recargar } = useConsulta(consultarGastos, {
-    alFallar: (error) => console.error('Error al cargar gastos:', error),
+    alFallar: (error) => avisoDeCarga(avisar, 'las obligaciones')(error),
   });
   const gastos = paginaGastos?.data || [];
 
@@ -57,7 +59,7 @@ const Pagos = () => {
   // Datos frescos del seleccionado tras un pago o una anulación (mismo gasto, sin reiniciar el panel)
   const gastoSeleccionado = gastos.find((g) => g.id_gasto === seleccion.gasto?.id_gasto) || seleccion.gasto;
 
-  const recargarGastos = () => recargar().catch((error) => console.error('Error al cargar gastos:', error));
+  const recargarGastos = () => recargar().catch((error) => avisoDeCarga(avisar, 'las obligaciones')(error));
 
   // ?gasto_id=... en la URL: abre esa obligación (por ejemplo, desde el botón "Pagar" de Gastos)
   const idGastoEnUrl = new URLSearchParams(location.search).get('gasto_id');

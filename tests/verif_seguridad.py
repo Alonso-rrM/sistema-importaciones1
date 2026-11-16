@@ -1010,6 +1010,39 @@ chk("O2", "Quitar un RUC del grupo no borra el proveedor; el expediente informa 
     and lookup_o.get("id_agente") == id_ag_o,
     f"{r_o2a.status_code} / proveedor={prov_o2 and prov_o2['id_agente']} / {r_o2b.status_code} / lookup={lookup_o.get('id_agente')}")
 
+# ==========================================
+# P) BORRAR UN CATÁLOGO EN USO NUNCA DEJA HUÉRFANOS (caso real: proveedor SUNAT borrado con gastos)
+# ==========================================
+print("\n=========== P) BORRADO DE CATÁLOGOS EN USO ===========")
+prov_p = c.post("/proveedores/", json={"nombre": "PROVEEDOR P1", "ruc": ruc_valido("2062000001")}, headers=H["logi"]).json()
+conc_p = c.post("/conceptos/", json={"nombre": "CONCEPTO P1"}, headers=H["admin"]).json()
+doc_p = c.post("/tipos-documento/", json={"nombre_documento": "DOC P1", "multiplicador_financiero": 1}, headers=H["admin"]).json()
+m_p = mk_maestro("F-P1"); d_p = mk_dam(m_p, "DAM-P1")
+g_p = c.post("/gastos/", json={"id_dam": d_p, "id_concepto": conc_p["id_concepto"], "id_proveedor": prov_p["id_proveedor"],
+                               "id_tipo_doc": doc_p["id_tipo_doc"], "monto_original": "40"}, headers=H["logi"]).json()["id_gasto"]
+c.delete(f"/proveedores/{prov_p['id_proveedor']}", headers=H["logi"])                  # baja lógica, como en el caso real
+r_p1a = c.delete(f"/proveedores/{prov_p['id_proveedor']}/fisico", headers=H["admin"])
+r_p1b = c.delete(f"/conceptos/{conc_p['id_concepto']}/fisico", headers=H["admin"])
+r_p1c = c.delete(f"/tipos-documento/{doc_p['id_tipo_doc']}/fisico", headers=H["admin"])
+g_p_bd = gasto(g_p)
+chk("P1", "Borrar definitivamente un proveedor, concepto o tipo de documento usado por un gasto se rechaza y el gasto conserva sus datos (antes quedaban en NULL)",
+    r_p1a.status_code == 400 and r_p1b.status_code == 400 and r_p1c.status_code == 400
+    and g_p_bd.id_proveedor == prov_p["id_proveedor"] and g_p_bd.id_concepto == conc_p["id_concepto"] and g_p_bd.id_tipo_doc == doc_p["id_tipo_doc"],
+    f"{r_p1a.status_code}/{r_p1b.status_code}/{r_p1c.status_code} proveedor={g_p_bd.id_proveedor} concepto={g_p_bd.id_concepto} doc={g_p_bd.id_tipo_doc}")
+
+# Gasto que ya quedó sin proveedor (como los de la DAM #8): las listas no se caen y se puede eliminar
+from sqlalchemy import text as _texto
+db.execute(_texto("UPDATE registro_gastos SET id_proveedor = NULL WHERE id_gasto = :g"), {"g": g_p}); db.commit()
+r_p2a = c.get("/gastos/", params={"search": num_dam("DAM-P1")}, headers=H["logi"])
+r_p2b = c.get(f"/maestros/{m_p}/liquidacion-gastos", headers=H["logi"])
+r_p2c = c.get("/gastos/exportar", params={"search": num_dam("DAM-P1")}, headers=H["audi"])
+r_p2d = c.request("DELETE", f"/gastos/{g_p}?forzar_reversion_pagos=true", json={"motivo": "Prueba P2: gasto sin proveedor"}, headers=H["logi"])
+r_p2e = c.request("DELETE", f"/dams/{d_p}", json={"motivo": "Prueba P2: DAM sin gastos"}, headers=H["logi"])
+chk("P2", "Un gasto que perdió su proveedor no tumba las listas (gastos, liquidación, Excel) y se puede eliminar, y luego su DAM",
+    r_p2a.status_code == 200 and len(r_p2a.json().get("data", [])) == 1 and r_p2b.status_code == 200 and r_p2c.status_code == 200
+    and r_p2d.status_code == 200 and r_p2e.status_code == 200,
+    f"lista={r_p2a.status_code} liquidación={r_p2b.status_code} excel={r_p2c.status_code} borrar gasto={r_p2d.status_code} {det(r_p2d)[:40]} borrar DAM={r_p2e.status_code} {det(r_p2e)[:40]}")
+
 fallas = [x for x in R if not x[2]]
 print(f"\nRESUMEN TOTAL: {len(R)-len(fallas)}/{len(R)} pruebas pasan." + (" Fallan: " + ", ".join(x[0] for x in fallas) if fallas else ""))
 
