@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { Outlet, NavLink, useNavigate, Navigate } from 'react-router-dom';
+import { useEffect, useRef } from 'react';
+import { Outlet, NavLink, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import { useTheme } from '../context/tema';
 import api from '../services/api';
 import { obtenerUsuario, guardarUsuario, limpiarSesionLocal } from '../utils/session';
@@ -10,6 +10,8 @@ import { validarClave } from '../utils/validaciones';
 
 function Layout() {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const menu = useRef(null);
   const { avisar, pedirDatos } = useInteraccion();
   const { isDark, toggleTheme } = useTheme();
   const usuario = obtenerUsuario();
@@ -29,6 +31,11 @@ function Layout() {
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // En pantallas bajas la lista de opciones se desplaza: la opción de la página actual se mantiene a la vista
+  useEffect(() => {
+    menu.current?.querySelector('[aria-current="page"]')?.scrollIntoView({ block: 'nearest' });
+  }, [pathname]);
 
   if (!usuario) {
     return <Navigate to="/login" replace />;
@@ -68,22 +75,23 @@ function Layout() {
 
   const navClass = ({ isActive }) => 
     isActive 
-      ? "relative group flex items-center justify-center h-10 w-10 mx-auto rounded-md bg-teal-500/15 text-teal-600 dark:text-teal-300 font-medium border border-teal-500/30 transition-all"
-      : "group flex items-center justify-center h-10 w-10 mx-auto rounded-md text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors";
+      ? "relative group flex items-center justify-center h-9 w-9 shrink-0 mx-auto rounded-md bg-teal-500/15 text-teal-600 dark:text-teal-300 font-medium border border-teal-500/30 transition-all"
+      : "group flex items-center justify-center h-9 w-9 shrink-0 mx-auto rounded-md text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors";
 
   return (
     <div className="h-screen w-full flex overflow-hidden font-sans text-slate-200 bg-slate-900 antialiased selection:bg-teal-500 selection:text-white">
       {/* ICON-RAIL SIDEBAR */}
-      <aside className="w-14 bg-slate-800 border-r border-slate-700 flex flex-col items-center py-3 justify-between z-30 shrink-0">
-        <div className="flex flex-col items-center gap-4 w-full">
-          <div className="h-9 w-9 bg-teal-500/10 border border-teal-500/30 rounded-lg flex items-center justify-center text-teal-400 font-bold text-xs" title="ERP Admin">ER</div>
-          <div className="w-6 h-px bg-slate-700 my-0.5"></div>
-          <nav className="flex flex-col gap-2 w-full px-2">
+      {/* La lista de opciones se desplaza si no cabe en la pantalla; el logo y los botones de abajo quedan fijos */}
+      <aside className="w-14 h-full bg-slate-800 border-r border-slate-700 flex flex-col items-center py-3 z-30 shrink-0">
+        <div className="h-9 w-9 shrink-0 bg-teal-500/10 border border-teal-500/30 rounded-lg flex items-center justify-center text-teal-400 font-bold text-xs" title="ERP Admin">ER</div>
+        <div className="w-6 h-px shrink-0 bg-slate-700 my-2"></div>
+        <div className="flex-1 min-h-0 w-full overflow-y-auto overflow-x-hidden [scrollbar-width:thin] [scrollbar-color:theme(colors.slate.600)_transparent]">
+          <nav ref={menu} aria-label="Menú principal" className="flex flex-col gap-1 w-full px-2 pb-2">
             <NavLink to="/app/reportes" className={navClass} title="Centro de Reportes & Analítica"><BarChart3 size={18} className="shrink-0" /></NavLink>
-            <div className="w-6 h-px bg-slate-700 my-0.5 mx-auto"></div>
+            <div className="w-6 h-px shrink-0 bg-slate-700 my-1 mx-auto"></div>
             <NavLink to="/app/logistica" className={navClass} title="Logística y Maestros"><Package size={18} className="shrink-0" /><span className="active-indicator absolute left-[-8px] top-2 bottom-2 w-0.5 bg-teal-400 rounded-r hidden"></span></NavLink>
             <NavLink to="/app/dams" className={navClass} title="Declaraciones (DAMs)"><FileText size={18} className="shrink-0" /></NavLink>
-            <div className="w-6 h-px bg-slate-700 my-1 mx-auto"></div>
+            <div className="w-6 h-px shrink-0 bg-slate-700 my-1 mx-auto"></div>
             <NavLink to="/app/importadores" className={navClass} title="Importadores"><Building2 size={18} className="shrink-0" /></NavLink>
             <NavLink to="/app/proveedores" className={navClass} title="Proveedores"><Users size={18} className="shrink-0" /></NavLink>
             <NavLink to="/app/agentes" className={navClass} title="Agentes Aduanas"><Briefcase size={18} className="shrink-0" /></NavLink>
@@ -91,34 +99,27 @@ function Layout() {
             <NavLink to="/app/conceptos" className={navClass} title="Conceptos"><Tags size={18} className="shrink-0" /></NavLink>
             <NavLink to="/app/comprobantes" className={navClass} title="Tipos Comprobante"><FileDigit size={18} className="shrink-0" /></NavLink>
             <NavLink to="/app/bancos" className={navClass} title="Bancos"><Landmark size={18} className="shrink-0" /></NavLink>
-            <div className="w-6 h-px bg-slate-700 my-1 mx-auto"></div>
+            <div className="w-6 h-px shrink-0 bg-slate-700 my-1 mx-auto"></div>
             <NavLink to="/app/vouchers" className={navClass} title="Vouchers"><Ticket size={18} className="shrink-0" /></NavLink>
             <NavLink to="/app/gastos" className={navClass} title="Registro Gastos"><Banknote size={18} className="shrink-0" /></NavLink>
             <NavLink to="/app/pagos" className={navClass} title="Liquidación Pagos"><Scale size={18} className="shrink-0" /></NavLink>
-            <div className="w-6 h-px bg-slate-700 my-1 mx-auto"></div>
+            <div className="w-6 h-px shrink-0 bg-slate-700 my-1 mx-auto"></div>
             <NavLink to="/app/auditoria" className={navClass} title="Auditoría"><ShieldCheck size={18} className="shrink-0" /></NavLink>
             {userRole === ROL.SUPERADMIN && (
               <>
-                <div className="w-6 h-px bg-slate-700 my-1 mx-auto"></div>
+                <div className="w-6 h-px shrink-0 bg-slate-700 my-1 mx-auto"></div>
                 <NavLink to="/app/usuarios" className={navClass} title="Usuarios"><UserCog size={18} className="shrink-0" /></NavLink>
                 <NavLink to="/app/admin" className={navClass} title="Administración & Carga Masiva"><Settings size={18} className="shrink-0" /></NavLink>
               </>
             )}
           </nav>
         </div>
-        <div className="flex flex-col items-center gap-3">
-          <button
-            type="button"
-            onClick={toggleTheme}
-            className="theme-toggle-btn relative h-8 w-8 rounded-full bg-slate-700 border border-slate-600 flex items-center justify-center text-sm hover:scale-105 transition-all cursor-pointer shadow-sm text-slate-200"
-            title={isDark ? "Cambiar a Modo Claro" : "Cambiar a Modo Oscuro"}
-          >
-            {isDark ? <Sun size={15} className="shrink-0" /> : <Moon size={15} className="shrink-0" />}
-          </button>
+        {/* Siempre visibles (el cambio de tema está en el encabezado) */}
+        <div className="flex flex-col items-center gap-2 pt-2 mt-1 border-t border-slate-700 w-full shrink-0">
           <button type="button" onClick={cambiarMiClave} className="relative h-8 w-8 rounded-full bg-slate-700 border border-slate-600 flex items-center justify-center text-slate-300 hover:ring-2 hover:ring-amber-500 transition-all cursor-pointer" title="Cambiar mi contraseña">
             <KeyRound size={15} className="shrink-0" />
           </button>
-          <button onClick={cerrarSesion} className="relative h-8 w-8 rounded-full bg-slate-700 border border-slate-600 flex items-center justify-center font-semibold text-slate-300 hover:ring-2 hover:ring-rose-500 transition-all cursor-pointer" title="Cerrar Sesión">
+          <button type="button" onClick={cerrarSesion} className="relative h-8 w-8 rounded-full bg-slate-700 border border-slate-600 flex items-center justify-center font-semibold text-slate-300 hover:ring-2 hover:ring-rose-500 transition-all cursor-pointer" title="Cerrar Sesión">
             <LogOut size={15} className="shrink-0" />
           </button>
         </div>

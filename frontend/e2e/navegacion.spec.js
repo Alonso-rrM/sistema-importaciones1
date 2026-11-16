@@ -47,3 +47,24 @@ for (const [ruta, contenido] of PANTALLAS) {
     expect(errores).toEqual([]);
   });
 }
+
+test('en una pantalla de laptop todas las opciones del menú lateral son alcanzables', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 657 });   // área útil de una laptop de 1366x768
+  await iniciarSesion(page);
+  const enPantalla = async (locator) => {
+    const caja = await locator.boundingBox();
+    return caja !== null && caja.y >= 0 && caja.y + caja.height <= 657;
+  };
+  // Los botones de abajo quedan siempre visibles
+  expect(await enPantalla(page.getByTitle('Cerrar Sesión'))).toBe(true);
+  expect(await enPantalla(page.getByTitle('Cambiar mi contraseña'))).toBe(true);
+  // La opción de la página actual se mantiene a la vista aunque esté al final de la lista
+  await page.goto('/app/admin');
+  expect(await enPantalla(page.getByTitle('Administración & Carga Masiva'))).toBe(true);
+  // Y la última opción se puede usar desde la primera página desplazando el menú
+  await page.goto('/app/reportes');
+  const usuarios = page.getByRole('navigation', { name: 'Menú principal' }).getByTitle('Usuarios');
+  await usuarios.scrollIntoViewIfNeeded();
+  await usuarios.click();
+  await expect(page).toHaveURL(/\/app\/usuarios/);
+});
