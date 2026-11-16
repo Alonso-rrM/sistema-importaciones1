@@ -139,3 +139,23 @@ test('el proveedor rápido permite registrar una entidad del Estado', async ({ p
   expect(creado.categoria).toBe(CATEGORIA_PROVEEDOR.ESTADO_O_TRIBUTO);
   expect(errores).toEqual([]);
 });
+
+test('si la consulta a SUNAT falla se muestra el motivo y el proveedor se puede guardar igual', async ({ page }) => {
+  const errores = vigilarErrores(page);
+  await iniciarSesion(page);
+  // Se simula la respuesta de SUNAT (las pruebas no salen a internet)
+  await page.route('**/sunat/ruc/**', (ruta) => ruta.fulfill({
+    status: 400, contentType: 'application/json', body: JSON.stringify({ detail: 'El RUC tiene condición NO HABIDO.' }),
+  }));
+  await page.goto('/app/proveedores');
+  await page.getByRole('button', { name: 'Nuevo Proveedor' }).first().click();
+  await page.getByPlaceholder('Ej. 20987654321').fill('20616053702');
+  await page.getByRole('button', { name: /Validar SUNAT/ }).click();
+  await esperarAviso(page, 'NO HABIDO');
+  await esperarAviso(page, 'guardar igual');
+
+  await page.getByPlaceholder('Nombre oficial o abreviado del proveedor').fill('PROVEEDOR SIN CONSULTA SUNAT');
+  await page.locator('form button[type=submit]').click();
+  await esperarAviso(page, 'registrado exitosamente');
+  expect(errores).toEqual([]);
+});

@@ -45,7 +45,7 @@ const FormularioProveedorRapido = ({
       }
     } catch (err) {
       console.error('Error buscando RUC en SUNAT:', err);
-      mostrarAlerta('No se pudo consultar el RUC en SUNAT. Puedes ingresar el nombre manualmente.', 'error');
+      mostrarAlerta(`SUNAT: ${mensajeDeError(err, 'no se pudo consultar el RUC.')} Puedes ingresar el nombre manualmente y guardar.`, 'error');
     } finally {
       setBuscandoRuc(false);
     }

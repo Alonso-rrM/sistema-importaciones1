@@ -967,6 +967,17 @@ r_m2 = gasto_estado(c_perc.id_concepto, f"{aduana_m} {anio_m[2:]} {reg_m} {num_m
 chk("M2", "El mismo C.D.A. escrito de otra forma es el mismo documento: el candado anti-duplicados lo rechaza",
     r_m2.status_code == 400 and "Duplicidad" in det(r_m2), f"{r_m2.status_code} {det(r_m2)[:60]}")
 
+# ==========================================
+# N) MENSAJE CLARO CUANDO UN RUC O NOMBRE YA EXISTE
+# ==========================================
+print("\n=========== N) RUC O NOMBRE YA REGISTRADO ===========")
+r_n0 = c.post("/proveedores/", json={"nombre": "PROVEEDOR N1", "ruc": "20616053702"}, headers=H["logi"])
+c.delete(f"/proveedores/{r_n0.json().get('id_proveedor')}", headers=H["logi"])          # baja lógica
+r_n1 = c.post("/proveedores/", json={"nombre": "OTRO NOMBRE N1", "ruc": "20616053702"}, headers=H["logi"])
+chk("N1", "Un RUC ya registrado (aunque esté desactivado) se informa con el nombre del registro y cómo restaurarlo",
+    r_n0.status_code == 200 and r_n1.status_code == 400 and "PROVEEDOR N1" in det(r_n1) and "DESACTIVADO" in str(r_n1.json().get("detail")),
+    f"{r_n0.status_code} / {r_n1.status_code} {det(r_n1)}")
+
 fallas = [x for x in R if not x[2]]
 print(f"\nRESUMEN TOTAL: {len(R)-len(fallas)}/{len(R)} pruebas pasan." + (" Fallan: " + ", ".join(x[0] for x in fallas) if fallas else ""))
 

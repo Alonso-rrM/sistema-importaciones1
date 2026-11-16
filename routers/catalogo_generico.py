@@ -18,7 +18,7 @@ Para agregar un catálogo nuevo basta con declarar su definición. Si un catálo
 propia al crear o modificar, se pasa en `preparar_alta` / `preparar_cambio` (sin tocar este archivo).
 """
 from dataclasses import dataclass
-from typing import Callable, List
+from typing import Callable, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel
@@ -60,6 +60,26 @@ def _buscar(db: Session, d: DefinicionCatalogo, id_registro: int):
     return db.query(d.modelo).filter(getattr(d.modelo, d.campo_id) == id_registro).first()
 
 
+def describir_repetido(db: Session, d: DefinicionCatalogo, datos: dict, excepto_id: Optional[int] = None) -> Optional[str]:
+    """
+    Qué dato choca con un registro existente (RUC o nombre), con el nombre de ese registro y si está desactivado
+    (los desactivados no aparecen en la lista normal). None si no se identifica.
+    """
+    for campo, rotulo in (("ruc", "El RUC"), ("nombre", "El nombre")):
+        valor = datos.get(campo)
+        if not valor or not hasattr(d.modelo, campo):
+            continue
+        consulta = db.query(d.modelo).filter(getattr(d.modelo, campo) == valor)
+        if excepto_id is not None:
+            consulta = consulta.filter(getattr(d.modelo, d.campo_id) != excepto_id)
+        existente = consulta.first()
+        if existente:
+            inactivo = getattr(existente, "estado_registro", None) == EstadoRegistro.INACTIVO
+            aviso = " Está DESACTIVADO: búsquelo con el botón «Inactivos» y restáurelo." if inactivo else ""
+            return f"{rotulo} {valor} ya está registrado como «{existente.nombre}».{aviso}"
+    return None
+
+
 def registrar_catalogo(router: APIRouter, d: DefinicionCatalogo) -> None:
     """Agrega al router las seis rutas estándar del catálogo `d`."""
     escritura = RoleChecker(d.roles_escritura)
@@ -69,7 +89,8 @@ def registrar_catalogo(router: APIRouter, d: DefinicionCatalogo) -> None:
     con_id = f"/{d.ruta}/{{{d.campo_id}}}"
 
     def crear(datos: d.esquema_alta, db: Session = Depends(get_db), current_user: models.Usuario = Depends(escritura)):
-        nuevo = d.modelo(**d.preparar_alta(datos.model_dump()))
+        valores = d.preparar_alta(datos.model_dump())
+        nuevo = d.modelo(**valores)
         try:
             db.add(nuevo)
             db.commit()
@@ -77,7 +98,7 @@ def registrar_catalogo(router: APIRouter, d: DefinicionCatalogo) -> None:
             return nuevo
         except IntegrityError:
             db.rollback()
-            raise HTTPException(status_code=400, detail=d.duplicado_alta) from None
+            raise HTTPException(status_code=400, detail=describir_repetido(db, d, valores) or d.duplicado_alta) from None
 
     def listar(mostrar_inactivos: bool = False, db: Session = Depends(get_db),
                current_user: models.Usuario = Depends(get_current_user)):
@@ -91,7 +112,8 @@ def registrar_catalogo(router: APIRouter, d: DefinicionCatalogo) -> None:
         registro = _buscar(db, d, id_registro)
         if not registro:
             raise HTTPException(status_code=404, detail=d.no_encontrado)
-        for campo, valor in d.preparar_cambio(datos.model_dump(exclude_unset=True), registro).items():
+        cambios = d.preparar_cambio(datos.model_dump(exclude_unset=True), registro)
+        for campo, valor in cambios.items():
             setattr(registro, campo, valor)
         try:
             db.commit()
@@ -99,7 +121,8 @@ def registrar_catalogo(router: APIRouter, d: DefinicionCatalogo) -> None:
             return registro
         except IntegrityError:
             db.rollback()
-            raise HTTPException(status_code=400, detail=d.duplicado_cambio) from None
+            detalle = describir_repetido(db, d, cambios, excepto_id=id_registro) or d.duplicado_cambio
+            raise HTTPException(status_code=400, detail=detalle) from None
 
     def dar_de_baja(id_registro: int = id_en_url, db: Session = Depends(get_db),
                     current_user: models.Usuario = Depends(escritura)):
