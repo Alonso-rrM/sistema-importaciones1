@@ -13,6 +13,9 @@ export default defineConfig({
       '/api': {
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,
+        // Envía la dirección real de cada PC al backend (X-Forwarded-For). Sin esto, todos los usuarios llegan
+        // como 127.0.0.1: comparten el límite de intentos de login y la bitácora guarda la misma IP para todos.
+        xfwd: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
     },
